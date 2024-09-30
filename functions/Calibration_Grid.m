@@ -79,6 +79,7 @@ while newSelections
         title('Select upper left, then lower right target corners on left picture and press enter. Add a third point to remove previous selections. Add no points to finish calibration.');
         [inputCoordTargetX,inputCoordTargetY] = getpts(gcf);
         close(gcf);
+
         % if no new points, finish calibration
         if isempty(inputCoordTargetX)
             newSelections = false;

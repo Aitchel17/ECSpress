@@ -12,12 +12,12 @@
 % WRITTEN BY:       C. Hyunseok Lee 2024-09-14
 %
 %%%%%%%%%%%%%%%%%%%%%%%%
-function [info, tpsm_info, mode_info, mobj] = io_info()
+function [info, tpsm_info, mode_info, mobj] = io_initmdf()
     %%
-    [path.mdfName, path.folderPath] = uigetfile({'*.tif ; *.mdf'}); % select file by UI
-    info.mdfPath = [path.folderPath, path.mdfName];
+    [info.mdfName, info.mdfPath] = uigetfile({'*.tif ; *.mdf'}); % select file by UI
+    mdfPath = [info.mdfPath, info.mdfName];
     mobj = actxserver('MCSX.Data'); % Create Component Object Model (COM)
-    mobj.invoke('OpenMCSFile', info.mdfPath); % Using COM open .mdf file
+    mobj.invoke('OpenMCSFile', mdfPath); % Using COM open .mdf file
     
     % General Info
     info.User = mobj.ReadParameter('Created by');
@@ -46,6 +46,11 @@ function [info, tpsm_info, mode_info, mobj] = io_info()
     tpsm_info.fh            = str2double(mobj.ReadParameter('Frame Height'));
     tpsm_info.fw            = str2double(mobj.ReadParameter('Frame Width'));
     tpsm_info.lpower        = mobj.ReadParameter('Laser intensity');
+    % Imaging Channel info
+    tpsm_info.imgch0range   = mobj.ReadParameter('Scanning Ch 0 Input Range');
+    tpsm_info.imgch1range   = mobj.ReadParameter('Scanning Ch 1 Input Range');
+
+
 
     % Imaging channel info
     %tpsm_info.image0        =
@@ -62,11 +67,17 @@ function [info, tpsm_info, mode_info, mobj] = io_info()
         mode_info.zinter    = mobj.ReadParameter('Z- interval');
         
     elseif strcmp(tpsm_info.scanmode, 'XY Movie')
+        mode_info.analogfreq    = mobj.ReadParameter('Analog Acquisition Frequency (Hz)');
+        mode_info.analogfreq    = str2double(mode_info.analogfreq(1:end -3));
+        mode_info.analogcount   = str2double(mobj.ReadParameter('Analog Sample Count'));
+        mode_info.analogresolution   = mobj.ReadParameter('Analog Resolution');
+
         mode_info.analog0   = mobj.ReadParameter('Analog Ch 0 Name');
         mode_info.analog1   = mobj.ReadParameter('Analog Ch 1 Name');
         mode_info.analog2   = mobj.ReadParameter('Analog Ch 2 Name');
         mode_info.analog3   = mobj.ReadParameter('Analog Ch 3 Name');
         mode_info.analog4   = mobj.ReadParameter('Analog Ch 4 Name');
+        mode_info.analogch4range = mobj.ReadParameter('Analog Ch 4 Input Range');
         mode_info.analog5   = mobj.ReadParameter('Analog Ch 5 Name');
         mode_info.analog6   = mobj.ReadParameter('Analog Ch 6 Name');
         mode_info.analog7   = mobj.ReadParameter('Analog Ch 7 Name');
