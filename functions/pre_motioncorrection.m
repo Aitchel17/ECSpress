@@ -1,6 +1,12 @@
 
 
-function [output, Greg] = dftregistration(buf1ft,buf2ft,usfac)
+function [output, Greg] = pre_motioncorrection(buf1ft,buf2ft,usfac)
+% Utilized in analysis by Kevin L. Turner
+% The Pennsylvania State University, Dept. of Biomedical Engineering
+% https://github.com/KL-Turner
+%
+% Code unchanged with the exception of this title block for record keeping
+%________________________________________________________
 % function [output Greg] = dftregistration(buf1ft,buf2ft,usfac);
 % Efficient subpixel image registration by crosscorrelation. This code
 % gives the same precision as the FFT upsampled cross correlation in a
