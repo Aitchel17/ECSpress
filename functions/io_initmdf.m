@@ -12,7 +12,7 @@
 % WRITTEN BY:       C. Hyunseok Lee 2024-09-14
 %
 %%%%%%%%%%%%%%%%%%%%%%%%
-function [info, mobj] = io_initmdf()
+function [info, analog, mobj] = io_initmdf()
     %%
     [info.mdfName, info.mdfPath] = uigetfile({'*.mdf'}); % select file by UI
     mdfPath = [info.mdfPath, info.mdfName];
@@ -73,22 +73,20 @@ function [info, mobj] = io_initmdf()
         info.analogfreq    = str2double(info.analogfreq(1:end -3));
         info.analogcount   = str2double(mobj.ReadParameter('Analog Sample Count'));
         info.analogresolution   = mobj.ReadParameter('Analog Resolution');
-        info.analog0   = mobj.ReadParameter('Analog Ch 0 Name');
-        info.analog1   = mobj.ReadParameter('Analog Ch 1 Name');
-        info.analog2   = mobj.ReadParameter('Analog Ch 2 Name');
-        info.analog3   = mobj.ReadParameter('Analog Ch 3 Name');
-        info.analog4   = mobj.ReadParameter('Analog Ch 4 Name');
-        info.analog5   = mobj.ReadParameter('Analog Ch 5 Name');
-        info.analog6   = mobj.ReadParameter('Analog Ch 6 Name');
-        info.analog7   = mobj.ReadParameter('Analog Ch 7 Name');
+
         for analog_ch = string(0:1:7)
-            field_name = strcat('analog',analog_ch);
+           
+            field_name = sprintf('analog%sname',analog_ch); %strcat('analog',analog_ch);
+            info.(field_name) = mobj.ReadParameter(sprintf('Analog Ch %s Name',analog_ch));
             if strcmp(info.(field_name),"")
                 info = rmfield(info,field_name);
             else
-                range_fname = strcat('analog',analog_ch,'range');
-                range_call = strcat('Analog ', 'ch ',analog_ch,' Input Range');
+                range_fname = sprintf('analog%srange',analog_ch);
+                range_call = sprintf('Analog Ch %s Input Range',analog_ch);
+                disp(range_call)
                 info.(range_fname) = mobj.ReadParameter(range_call);
+                analog.(info.(field_name)) = double(mobj.ReadAnalog(str2double(analog_ch)+1,info.analogcount,0));
+
             end
         end
     end
