@@ -34,7 +34,7 @@ dft_stack = pre_groupaverage(zstack, param.groupz); % denoise by group averaging
 dft_stack = medfilt3(dft_stack,[3,3,5]); % denoise by 3d median filter
 drift_table = pre_estimatemotion(dft_stack); % using dft_registration, get drift table [error,diffphase,net_row_shift,net_col_shift]
 %% using pixel shift information register the zstack
-[interpdrifttable, corrected_z] = pre_pshiftcorr(zstack,drift_table);
+[interpdrifttable, corrected_z] = pre_applymotion(zstack,drift_table);
 gc_stack = pre_groupaverage(corrected_z,param.groupz);
 gc_stack = medfilt3(gc_stack,[3,3,3]);
 figure()
@@ -57,7 +57,7 @@ zstack = io_readframes(mobj,img_channel,[param.framestart, param.frameend]); % r
 zstack = zstack(:,tmp.xpadStart:tmp.xpadEnd,:);
 zstack = zstack - min(zstack,[],'all');
 
-[interpdrifttable, corrected_z] = pre_pshiftcorr(zstack,drift_table);
+[interpdrifttable, corrected_z] = pre_applymotion(zstack,drift_table);
 gc_stack = pre_groupaverage(corrected_z,param.groupz);
 gc_stack = medfilt3(gc_stack,[3,3,3]);
 
