@@ -1,21 +1,8 @@
-function [pixelShift_table] = pre_estimatemotion(dst_stack)
-    figure(77)
-    % display the first frame of the .tif stack so the user can draw a box on
-    % steady region (not contain artery)
-    sliceViewer(dst_stack);
-    title('draw a box around region to be processed')
-    thebox=drawrectangle(gca);
-    xy=round(thebox.Vertices);
-    input('type enter when done','s');
-    close(77)
+function [pixelShift_table] = pre_estimatemotion(dst_stack,ref_frame,Vertices)
     raw_hold_image=double(dst_stack);
-    hold_stack=raw_hold_image(xy(1,2):xy(3,2), xy(1,1):xy(3,1),:);
-    
-    figure(5)
-    sliceViewer(hold_stack);
-    
-    first_fft = fft2(hold_stack(:,:,end));
-    
+    hold_stack=raw_hold_image(Vertices(1,2):Vertices(3,2), Vertices(1,1):Vertices(3,1),:);
+    first_fft = fft2(ref_frame);
+
     pixelShift_table = [];
     for sli = drange(1:size(hold_stack,3))
         disp(sli)

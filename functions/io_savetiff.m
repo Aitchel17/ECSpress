@@ -60,8 +60,8 @@ function io_savetiff(zstack, info, img_ch)
         tagstruct.XResolution = 1/x_res; % Convert microns to cm
         tagstruct.YResolution = 1/y_res; % Convert microns to cm
         tagstruct.Software = 'MATLAB';
-        tagstruct.ImageDescription = ImageDescription;
-        setTag(t,'StripOffsets',8);
+        % tagstruct.ImageDescription = ImageDescription;
+        % setTag(t,'StripOffsets',8);
 
         % Set tags and write the frame
         t.setTag(tagstruct);
