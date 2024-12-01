@@ -15,7 +15,7 @@ function zstack = io_readframes(mobj, imgch, zrange, batchSize, verbose)
     if nargin < 5
         verbose = true; % Default to verbose output
     end
-
+    disp(['Loading Image ch',imgch])
 
     % Determine the number of frames and batches
     totalFrames = zrange(2) - zrange(1) + 1;
@@ -32,7 +32,7 @@ function zstack = io_readframes(mobj, imgch, zrange, batchSize, verbose)
         batchEnd = min(zrange(2), batchStart + batchSize - 1);
 
         if verbose
-            fprintf('Processing batch %d/%d (frames %d to %d)...\n', ...
+            fprintf('Reading frames batch %d/%d (frames %d to %d)...\n', ...
                 b, numBatches, batchStart, batchEnd);
         end
 
@@ -46,6 +46,8 @@ function zstack = io_readframes(mobj, imgch, zrange, batchSize, verbose)
         fprintf('Combining batches into final Z-stack...\n');
     end
     zstack = cat(3, zstack{:});
+
+
 end
 
 function zstack = io_readframes_simple(mobj, imgch, zrange, verbose)

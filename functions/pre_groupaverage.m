@@ -13,6 +13,7 @@ function [result] = pre_groupaverage(zstack, number_averaging)
     %   result         - The resulting 3D matrix with the averaged frames.
     
     % Ensure the number of frames is a multiple of the group size
+    disp(['Group averaging with ' num2str(number_averaging) ' depricate ' num2str(mod(size(zstack,3),number_averaging))]);
     zstack = zstack(:,:,1:size(zstack,3)-mod(size(zstack,3),number_averaging));
 
     % Reshape the stack to group the frames

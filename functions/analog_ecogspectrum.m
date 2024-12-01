@@ -1,4 +1,5 @@
-function [ecog_spectrum] = pre_ecogspectrum(samplingfreq,ECoG)
+function [ecog_spectrum] = analog_ecogspectrum(samplingfreq,ECoG)
+disp('Calculate multi taper spectrum')
 
 % ECoG processing
     detrended_ECoG = detrend(ECoG,'constant');
