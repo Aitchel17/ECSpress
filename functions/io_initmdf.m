@@ -16,6 +16,7 @@ function [info, analog, mobj] = io_initmdf()
     %%
     [info.mdfName, info.mdfPath] = uigetfile({'*.mdf'}); % select file by UI
     mdfPath = [info.mdfPath, info.mdfName];
+    disp([info.mdfName,'is loaded'])
     mobj = actxserver('MCSX.Data'); % Create Component Object Model (COM)
     mobj.invoke('OpenMCSFile', mdfPath); % Using COM open .mdf file
     
@@ -51,9 +52,7 @@ function [info, analog, mobj] = io_initmdf()
     info.imgch0range   = mobj.ReadParameter('Scanning Ch 0 Input Range');
     info.imgch1name    = mobj.ReadParameter('Scanning Ch 1 Name');
     info.imgch1range   = mobj.ReadParameter('Scanning Ch 1 Input Range');
-
-
-
+    
     % Imaging channel info
     %tpsm_info.image0        =
 

@@ -1,5 +1,5 @@
-function [result] = pre_analogprocessing(analog_signal,parameter,downsample_rate,medianfilt)
-
+function [result] = analog_preprocessing(analog_signal,parameter,downsample_rate,medianfilt)
+disp(['analog_preprocessing started, downsample to 1/',num2str(downsample_rate),' medianfilter with ',num2str(medianfilt)])
 analog_freq = parameter(1); % unit: Hz
 analog_pixeldepth = parameter(2); % unit: bit
 analog_inputrange = parameter(3); % unit: V
@@ -16,8 +16,6 @@ rescale_signal = medfilt_analog*analog_inputrange/2^analog_pixeldepth;
 downsample_duration = length(downsample_signal)/downsample_freq;
 
 downsample_xaxis = linspace(0,downsample_duration,length(downsample_signal));
-disp(analog_pixeldepth(1:end))
-disp(class(downsample_xaxis))
 result = cat(1,downsample_xaxis,rescale_signal);
 
 end    

@@ -1,40 +1,41 @@
-function [pixelShift_table] = pre_estimatemotion(dst_stack,ref_frame,Vertices)
-    raw_hold_image=double(dst_stack);
-    hold_stack=raw_hold_image(Vertices(1,2):Vertices(3,2), Vertices(1,1):Vertices(3,1),:);
-    first_fft = fft2(ref_frame);
+function [pixelShift_table] = pre_estimatemotion(dft_stack,ref_frame,Vertices)
+    disp(['Estimate motion to get drift table using reference frame ' num2str(ref_frame)]);
+    xy = round(Vertices);
 
-    pixelShift_table = [];
-    for sli = drange(1:size(hold_stack,3))
-        disp(sli)
+    % Extract the selected region from the stack
+    hold_stack = dft_stack(xy(1,2):xy(3,2), xy(1,1):xy(3,1), :);
+    
+    % Display the selected region in a slice viewer
+    figure(5);
+    sliceViewer(hold_stack);
+    
+    % Perform Fourier Transform on the first slice (used as reference)
+    first_fft = fft2(hold_stack(:,:,ref_frame));
+    
+    % Initialize the table to store pixel shifts
+    pixelShift_table = zeros(4, size(hold_stack, 3));  % 4 rows for shift values (x, y, and shifts)
+    
+    % Loop over all slices in the stack
+    for sli = 1:size(hold_stack, 3)
+        
+        
+        % Fourier transform of the current slice
         regframe = fft2(hold_stack(:,:,sli));
-        [pixelShift_table(:,sli),~] = dft_registration(first_fft,regframe);
-% Inputs
-% buf1ft    Fourier transform of reference image, 
-%           DC in (1,1)   [DO NOT FFTSHIFT]
-% buf2ft    Fourier transform of image to register, 
-%           DC in (1,1) [DO NOT FFTSHIFT]
-% usfac     Upsampling factor (integer). Images will be registered to 
-%           within 1/usfac of a pixel. For example usfac = 20 means the
-%           images will be registered within 1/20 of a pixel. (default = 1)
-%
-% Outputs
-% output =  [error,diffphase,net_y_shift,net_x_shift]
-% error     Translation invariant normalized RMS error between f and g
-% diffphase     Global phase difference between the two images (should be
-%               zero if images are non-negative).
-% net_row_shift net_col_shift   Pixel shifts between images
-% Greg      (Optional) Fourier transform of registered version of buf2ft,
-%           the global phase difference is compensated for.
+        
+        % Estimate the pixel shift using DFT registration
+        [pixelShift_table(:, sli), ~] = dft_registration(first_fft, regframe);
     end
-
-    figure('name', 'pixel shift','NumberTitle','off')
-    subplot(2,1,1)
-    xshift = pixelShift_table(4,:);
-    plot(xshift)
-    title('X shift')
-    subplot(2,1,2)
-    yshift = pixelShift_table(3,:);
-    plot(yshift)
-    title('Y-shift')
+    
+    % Display the X and Y shifts
+    figure('name', 'Pixel Shift', 'NumberTitle', 'off');
+    subplot(2, 1, 1);
+    xshift = medfilt1(pixelShift_table(4,:), 100);  % Apply median filter to smooth x-shifts
+    plot(xshift);
+    title('X shift');
+    
+    subplot(2, 1, 2);
+    yshift = medfilt1(pixelShift_table(3,:), 100);  % Apply median filter to smooth y-shifts
+    plot(yshift);
+    title('Y shift');
 end
 
