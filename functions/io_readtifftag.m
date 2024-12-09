@@ -1,4 +1,4 @@
-function [tags_struct, tiff_obj] = io_readtiff_alltags()
+function [tags_struct, tiff_obj] = io_readtiff()
     % Open a dialog to select a .tiff file
     [file, path] = uigetfile({'*.tiff;*.tif', 'TIFF Files (*.tiff, *.tif)'}); 
     if isequal(file, 0)
