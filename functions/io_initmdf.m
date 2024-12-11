@@ -55,16 +55,17 @@ function [info, analog, mobj] = io_initmdf()
     
     % Imaging channel info
     %tpsm_info.image0        =
-
+    
 
 %% Scan mode specific info
     if strcmp(info.scanmode, 'Image Stack')
+        analog.exist = false;
         disp('Image stack loaded')
         info.fave      = mobj.ReadParameter('Average Count');
         info.pinit     = mobj.ReadParameter('Initial Intensity');
-        % mode_info.pfinl     = mobj.ReadParameter('Final Intensity');
-        % final intensity activex control has bug the .ocx file should be
+        info.pfinl     = mobj.ReadParameter('Final Intensity'); % final intensity activex control has bug the .ocx file should be
         % editted
+        
         info.zinter    = mobj.ReadParameter('Z- interval');
         
     elseif strcmp(info.scanmode, 'XY Movie')
