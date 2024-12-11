@@ -1,4 +1,4 @@
-function [vertices,ref_slice] = roi_rectangle(stack)
+function [vertices,ref_slice] = roi_rectangle_polygon(stack,roi_type)
     % Create the main figure
 
     min_val = min(stack,[],'all');
@@ -25,7 +25,7 @@ function [vertices,ref_slice] = roi_rectangle(stack)
     intensitySlider = uislider(controlPanel, 'range',...
         'Position', [130, 65, 400, 3], ...
         'Limits', [0, 65535], ...
-        'Value', [10000, 30000], ...
+        'Value', [0, 65535], ...
         'MajorTicks', [], ...
         'Orientation', 'horizontal', ...
         'ValueChangedFcn', @(src, event) updatefig(hAxes, src.Value));
@@ -42,18 +42,37 @@ function [vertices,ref_slice] = roi_rectangle(stack)
         'Position', [480, 10, 70, 30], ...
         'ButtonPushedFcn', @(src, event) uiresume(fig)); % Resume execution when clicked
     
-    % Draw rectangle on the axes and wait for user confirmation
-    instructionLabel = uilabel(controlPanel, ...
-        'Text', 'Draw a rectangle around the ROI.', ...
-        'Position', [20, 40, 400, 20], ...
-        'HorizontalAlignment', 'left');
-    thebox = drawrectangle(hAxes); % Allow the user to draw
+    % Add Reset button
+    uibutton(controlPanel, ...
+        'Text', 'Reset', ...
+        'Position', [400, 10, 70, 30], ...
+        'ButtonPushedFcn', @(~, ~) resetROI());
     
-    % Wait for confirmation
-    uiwait(fig);
-    
-    % Get the vertices of the rectangle
-    vertices = round(thebox.Vertices);
+    % Initialize ROI
+    theROI = drawROI();
+    resetFlag = false;
+
+    % Main loop to manage ROI interaction
+    while true
+        uiwait(fig);
+        if ~isvalid(fig)
+            break; % Exit if the figure is closed
+        end
+        if resetFlag
+            resetFlag = false; % Reset the flag and continue drawing
+            continue;
+        end
+        break; % Exit loop on confirm
+    end
+
+ 
+    % Extract vertices and slice number
+    if strcmp(roi_type, 'rectangle')
+        vertices = round(theROI.Vertices); % Rectangle vertices
+    else
+        vertices = round(theROI.Position); % Polygon vertices
+    end
+
     % Extract the current slice from the sliceViewer
     ref_slice = hStack.SliceNumber;
     % Close the figure
@@ -61,7 +80,28 @@ function [vertices,ref_slice] = roi_rectangle(stack)
 
     % Function to update intensity range dynamically
     function updatefig(hAxes, range)
-        hAxes.CLim = range; % Adjust the display range based on slider values
+        hAxes.CLim = range; % Adjust display range
+    end
+
+    % Function to draw ROI based on type
+    function roi = drawROI()
+        if strcmp(roi_type, 'rectangle')
+            roi = drawrectangle(hAxes); % Draw rectangle
+        elseif strcmp(roi_type, 'polygon')
+            roi = drawpolygon(hAxes); % Draw polygon
+        else
+            error('Unsupported ROI type: %s. Use "rectangle" or "polygon".', roi_type);
+        end
+    end
+
+    % Function to reset ROI
+    function resetROI()
+        if isvalid(theROI)
+            delete(theROI); % Delete existing ROI
+        end
+        theROI = drawROI(); % Allow user to redraw
+        resetFlag = true; % Set the reset flag
+        uiresume(fig); % Resume the UI loop
     end
 end
 
