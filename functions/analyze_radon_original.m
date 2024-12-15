@@ -1,4 +1,4 @@
-function [area, radoncontours]=analyze_radon_original(inputStack)
+function [area, radoncontours, vertices]=analyze_radon_original(inputStack)
 % this function impliments the "Thresholded in Radon Space" (TiRS)
 % algorithm described in Gao and Drew, Journal of Cerebral Blood Flow and
 % Metabolism, 2014 (DOI:10.1038/jcbfm.2014.67)
@@ -28,11 +28,12 @@ radoncontours=cell(nframes,1); %countour lines obtained of the vessel lumen usin
 %displays the first frame of the .tif stack and asks the user to draw a box
 %around the penetrating vessel
 
-[vertices,~] = roi_rectangle(inputStack);
+[vertices,~] = roi_rectangle_polygon(inputStack,'rectangle');
 vertices = round(vertices);
 hold_stack = inputStack(vertices(1,2):vertices(3,2), vertices(1,1):vertices(3,1), :);
 
 for f=1:nframes
+    disp(f);
     %read in the image in the tiff stack and converti it into a double for procesing
     hold_image=hold_stack(:,:,f);
     radon_hold_image=radon(hold_image,the_angles);
@@ -64,26 +65,26 @@ for f=1:nframes
     numPixels = cellfun(@length,cc);
     %find the largest contiguous group of suprathreshold pixels
     [~,idx] = max(numPixels);
-    figure(44)
-    
-    subplot(221)
-    hold off
-    
-    imagesc(hold_image,'XData',[1:size(hold_image,2)]+90-size(hold_image,2)/2,'YData',[1:size(hold_image,1)]+90-size(hold_image,1)/2)
-    axis([min([1:size(hold_image,2)]+90-size(hold_image,2)/2) max([1:size(hold_image,2)]+90-size(hold_image,2)/2)...
-        min([1:size(hold_image,1)]+90-size(hold_image,1)/2) max([1:size(hold_image,1)]+90-size(hold_image,1)/2)])
-    axis equal
-    
-    axis xy
-    hold on
-    colormap gray
-    
-    title(['frame=' num2str(f)])
-    subplot(222)
-    imagesc(irtd_norm)
-    axis image
-    axis xy
-    title('inverse-Radon transformed image')
+    % figure(44)
+    % 
+    % subplot(221)
+    % hold off
+    % 
+    % imagesc(hold_image,'XData',[1:size(hold_image,2)]+90-size(hold_image,2)/2,'YData',[1:size(hold_image,1)]+90-size(hold_image,1)/2)
+    % axis([min([1:size(hold_image,2)]+90-size(hold_image,2)/2) max([1:size(hold_image,2)]+90-size(hold_image,2)/2)...
+    %     min([1:size(hold_image,1)]+90-size(hold_image,1)/2) max([1:size(hold_image,1)]+90-size(hold_image,1)/2)])
+    % axis equal
+    % 
+    % axis xy
+    % hold on
+    % colormap gray
+    % 
+    % title(['frame=' num2str(f)])
+    % subplot(222)
+    % imagesc(irtd_norm)
+    % axis image
+    % axis xy
+    % title('inverse-Radon transformed image')
     
     area_filled=regionprops(l,'FilledArea','Image','FilledImage');
     area(f)=length(find(area_filled(idx).FilledImage));
@@ -91,9 +92,10 @@ for f=1:nframes
     radoncontours{f}=contour(irtd_norm(1:end,1:end),[irtd_threhold irtd_threhold]*max(irtd_norm(:)),'r', 'LineWidth', 2);
 end
 
-%plot the area for each frame
-subplot(2,1,2)
-plot(1:f,area(1:f),'ro')
-xlabel('frame number')
-ylabel('area, pixels')
-ylim([0 1.2*max(area(1:f))])
+% %plot the area for each frame
+% subplot(2,1,2)
+% plot(1:f,area(1:f),'ro')
+% xlabel('frame number')
+% ylabel('area, pixels')
+% ylim([0 1.2*max(area(1:f))])
+% end
