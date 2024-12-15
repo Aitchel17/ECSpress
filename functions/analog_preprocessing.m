@@ -1,4 +1,7 @@
 function [result] = analog_preprocessing(analog_signal,parameter,downsample_rate,medianfilt)
+
+% parameter (acquisition): [sampling frequency, sampling resolution, sampling range]
+
 disp(['analog_preprocessing started, downsample to 1/',num2str(downsample_rate),' medianfilter with ',num2str(medianfilt)])
 analog_freq = parameter(1); % unit: Hz
 analog_pixeldepth = parameter(2); % unit: bit
