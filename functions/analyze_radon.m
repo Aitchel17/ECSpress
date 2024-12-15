@@ -86,12 +86,13 @@ for f = 1:size(result.irtd_norm,3)
     tirs_slice = double(result.tirs(:,:,f)>rtd_threshold*max(result.tirs(:,:,f)));
     result.irtd_norm(:,:,f)=iradon(tirs_slice,(the_angles),'linear','Hamming',size(result.tirs,2));
 end
-
-result.tirs = gather(result.tirs);
-result.irtd_norm = gather(result.irtd_norm);
-
 disp('Inverse radon transform end')
+
+
+% area calculation
 disp('Area calculation and contour start')
+
+
 
 result.area = zeros([size(result.irtd_norm,3),1]);
 result.radoncontours=cell(size(result.irtd_norm,3),1); %countour lines obtained of the vessel lumen using TiRS method
