@@ -1,12 +1,10 @@
-function [result] = analyze_radon(hold_stack)
+function [irtd, tirs] = analyze_radon(hold_stack)
 
 % 1. Set parameter
     % 1.1 the_agnles: Determine range and interval of projection angle 
     % 1.2 rtd_threshod: Threshold after normalization, 0.5 equal full width half max of each angle 
-% 2. Draw region of interest using custom function, and extract -> gpuArray
-    % 2.1 Draw ROI and make vertices to integer 
-    % 2.2 Crop region
-    % 2.3 Bring memory to gpu memory
+% 2. gpuArray
+    % Bring memory to gpu memory
 % 3. Radon transform
     % 3.1 preallocate memory for radonimages
     % 3.2 radon transform (gpu)
@@ -37,18 +35,13 @@ function [result] = analyze_radon(hold_stack)
     % 8.3 convert all lower area of upper boundary to be 1
     % 8.4 same as 5.4 but lower boundary
     % 8.5 convert all lower area of lower boundary back to 0
-        % Now final mask for radon thresholding is ready
-    % 8.6 apply to normalized radon 4.2
 % 9. Inverse radon transform
 
 % 1. Set parameter
 the_angles=1:1:180;
 rtd_threshold = 0.5;
 
-% 2. Draw ROI
-[result.vertices, ~] = roi_rectangle_polygon(hold_stack,'rectangle'); %2.1
-result.vertices = round(result.vertices); 
-hold_stack = hold_stack(result.vertices(1,2):result.vertices(3,2), result.vertices(1,1):result.vertices(3,1), :); % 2.2
+% 2. Put stack to memory of gpu
 hold_stack = gpuArray(hold_stack);
 
 % 3. Normalize stack
@@ -68,12 +61,14 @@ disp('Radon thresholding start')
 [~, maxlocarray] = max(radon_stack,[],1); % 5.1
 maxlocarray = squeeze(maxlocarray); 
 sz = size(radon_stack);
-mask = zeros(sz); % 5.2
+mask = false(sz); % 5.2
+tirs = false(sz);
 [row_idx, ~, ~] = ndgrid(1:sz(1), 1:sz(2), 1:sz(3)); % 5.3
 maxlocarray3d = repmat(reshape(maxlocarray, [1, sz(2), sz(3)]), [sz(1), 1, 1]); % 5.4
 
 % 6. upper processing
 mask(row_idx <= maxlocarray3d) = 1; % 6.1
+tirs(row_idx == maxlocarray3d) = 1;
 clearvars maxlocarray3d
 radon_thr = radon_stack<rtd_threshold; % 6.2
 upperboundary_idx = row_idx .* radon_thr.* mask; % 6.3
@@ -88,25 +83,24 @@ bottomboundary_idx = min(bottomboundary_idx, [], 1); % 7.4
 bottomboundary_idx = squeeze(bottomboundary_idx);
 
 % 8. Final mask processing
-mask = zeros(sz); % 8.1
+mask = false(sz); % 8.1
 uplocarray3d = repmat(reshape(upperboundary_idx, [1, sz(2), sz(3)]), [sz(1), 1, 1]); % 8.2
 mask(row_idx >= uplocarray3d) =1; % 8.3
+tirs(row_idx == uplocarray3d) = 1;
 clearvars uplocarray3d
 downlocarray3d = repmat(reshape(bottomboundary_idx, [1, sz(2), sz(3)]), [sz(1), 1, 1]); % 8.4
 mask(row_idx > downlocarray3d) =0; % 8.5
+tirs(row_idx == downlocarray3d) = 1;
 clearvars downlocarray3d
-tirs = radon_stack.*mask; % 8.6
-tirs = gpuArray(tirs);
 disp('Radon thresholding end')
-% result.mask = mask; % inspection purpose
-
+% mask = mask; % inspection purpose
 
 % 9. Inverse radon thresholding 
 disp('Inverse radon transform start')
-result.irtd_norm = zeros([size(iradon(double(tirs(:,:,1)),(the_angles),'linear','Hamming',1,size(tirs,1))),size(tirs,3)]);
-for f = 1:size(result.irtd_norm,3)
-    tirs_slice = double(tirs(:,:,f)>rtd_threshold*max(tirs(:,:,f)));
-    result.irtd_norm(:,:,f)=iradon(tirs_slice,(the_angles),'linear','Hamming',1,size(tirs,1));
+irtd = zeros([size(iradon(double(mask(:,:,1)),(the_angles),'linear','Hamming',1,size(mask,1))),size(mask,3)]);
+mask = gpuArray(mask);
+for f = 1:size(irtd,3)
+    irtd(:,:,f)=iradon(mask(:,:,f),(the_angles),'linear','Hamming',1,size(mask,1));
 end
 disp('Inverse radon transform end')
 end
