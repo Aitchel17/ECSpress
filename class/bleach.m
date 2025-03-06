@@ -7,8 +7,14 @@ classdef bleach < roi
     end
     
     methods
-        function obj = bleach(stackname,roitype)
-           obj@roi(stackname,roitype);
+        function obj = bleach(reference_stack,roimod,mdfExtractLoader_instance)
+            arguments
+                reference_stack (:,:,:) {mustBeNumeric}
+                roimod (1,:) char {mustBeMember(roimod, ["polygon", "rectangle"])}
+                mdfExtractLoader_instance mdfExtractLoader = []
+            end
+
+           obj@roi(reference_stack,roimod,mdfExtractLoader_instance);
         end
         
         function data = decay(obj,stackfieldname)
