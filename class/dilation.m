@@ -7,8 +7,14 @@ classdef dilation < roi
     end
     
     methods
-        function obj = dilation(stackname,roitype)
-            obj@roi(stackname,roitype)
+        function obj = dilation(reference_stack,roimod,mdfExtractLoader_instance)
+            arguments
+                reference_stack (:,:,:) {mustBeNumeric}
+                roimod (1,:) char {mustBeMember(roimod, ["polygon", "rectangle"])}
+                mdfExtractLoader_instance mdfExtractLoader = []
+            end
+
+           obj@roi(reference_stack,roimod,mdfExtractLoader_instance);        
         end
         
 
