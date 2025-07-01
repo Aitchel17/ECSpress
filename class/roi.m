@@ -16,7 +16,7 @@ classdef roi
             arguments
                 ref_stack (:,:,:) {mustBeNumeric}
                 roiname (1,:) char
-                roimod (1,:) char {mustBeMember(roimod, ["polygon", "rectangle"])}
+                roimod (1,:) char {mustBeMember(roimod, ["polygon", "rectangle", 'line'])}
                 mdfExtractLoader_instance mdfExtractLoader = []
             end
 

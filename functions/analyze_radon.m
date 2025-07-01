@@ -78,7 +78,7 @@ upperboundary_idx = squeeze(upperboundary_idx);
 % 7. bottom processing
 mask = ~mask; % 7.1
 bottomboundary_idx = row_idx.*radon_thr.*mask; % 7.2
-bottomboundary_idx(bottomboundary_idx == 0) = 9999; % 7.3
+bottomboundary_idx(bottomboundary_idx == 0) = Inf; % 7.3
 bottomboundary_idx = min(bottomboundary_idx, [], 1); % 7.4
 bottomboundary_idx = squeeze(bottomboundary_idx);
 
