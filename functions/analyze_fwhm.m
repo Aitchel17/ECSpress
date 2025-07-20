@@ -7,12 +7,11 @@ end
 
     [~, max_idx] = max(kymograph,[],1); % 5.1 
     sz = size(kymograph);
-    thresholded = false(sz);
+
     [row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 5.3
     maxlocarray2d = repmat(max_idx, [sz(1), 1]); % 5.4
     % 6. upper processing
 
-    thresholded(row_idx_grid == maxlocarray2d) = 1;
     upkymograph = kymograph;
     upkymograph(row_idx_grid > maxlocarray2d) = NaN;
     upkymograph = upkymograph - prctile(upkymograph,offset,1,"Method","approximate");
@@ -35,20 +34,34 @@ end
     uplocarray2d = repmat(upperboundary_idx, [sz(1), 1]); % 8.2
     downlocarray2d = repmat(lowerboundary_idx, [sz(1), 1]); % 8.4
     mask = row_idx_grid >= uplocarray2d & row_idx_grid <= downlocarray2d;
-    thresholded(row_idx_grid == uplocarray2d | row_idx_grid == downlocarray2d) = 1;
-    
-    % 9. saving
-    idx =[];
-    idx.upperboundary_idx = upperboundary_idx;
-    idx.lowerboundary_idx = lowerboundary_idx;
-    idx.max_idx = max_idx;
 
+    maxline = false(sz);
+    maxline(row_idx_grid == maxlocarray2d) = 1;
+    maxline(row_idx_grid == uplocarray2d | row_idx_grid == downlocarray2d) = 1;
+
+    upline = false(sz);
+    upline(row_idx_grid == uplocarray2d) = 1;
+    
+    downline = false(sz);
+    downline(row_idx_grid == downlocarray2d) = 1;
+
+    midline = false(sz);
+    midline(row_idx_grid == ceil((downlocarray2d+uplocarray2d)/2)) = 1;
+
+    % 9. return
+    idx =[];
+    idx.bv_upperboundary = upperboundary_idx;
+    idx.bv_lowerboundary = lowerboundary_idx;
+    idx.max_idx = max_idx;
+    
     kymograph_mask = [];
     kymograph_mask.rowidx = row_idx_grid;
-    kymograph_mask.inside = mask;
-    kymograph_mask.boundary = thresholded; 
-    kymograph_mask.upkymograph = upkymograph;
-    kymograph_mask.downkymograph = downkymograph;
-
+    kymograph_mask.bv_bwin = mask;
+    kymograph_mask.bv_up = upkymograph;
+    kymograph_mask.bv_down = downkymograph;
+    kymograph_mask.bv_maxline = maxline; 
+    kymograph_mask.bv_upline = upline;
+    kymograph_mask.bv_downline = downline;
+    kymograph_mask.bv_midline = midline;
 end
 
