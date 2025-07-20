@@ -3,18 +3,21 @@ classdef roiSelector < handle
         Stack
         ROIType
         PreexistingVertices = []
-        IsRGB
-        Fig
-        HStack
-        HAxes
-        TheROI
-        OverlayLine
-        MoveListeners = event.listener.empty
-        ResetFlag = false
-        MinSlider
-        MaxSlider
-        WSlider
-        WEdit
+        IsRGB % bool
+        Fig % uifigure object
+        HStack % sliceviewer object
+        HAxes % sliceviewer axes object
+        TheROI % ROI object
+
+        ResetFlag = false 
+        MinSlider % contrast slider
+        MaxSlider % contrast slider
+
+        OverlayLine % line object for thickness marking 
+        MoveListeners = event.listener.empty % line object listener
+        WEdit % line width box
+        WSlider % line width slider
+
     end
 
     methods
@@ -58,9 +61,10 @@ classdef roiSelector < handle
     methods (Access = private)
         function setupUI(obj)
             obj.normalizeStack();
-
-            obj.Fig = uifigure('Name','Stack Explorer','Position',[100 100 900 650]);
-            outer = uigridlayout(obj.Fig,[2 1], 'RowHeight',{'1x','fit'}, 'RowSpacing',6, 'Padding',[8 8 8 8]);
+            obj.Fig = uifigure('Name','Stack Explorer','Position',[100 100 600 950]);
+            outer = uigridlayout(obj.Fig);
+            outer.RowHeight = {400 ,'1x','1x'};
+            outer.ColumnWidth = {'1x'};
             imgPanel = uipanel(outer,'Title','Slice Viewer');
             controlPanel = uipanel(outer,'Title','Console');
 
@@ -93,7 +97,7 @@ classdef roiSelector < handle
         if strcmp(obj.ROIType,'line')
             obj.WEdit = uieditfield(gb,'numeric','Limits',[0 30],'Value',0,...
                 'ValueChangedFcn', @(src,~) obj.syncEditToSlider(src));
-            obj.WSlider.Value = 10;  % override to 10 only for line
+            obj.WSlider.Value = 5;  % override to 5 only for line
         end
             % Slice viewer
             if obj.IsRGB

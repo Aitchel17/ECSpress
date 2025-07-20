@@ -1,12 +1,6 @@
 clear ,clc, tic;
 analysis = analyze('E:\OneDrive - The Pennsylvania State University\2023_ECSpress\01_primary_analysis\matlab_analysis');
 %%
-
-
-
-
-
-%%
 analysis2 = analyze('E:\OneDrive - The Pennsylvania State University\2023_ECSpress\01_primary_analysis\matlab_analysis');
 
 %% Extra parenchymal space

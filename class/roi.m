@@ -4,29 +4,15 @@ classdef roi
         vertices = struct(); % struct: name -> [x, y]
         refslice = struct(); % struct: name -> slice #
         roislice = struct(); % struct: name -> image
-        stacks = struct();   % struct: name -> ROI-applied image stack
-        mean = struct();
         mask = struct();
-        info
-        analog
     end
 
     methods
-        function obj = roi(ref_stack, roiname, roimod, mdfExtractLoader_instance)
+        function obj = roi(ref_stack, roiname, roimod)
             arguments
                 ref_stack (:,:,:) {mustBeNumeric}
                 roiname (1,:) char
                 roimod (1,:) char {mustBeMember(roimod, ["polygon", "rectangle", 'line'])}
-                mdfExtractLoader_instance mdfExtractLoader = []
-            end
-
-            if ~isempty(mdfExtractLoader_instance)
-                obj.info = mdfExtractLoader_instance.info;
-                obj.analog = mdfExtractLoader_instance.analog;
-            else
-                obj.info = struct();
-                obj.analog.data = struct();
-                obj.analog.info = struct();
             end
             obj = obj.addroi(ref_stack, roiname, roimod);
         end
@@ -117,12 +103,9 @@ classdef roi
         end
 
         function overlay = showroi(obj, roiname)
-            overlay = roi_summaryimg(obj.roislice.(roiname), obj.vertices.(roiname));
+            overlay = roi_summaryimg(obj.roislice.(roiname), obj.vertices.(roiname),obj.roimod.(roiname));
         end
 
-        function state = showstack(obj, stackfieldname, roiname)
-            state = util_checkstack(obj.stacks.(roiname).(stackfieldname));
-        end
 
         function obj = copyroi(obj, original_name, new_name)
             % Duplicate all fields for a given ROI name
@@ -139,20 +122,4 @@ classdef roi
       
     end % end of public method  
 
-
-
-properties (Constant)
-            clist = struct(...
-            'white', [1,1,1],...
-            'black', [0,0,0],...
-            'cyan', [0,1,1],...
-            'magenta', [1,0,1],...
-            'yellow', [1,1,0],...
-            'red', [1,0,0],...
-            'green', [0,1,0],...
-            'blue', [0,0,1],...
-            'orange', [1,0.5,0],...
-            'lightgreen', [0.4,0.8,0.4],...
-            'darkgreen', [0,0.5,0]);
-    end
 end
