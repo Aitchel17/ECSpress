@@ -1,18 +1,19 @@
 clc,clear
-
+%
 % loading file and info
 vivo_50um1 = mdfExtractLoader();
+%%
 savepath = fullfile(vivo_50um1.info.analyzefolder,'primary_analysis');
 if ~exist(savepath, 'dir')
     mkdir(savepath);
 end 
-
 % load and process analog channel
 vivo_50um1.analog = vivo_50um1.loadanalog;
+%
 primary_analog = analysis_analog(vivo_50um1.analog.info,vivo_50um1.analog.data);
 primary_analog.airtable = primary_analog.get_airtable('raw_Air_puff1');
 primary_analog.ecogspectrum = primary_analog.get_ecogspectrum('raw_ECoG');
-%% load imagestack
+% load imagestack
 vivo_50um1.stackch1 = vivo_50um1.loadstack("ch1");
 vivo_50um1.stackch2 = vivo_50um1.loadstack("ch2");
 % original time axis
@@ -48,7 +49,7 @@ fig = figure;
 ax = axes('Parent', fig);
 
 % Simulated kymograph data
-kymograph = pax_fwhm.kymograph.kgph_csf;
+kymograph = pax_fwhm.kymograph.kgph_bv;
 kymograph = (kymograph-min(kymograph,[],1))./max(kymograph,[],1);
 
 % Display kymograph using imagesc with colormap
@@ -56,14 +57,7 @@ imagesc(ax, kymograph);
 colormap(ax, parula);  % Or your inferno colormap
 hold(ax, 'on');
 
-%% Draw horizontal line on top
-fig = figure;
-ax = axes('Parent', fig);
-line_y = pax_fwhm.idx.pvs_lowerboundary;
-line_x = linspace(1,size(line_y,2),size(line_y,2));
-plot(ax, line_x, line_y, 'Color', [0 1 0], 'LineWidth', 1);
-line_y = pax_fwhm.idx.pvs_upperboundary;
-plot(ax, line_x, line_y, 'Color', [0 1 0], 'LineWidth', 1);
+
 %%
 line_y = pax_fwhm.idx.bv_lowerboundary;
 plot(ax, line_x, line_y, 'Color', [1 0 1], 'LineWidth', 1);
@@ -74,7 +68,7 @@ fig = figure;
 ax = axes('Parent', fig);
 
 % Simulated kymograph data
-kymograph = pax_fwhm.kymograph.kgph_bv;
+kymograph = pax_fwhm.kymograph.kgph_csf;
 kymograph = (kymograph-min(kymograph,[],1))./max(kymograph,[],1);
 
 % Display kymograph using imagesc with colormap
@@ -97,10 +91,17 @@ plot(ax, line_x, line_y, 'Color', [1 0 1], 'LineWidth', 1);
 
 
 %% saving
+roilist.showroi('pax')
+h2frame = getframe(gca);
+h2img = frame2im(h2frame);
+%%
+pax_fwhm.mask.roiimg = h2img;
+%%
 line_fwhms = struct();
 line_fwhms.pax = pax_fwhm;
 save(fullfile(savepath,'line_fwhms.mat'),'line_fwhms')
 save(fullfile(savepath,'analog.mat'),'primary_analog')
+save(fullfile(savepath,'roilist.mat'),'roilist')
 
 
 
@@ -129,5 +130,100 @@ plot(medfilt1(pax_fwhm.idx.bv_upperboundary,5))
 plot(medfilt1(pax_fwhm.idx.pvs_lowerboundary,5))
 plot(medfilt1(pax_fwhm.idx.bv_lowerboundary,5))
 
+%%
+roilist = roilist.addroi(gaussbv,'radon','polygon');
+%%
+roilist.showroi('radon')
+%%
+stackfieldname ='radon';
+%%
+stack = roi_applymask(gaussbv,roilist.mask.radon);
+stack(isnan(stack))= 0;
+for i = 1:size(stack, 3)
+    sli = medfilt2(stack(:, :, i), [3 3]);  % Apply 3x3 median filter (adjust size as needed)
+    stack(:, :, i) = imgaussfilt(sli,1);
+end
+%%
+radon_result = analyze_radon(stack); % do tirs
+%%
+
+util_checkstack(radon_result.irtd)
+%%
+radon_fwhm = radon_result.idx_downloc-radon_result.idx_uploc;
+%%
+rgb_img = zeros(size(radon_result.irtd(:,:,1),1),size(radon_result.irtd(:,:,1),2),3);
+
+rgb_img(:,:,1) = mat2gray(radon_result.irtd(:,:,1))>0.5;
+rgb_img(:,:,2) = mat2gray(radon_result.irtd(:,:,500))>0.5;
+rgb_img(:,:,3) = mat2gray(radon_result.irtd(:,:,1))>0.5;
+
+figure()
+imshow(rgb_img)
+
+
+
+%%
+figure(window1)
+imagesc(radon_fwhm)
+%%
+figure()
+plot(radon_fwhm(90,:))
+hold on
+plot(radon_fwhm(31,:))
+
+%%
+figure()
+var(radon_fwhm,0,2)
+plot(ans)
+%%
+[~, bottom_loc] = max(stacks.tirs_radon,[],1);
+%%
+stacks.tirs_radon(stacks.tirs_radon==0)=9999;
+
+%%
+[~, top_loc] = min(stacks.tirs_radon,[],1);
+
+%%
+
+bottom_loc = squeeze(bottom_loc);
+top_loc = squeeze(top_loc);
+
+
+%%
+util_checkstack(stacks.irtd_radon)
+%%
+imadjust(stacks.irtd_radon(:,:,1),[0 1])
+%%
+irtd = stacks.irtd_radon(:,:,1);
+%%
+
+%%
+window1=figure(Name='window1',NumberTitle='off');
+
+figure(window1)
+%%
+for i = 1:3000
+irtd = stacks.irtd_radon(:,:,i);
+img = mat2gray(stack(:,:,i));
+resize_img = zeros(size(irtd));
+resize_img(ceil(size(irtd,1)/2)+1-floor(size(img,1)/2):ceil(size(irtd,1)/2)+floor(size(img,1)/2),...
+    ceil(size(irtd,1)/2)+1-floor(size(img,1)/2):ceil(size(irtd,1)/2)+floor(size(img,1)/2)) = img;
+rgb_img = zeros(size(irtd,1),size(irtd,2),3);
+
+rgb_img(:,:,1) = mat2gray(resize_img);
+rgb_img(:,:,2) = mat2gray(irtd);
+rgb_img(:,:,3) = mat2gray(resize_img);
+imshow(rgb_img)
+end
+
+
+
+figure(window1)
+imagesc(stacks.tirs_radon(:,:,1))
+
+
+%%
+cat(4,irtd;resize_img;resize_img)
+%%
 
 
