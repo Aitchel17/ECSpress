@@ -23,7 +23,6 @@ classdef color_lee
             obj.cyan_g =    [zeros(256,1),linspace(0,1,256)', linspace(0,1,256)'];
             obj.yellow_g =    [linspace(0,1,256)', linspace(0,1,256)',zeros(256,1)];
             obj.gray_g =    [linspace(0,1,256)', linspace(0,1,256)', linspace(0,1,256)'];
-
         end
     end
 end
