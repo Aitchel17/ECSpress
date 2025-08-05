@@ -1,4 +1,4 @@
-function [irtd, tirs] = analyze_radon(hold_stack)
+function radon_result = analyze_radon(hold_stack)
 
 % 1. Set parameter
     % 1.1 the_agnles: Determine range and interval of projection angle 
@@ -36,6 +36,7 @@ function [irtd, tirs] = analyze_radon(hold_stack)
     % 8.4 same as 5.4 but lower boundary
     % 8.5 convert all lower area of lower boundary back to 0
 % 9. Inverse radon transform
+radon_result = struct();
 
 % 1. Set parameter
 the_angles=1:1:180;
@@ -62,13 +63,13 @@ disp('Radon thresholding start')
 maxlocarray = squeeze(maxlocarray); 
 sz = size(radon_stack);
 mask = false(sz); % 5.2
-tirs = false(sz);
+radon_result.tirs = zeros(sz);
 [row_idx, ~, ~] = ndgrid(1:sz(1), 1:sz(2), 1:sz(3)); % 5.3
 maxlocarray3d = repmat(reshape(maxlocarray, [1, sz(2), sz(3)]), [sz(1), 1, 1]); % 5.4
 
 % 6. upper processing
 mask(row_idx <= maxlocarray3d) = 1; % 6.1
-tirs(row_idx == maxlocarray3d) = 1;
+radon_result.tirs(row_idx == maxlocarray3d) = 2;
 clearvars maxlocarray3d
 radon_thr = radon_stack<rtd_threshold; % 6.2
 upperboundary_idx = row_idx .* radon_thr.* mask; % 6.3
@@ -86,21 +87,25 @@ bottomboundary_idx = squeeze(bottomboundary_idx);
 mask = false(sz); % 8.1
 uplocarray3d = repmat(reshape(upperboundary_idx, [1, sz(2), sz(3)]), [sz(1), 1, 1]); % 8.2
 mask(row_idx >= uplocarray3d) =1; % 8.3
-tirs(row_idx == uplocarray3d) = 1;
+radon_result.tirs(row_idx == uplocarray3d) = 1;
 clearvars uplocarray3d
 downlocarray3d = repmat(reshape(bottomboundary_idx, [1, sz(2), sz(3)]), [sz(1), 1, 1]); % 8.4
 mask(row_idx > downlocarray3d) =0; % 8.5
-tirs(row_idx == downlocarray3d) = 1;
+radon_result.tirs(row_idx == downlocarray3d) = 3;
 clearvars downlocarray3d
 disp('Radon thresholding end')
 % mask = mask; % inspection purpose
 
+radon_result.idx_maxloc = maxlocarray;
+radon_result.idx_uploc = upperboundary_idx;
+radon_result.idx_downloc = bottomboundary_idx;
+
 % 9. Inverse radon thresholding 
 disp('Inverse radon transform start')
-irtd = zeros([size(iradon(double(mask(:,:,1)),(the_angles),'linear','Hamming',1,size(mask,1))),size(mask,3)]);
+radon_result.irtd = zeros([size(iradon(double(mask(:,:,1)),(the_angles),'linear','Hamming',1,size(mask,1))),size(mask,3)]);
 mask = gpuArray(mask);
-for f = 1:size(irtd,3)
-    irtd(:,:,f)=iradon(mask(:,:,f),(the_angles),'linear','Hamming',1,size(mask,1));
+for f = 1:size(radon_result.irtd,3)
+    radon_result.irtd(:,:,f)=iradon(mask(:,:,f),(the_angles),'linear','Hamming',1,size(mask,1));
 end
 disp('Inverse radon transform end')
 end

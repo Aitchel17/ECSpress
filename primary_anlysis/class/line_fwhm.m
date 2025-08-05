@@ -24,10 +24,13 @@ classdef line_fwhm
             obj.kymograph.kgph_normcsf = (obj.kymograph.kgph_csf-min(obj.kymograph.kgph_csf,[],1))./max(obj.kymograph.kgph_csf,[],1);
         end
         
-        function obj = bvanalysis(obj,thrshold,offset)
+        function obj = bvanalysis(obj,threshold,offset)
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
-             [tmp.idx, tmp.kgph_mask] = analyze_fwhm(obj.kymograph.kgph_bv,thrshold,offset);
+             [tmp.idx, tmp.kgph_mask] = analyze_fwhm(obj.kymograph.kgph_bv,threshold,offset);
+             obj.param.bv_thr = threshold;
+             obj.param.bv_offset = offset;
+
              obj.idx = obj.mergestruct(obj.idx, tmp.idx);
              obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
         end
@@ -36,6 +39,8 @@ classdef line_fwhm
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
              [tmp.idx, tmp.kgph_mask] = analyze_csfoutter(obj.kymograph.kgph_csf,obj.idx.bv_upperboundary,obj.idx.bv_lowerboundary,threshold,offset);
+             obj.param.csf_thr = threshold;
+             obj.param.csf_offset = offset;
              obj.idx = obj.mergestruct(obj.idx, tmp.idx);
              obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
         end
