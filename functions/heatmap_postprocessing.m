@@ -23,11 +23,11 @@ result.xy_counts_clean = result.xy_maskedcounts;
 % NaN removal for x axis
 tmp.allnan_x = all(isnan(result.xy_counts_clean),1);
 result.xy_counts_clean = result.xy_counts_clean(:,~tmp.allnan_x);
-result.x_centers_clean = result.x_centers(~tmp.allnan_x);
+result.x_centers_clean = heatdata.x_centers(~tmp.allnan_x);
 % NaN removal for y axis
 tmp.allnan_y = all(isnan(result.xy_counts_clean),2);
 result.xy_counts_clean = result.xy_counts_clean(~tmp.allnan_y,:);
-result.y_centers_clean = result.x_centers(~tmp.allnan_y);
+result.y_centers_clean = heatdata.y_centers(~tmp.allnan_y);
 
 % 3. Origin correction (Set baseline vessel, and PVS as origin)
 % BV origin correction
@@ -40,11 +40,11 @@ tmp.baseline_pvs = sum(result.xy_counts_clean,2,'omitmissing');
 result.y_baseceneters = result.y_centers_clean - result.y_centers_clean(tmp.maxpvsloc);
 
 
-% 4. Mode of PVS for each x point
-[~,result.maxpvslocs] = max(result.xy_counts_clean,[],1);
-result.modepvs = zeros([length(result.maxpvslocs),1]);
-    for idx = 1:length(result.maxpvslocs)
-        result.modepvs(idx) = result.y_baseceneters(result.maxpvslocs(idx));
+% Mode of PVS for each x point
+[~,result.modepvslocs] = max(result.xy_counts_clean,[],1);
+result.modepvs = zeros([length(result.modepvslocs),1]);
+    for idx = 1:length(result.modepvslocs)
+        result.modepvs(idx) = result.y_baseceneters(result.modepvslocs(idx));
     end
 end
 
