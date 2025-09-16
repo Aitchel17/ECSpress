@@ -1,46 +1,144 @@
 clc, clear
 folderpath = 'G:\tmp\**';
 secondary_struct = secondary_integration(folderpath);
-
 %%
-window1=figure(Name='window1',NumberTitle='off');
+secondary_struct = secondary_afterproceesing(secondary_struct);
 %%
-ssidx_list = [];
+slopes.dynamic = arrayfun(@(s) s.heatdata(1).slope, secondary_struct);
+slopes.static = arrayfun(@(s) s.heatdata(2).slope, secondary_struct);
+slopes.total = arrayfun(@(s) s.heatdata(3).slope, secondary_struct);
+%%
 figure()
+scatter(slopes.dynamic,slopes.static,'rx')
+%%
 hold on
-for ssidx = 1:size(secondary_struct,2)
-    tmp.minpvschanges =  abs(min(secondary_struct(ssidx).heatdata(1).modespvs,[],'all'));
-    tmp.maxpvschanges =  abs(max(secondary_struct(ssidx).heatdata(1).modespvs,[],'all'));
+plot(slopes.static,slopes.static)
+%%
+plot([-0.7, 0.1],[-0.7, 0.1])
 
-    if tmp.minpvschanges > tmp.maxpvschanges
-    plot(secondary_struct(ssidx).heatdata(3).x_centers_aligned,secondary_struct(ssidx).heatdata(3).modespvs)
-    ssidx_list = [ssidx_list, ssidx];
-    else
-        disp(ssidx)
-    end
+
+%% check total modespvs value
+figure()
+clf
+plot_specific_vd_pvst(filtered_secondarystruct,1)
+%%
+figure()
+clf
+plot_individual_vdpvst(filtered_secondarystruct)
+%% Does the toal pvs thickness changes nonlinearly ( steep firsthalf gentle second half )
+ssidx = 8;
+idx = 3;
+
+%%
+
+firsthalf = arrayfun(@(s)  s.heatdata(2).slope_firsthalf, filtered_secondarystruct);
+secondhalf = arrayfun(@(s)  s.heatdata(2).slope_secondhalf, filtered_secondarystruct);
+
+%%
+figure;
+hold on
+histogram(firsthalf, 'BinWidth', 0.1, 'FaceAlpha', 0.5);
+histogram(secondhalf,'BinWidth', 0.1, 'FaceAlpha', 0.5);
+legend('firsthalf','secondhalf');
+
+%%
+figure()
+t = tiledlayout('flow')
+idx= 3
+
+for ssidx = 1:8
+    nexttile
+    tmp.secondarystruct = filtered_secondarystruct(ssidx).heatdata(idx);
+scatter(tmp.secondarystruct.x_centers_aligned, tmp.secondarystruct.modespvs,"x",'MarkerEdgeColor', 'w')
+hold on 
+bv_length = size(tmp.secondarystruct.x_centers_aligned,2);
+midpoint = floor(bv_length/2);
+tmp.yfit = tmp.secondarystruct.slope.*tmp.secondarystruct.x_centers_aligned(1:end) +tmp.secondarystruct.intercept;
+% plot(tmp.secondarystruct.x_centers_aligned(1:end),tmp.yfit(1:end),'LineWidth',2,color='k')
+tmp.yfit = tmp.secondarystruct.slope_firsthalf.*tmp.secondarystruct.x_centers_aligned(1:midpoint) +tmp.secondarystruct.intercept_firsthalf;
+plot(tmp.secondarystruct.x_centers_aligned(1:midpoint),tmp.yfit,'LineWidth',2,color='m')
+
+tmp.yfit = tmp.secondarystruct.slope_secondhalf.*tmp.secondarystruct.x_centers_aligned(midpoint:end) +tmp.secondarystruct.intercept_secondhalf;
+plot(tmp.secondarystruct.x_centers_aligned(midpoint:end),tmp.yfit,'LineWidth',2,color='c')
 end
 
-axis tight
-%%
-secondary_struct = secondary_struct(ssidx_list);
-%%
+%% make figure background as black
 
-
+fig = gcf;  % 현재 figure (또는 figure handle)
+ax = findall(fig, 'type', 'axes');  % figure 내 모든 axes 핸들 찾기
+set(ax, 'XLim', [-3 8], 'YLim', [-6 5]);  % 모든 축에 동일하게 적용
+set(ax,'XColor',[1 1 1])
+set(ax,'YColor',[1 1 1])
+set(ax,'Color', [0 0 0])
+set(ax,'Color', [0 0 0])
+% figure 안의 모든 axes 찾기
+% 1) 우선 모두 axis equal 적용
+arrayfun(@(a) axis(a, 'equal'), ax);
+% 2) 모든 axes를 link해서 확대/이동이 같이 적용되도록
+linkaxes(ax, 'xy');   % 'x', 'y', 'xy' 중 선택 가능
+%%
+secondary_struct.heatdata
+%%
+arrayfun(@(s) length(s.heatdata(3).x_centers_aligned), filtered_secondarystruct);
 
 %%
-ssidx = 8;
-demo.bvdata = secondary_struct(ssidx).heatdata(3).x_centers_aligned;
-demo.pvsdata = secondary_struct(ssidx).heatdata(3).modespvs;
+mean(dynamic_slopes)
+std(dynamic_slopes)
+%%
+d1 = dynamic_slopes./total_slopes;
+d2 = static_slopes./total_slopes;
+%%
+d3 = d1+d2
+
+%%
 figure()
-scatter(demo.bvdata,demo.pvsdata)
+scatter(dynamic_slopes,static_slopes)
 hold on
-plot(demo.bvdata,demo.bvdata*(demo.bvdata'\demo.pvsdata))
-%%
-demo.upbvdata = secondary_struct(ssidx).heatdata(1).x_centers_aligned;
-demo.uppvsdata = secondary_struct(ssidx).heatdata(1).modespvs;
+%% make Total pvs - Dynamic pvs plot
 figure()
-scatter(demo.upbvdata,demo.uppvsdata)
 hold on
+scatter(slopes.dynamic,slopes.total, 100, "x",MarkerEdgeColor='w',LineWidth=2)
+plot([-1,0],[-1,0], color='r',LineWidth=2)
+plot([-0.5,0],[-1,0],color='g',LineWidth=2)
+axis tight equal
+ax = gca;              % Get current axes
+ax.FontSize = 18;
+set(ax,'XColor',[1 1 1])
+set(ax,'YColor',[1 1 1])
+set(ax,'Color', [0 0 0])
+set(ax,'Color', [0 0 0])
+xlim([-1.1 0])
+ylim([-1.1 0])
+
+%%
+data = dynamic_slopes;
+mu = mean(data)     % 평균
+se = std(data) / sqrt(length(data));  % 표준오차 (standard error)
+n = length(data);
+alpha = 0.05;  % 95% CI
+tval = tinv(1 - alpha/2, n - 1);  % t-score
+
+ci95 = tval * se
+
+%%
+hist(slopes)
+first_vals-second_vals
+%%
+figure()
+plot_individual_vdpvst(secondary_struct)
+
+
+figure('Position', [200, 200, 1200, 400])
+plot(image_x,image_ch1,Color='r');
+hold on;
+plot(image_x,image_ch2,Color='g');
+
+secondary_struct(ssidx).heatdata(3).modespvs
+
+
+%%
+figure()
+plot(secondary_struct(1).heatdata(2).modespvs)
 plot(demo.upbvdata,demo.upbvdata*(demo.upbvdata'\demo.uppvsdata))
 %%
 
@@ -61,10 +159,6 @@ result.modepvs = zeros([length(result.modepvslocs),1]);
     for idx = 1:length(result.modepvslocs)
         result.modepvs(idx) = result.y_baseceneters(result.modepvslocs(idx));
     end
-
-
-
-
 %%
 demo.downbvdata = secondary_struct(1).heatdata(2).x_centers_aligned;
 demo.downpvsdata = secondary_struct(1).heatdata(2).modespvs;
@@ -75,132 +169,53 @@ figure()
 scatter(demo.bvdata,demo.pvsdata)
 hold on
 plot(demo.bvdata,demo.bvdata*(demo.bvdata'\demo.pvsdata))
-%%
+
+%% Plot thickness changes of all example
 figure()
-scatter(demo.upbvdata,demo.uppvsdata)
+t =tiledlayout("flow",TileSpacing="tight")
+for idx = 1:8
+nexttile
+tmp.taxis = secondary_struct(idx).fwhmline.pax.t_axis(2:end);
+plot(tmp.taxis,secondary_struct(idx).thickness(1).thickness)
 hold on
-plot(demo.bvdata,demo.bvdata*(demo.bvdata'\demo.pvsdata))
-%%
-t = tiledlayout()
-%%
-figure()
-plot(seco)
-
-
-
-
-%%
-figure()
-%%
-for k = 1:length(secondary_struct.goodsessionlist)
-    disp(k)
-
-hold on
-plot(secondary_struct.(secondary_struct.goodsessionlist(k)).heatdata(1).x_centers_aligned,...
-    secondary_struct.(secondary_struct.goodsessionlist(k)).heatdata(1).modespvs,'r')
-plot(secondary_struct.(secondary_struct.goodsessionlist(k)).heatdata(2).x_centers_aligned,...
-    secondary_struct.(secondary_struct.goodsessionlist(k)).heatdata(2).modespvs,'g')
-pause(1)
-end
-
-
-
-
-
-%%
-figure()
-plot(tmp.result_up.x_baseceneters,tmp.result_up.modepvs,'r')
-hold on
-plot(tmp.result_down.x_baseceneters,tmp.result_down.modepvs,'r')
+plot(tmp.taxis,secondary_struct(idx).thickness(2).thickness)
+plot(tmp.taxis,secondary_struct(idx).thickness(3).thickness)
+plot(tmp.taxis,secondary_struct(idx).thickness(4).thickness)
+hold off
+axis tickaligned
 axis tight
+end
+%%
+plot_individual_thickness(secondary_struct,8)
+%% plot one of the example
 
 %%
+airtable = secondary_struct(idx).analog.airtable;
+%%
+starttime = airtable.StartTime;
+endtime = airtable.EndTime;
+%%
 
+secondary_struct(idx).analog.data.taxis(end)
+%%
+
+secondary_struct(idx).analog.data.raw_Ball
+%%
+figure()
+plot(secondary_struct(idx).analog.data.taxis(end),secondary_struct(idx).analog.data.raw_Ball)
+
+%%
+figure()
+plot(tmp.taxis,secondary_struct(idx).thickness(1).thickness*scale,'Color','k')
+
+hold on
+xline(starttime, 'Color', 'g')
+xline(endtime,'Color','r')
+plot(secondary_struct(idx).analog.data.raw_Ball,secondary_struct(idx).analog.data.taxis(end))
+
+
+%%
 plot(heatdata.x_baseceneters,heatdata.modepvs)
 
-%%
-heatdata = secondary_struct.(secondary_struct.goodsessionlist(3)).heatdata;
-spattern = 'flat';
-hidx = 1
-figure()
-s = pcolor(heatdata(hidx).x_centers_aligned,heatdata(hidx).y_centers_aligned, heatdata(hidx).xy_counts_aligned);
-s.FaceColor = spattern;
-set(s,'EdgeColor','none');
-set(gca, 'YDir', 'normal')
-axis equal
-axis tight
-axis on
-colormap(clee.gray_g)
-
-%% pvs빈도 계산
- 
-
-figure()
-bar(heatdata.y_centers,baseline_pvs,'hist')
-xlim([0 max(heatdata.y_centers)])
-
-
-
-
-%%
-primary_session.infodict("mdfName")
-
-
-
-%% plot function start from here
-
-
-
-
-%
-
-
-%%
-window1=figure(Name='window1',NumberTitle='off');
-window2=figure(Name='window2',NumberTitle='off');
-%%
-
-figure(window2)
-hold off
-plot(tmp.downbv,'r')
-hold on
-plot(tmp.downcell,'k')
-plot(tmp.downpvs,'g')
-
-plot(tmp.upbv,'r')
-hold on
-plot(tmp.upcell,'k')
-plot(tmp.uppvs,'g')
-figure(window1)
-plot(tmp.downpvs-tmp.downbv)
-plot(tmp.uppvs-tmp.upbv)
-%%
-
-
-% 3.1 원점보정 히스토그램
-figure()
-hold on
-
-b1 = bar(heatdata.x_baseceneters, tmp.baseline_bv, 'hist');
-b2 = bar(-heatdata.y_baseceneters, tmp.baseline_pvs, 'hist');
-
-% 색상 설정
-b1.FaceColor = [0.2 0.6 1];   % 파랑
-b2.FaceColor = [1 0.4 0.4];   % 빨강
-
-% 투명도 설정
-b1.FaceAlpha = 0.5;
-b2.FaceAlpha = 0.5;
-
-% 공통 범위로 x축 설정
-all_x = [heatdata.x_baseceneters(:); heatdata.y_baseceneters(:)];
-xlim([min(all_x), max(all_x)]);
-
-xlabel('Offset from peak')
-ylabel('Counts')
-legend({'BV', 'PVS'})
-
-%%
-test.snippet_fname = 'HQL080_whiskerb_250722_002';
 
 

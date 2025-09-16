@@ -24,15 +24,14 @@ clee = color_lee;
 %%
 clc, clear
 %%
-foldername = '00_igkl';
-mouseid = 'hql072';
+foldername = '01_igkltdt';
+mouseid = 'hql080';
 path = fullfile('G:\tmp\', foldername, mouseid, '**');
 %%
 savepath= struct();
 savepath.loadsplit = strsplit(path,filesep);
 savepath.primarystruct = fullfile(savepath.loadsplit{1:end-1},'primarystruct.mat');
 savepath.secondarystruct = fullfile(savepath.loadsplit{1:end-1},'paxfwhm_struct.mat');
-%
 primarystruct = primary_integration(string(path));
 %% 1. kymograph selection
 tmp.fig = plot_tile_kymograph(primarystruct,'all');
