@@ -48,8 +48,12 @@ classdef line_fwhm < handle
             name_kymograph = strcat("kgph_",stack_name);
             name_processed_kymograph = strcat(name_kymograph,'_processed');
             processed_kymograph = medfilt2(obj.kymograph.(name_kymograph),window_size);
+            prctile10 = prctile(processed_kymograph,10,1);
+            prctile90 = prctile(processed_kymograph,90,1);
+            processed_kymograph = min(processed_kymograph, prctile90);
+            processed_kymograph = max(processed_kymograph, prctile10);
+            processed_kymograph = processed_kymograph./max(processed_kymograph,[],1);
             obj.kymograph.(name_processed_kymograph) = processed_kymograph;
-
         end
 
 

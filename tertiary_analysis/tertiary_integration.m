@@ -8,6 +8,30 @@ slopes.dynamic = arrayfun(@(s) s.heatdata(1).slope, secondary_struct);
 slopes.static = arrayfun(@(s) s.heatdata(2).slope, secondary_struct);
 slopes.total = arrayfun(@(s) s.heatdata(3).slope, secondary_struct);
 %%
+plot_static_dynamic_slope = make_fig('static-dynamic_slope');
+%%
+plot_static_dynamic_slope.update_figsize([7 7])
+%%
+plot_static_dynamic_slope.plot_scatter(slopes.dynamic,slopes.static,'go')
+%%
+plot_static_dynamic_slope.change_xylim([-1 0],[-1 0])
+%%
+plot_static_dynamic_slope.initialize_axis
+%%
+plot_static_dynamic_slope.put_xaxistitle('Dynamic slope')
+%%
+plot_static_dynamic_slope.put_yaxistitle('Static slope')
+%%
+plot_static_dynamic_slope.fontsize = 20;
+
+%%
+plot_static_dynamic_slope.convert_background(true)
+%%
+
+
+
+axis(plot_static_dynamic_slope.ax,'equal')
+%%
 figure()
 scatter(slopes.dynamic,slopes.static,'rx')
 %%
