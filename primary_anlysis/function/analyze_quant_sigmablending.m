@@ -34,7 +34,5 @@ for sli = 1:nsli
 end
 
 sum_area = squeeze(sum(sum_stack,[1,2]));
-figure()
-plot(sum_area)
 end
 
