@@ -46,3 +46,33 @@ function raw_datastruct = primary_loaddata(test_dir)
     raw_datastruct.stackch2 = stackch2;
 
 end
+
+function loadstruct = util_load_primarydataset(extractfolder_path)
+%UTIL_LOAD_PRIMARYDATASET Summary of this function goes here
+%   Detailed explanation goes here
+%   check existence of primary anlysis and make folder
+    savepath = fullfile(extractfolder_path,'primary_analysis');
+    loadstruct = struct();
+    if ~exist(savepath, 'dir')
+        mkdir(savepath);
+    end
+
+    % check existence of line_fwhms 
+    if isfile(fullfile(extractfolder_path,'primary_analysis/line_fwhms.mat'))
+        tmp.load = load(fullfile(extractfolder_path,'primary_analysis/line_fwhms.mat'));
+        loadstruct.line_fwhms = tmp.load.line_fwhms;
+    end
+
+    % check existence of line_fwhms 
+    if isfile(fullfile(extractfolder_path,'primary_analysis/analog.mat'))
+        tmp.load = load(fullfile(extractfolder_path,'primary_analysis/analog.mat'));
+        loadstruct.analog = tmp.load.primary_analog;
+    end
+
+    % check existence of line_fwhms 
+    if isfile(fullfile(extractfolder_path,'primary_analysis/roilist.mat'))
+        tmp.load = load(fullfile(extractfolder_path,'primary_analysis/roilist.mat'));
+        loadstruct.roilist = tmp.load.roilist;
+    end
+end
+
