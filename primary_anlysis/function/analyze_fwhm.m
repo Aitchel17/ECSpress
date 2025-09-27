@@ -9,12 +9,18 @@ end
     sz = size(kymograph);
     norm_kymograph = kymograph./max_value;
     [row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 5.3
-    maxlocarray2d = repmat(max_idx, [sz(1), 1]); % 5.4 
+
+    filtered_max_idx = medfilt1(max_idx,31);
+    %devidation from midline
+    % dev_mid = sz(1)/2 - filtered_max_idx;
+    % mid_idx = (sz(1)-dev_mid)./2 ;
+    maxlocarray2d = repmat(filtered_max_idx, [sz(1), 1]); % 5.4 
     upkymograph = norm_kymograph;
     upkymograph(row_idx_grid > maxlocarray2d) = NaN;
     up_offset = prctile(upkymograph,offset,1,"Method","approximate");
     upoffsetloc =  upkymograph<up_offset;
     upoffsetloc = max(row_idx_grid.*upoffsetloc,[],1);
+    upoffsetloc = medfilt1(upoffsetloc,31);
     upkymograph(row_idx_grid < upoffsetloc) = NaN;
     upkymograph = upkymograph - up_offset; % below offset become negative
     upkymograph = upkymograph./max(upkymograph,[],1); % Max to be 1
@@ -30,12 +36,15 @@ end
     %%
     down_offset = prctile(downkymograph,offset,1,"Method","approximate");
     downoffsetloc =  downkymograph<down_offset;
+
     %%
     downoffsetloc = row_idx_grid.*downoffsetloc;
     %%
     downoffsetloc(downoffsetloc == 0) = Inf;
     %%
     downoffsetloc = min(downoffsetloc,[],1);
+    downoffsetloc = medfilt1(downoffsetloc,31);
+
     %%
     downkymograph(row_idx_grid > downoffsetloc) = NaN;
     %%
@@ -72,8 +81,9 @@ end
     idx =[];
     idx.upperboundary = upperboundary_idx;
     idx.lowerboundary = lowerboundary_idx;
-    idx.max_idx = max_idx;
-    
+    idx.max_idx = filtered_max_idx;
+    idx.downoffsetloc = downoffsetloc;
+    idx.upoffsetloc = upoffsetloc;
     kymograph_mask = [];
     kymograph_mask.rowidx = row_idx_grid;
     kymograph_mask.bwin = mask;
