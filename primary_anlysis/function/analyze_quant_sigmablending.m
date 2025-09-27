@@ -30,7 +30,7 @@ sumpixel_sli = reshape(sum_stack,[],nsli);
 for sli = 1:nsli
     pixels = pixel_sli(:,sli);
     pixels = sumpixel_sli(~isnan(pixels));
-    sum_stack(:,:,sli) = sum_stack(:,:,sli) > prctile(pixels,75,"all");
+    sum_stack(:,:,sli) = sum_stack(:,:,sli) > prctile(pixels,50,"all");
 end
 
 sum_area = squeeze(sum(sum_stack,[1,2]));

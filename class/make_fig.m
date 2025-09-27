@@ -25,6 +25,9 @@ classdef make_fig < handle
                 "Position",[obj.monitor_xyinch(1) obj.monitor_xyinch(2) obj.xy_sizeinch(1) obj.xy_sizeinch(2)]) % 
             obj.initialize_axis
         end
+
+        
+
         
         function plot_kymograph(obj,kymograph_data)
             %METHOD1 Summary of this method goes here
@@ -79,8 +82,79 @@ classdef make_fig < handle
         
 
     end
+%%  ROI visualization related methods
+methods
+    function showroi(obj, roi_handle, label, channel)
+            arguments
+                obj
+                roi_handle
+                label
+                channel
+            end           
+            i = roi_handle.findLabel(label);
+            image = roi_handle.ROIs(i).ROISlice;
+            vertices = roi_handle.ROIs(i).Vertices;
+            roimod = roi_handle.ROIs(i).Mode;
+
+            %%
+            im_handle = imagesc(obj.ax,image(:,:,channel)); % plot image
+            axis(obj.ax, 'image')
+            colormap('gray')
+
+            hold on;
+            
+            if strcmp(roimod, 'line')
+                plot(obj.ax,[vertices(1, 1); vertices(2, 1)], [vertices(1, 2); vertices(2, 2)], 'r-', 'LineWidth', vertices(3, 1)); % Close the polygon
+            else
+                plot(obj.ax,[vertices(:, 1); vertices(1, 1)], [vertices(:, 2); vertices(1, 2)], 'r-', 'LineWidth', 2); % Close the polygon
+            end
+            hold off;
+        
+            % Output the original image (no modifications made to the image itself)
+            imcontrast(im_handle)
+        end
+
+        function showrois(obj, roi_handle, channel, labels) % 250925, display all region of interest
+            arguments
+                obj
+                roi_handle
+                channel
+                labels = []
+            end
+            if isempty(labels)
+                image = zeros(size(roi_handle.ROIs(1).ROISlice));
+            else
+                i = roi_handle.findLabel(labels(1));
+                image = roi_handle.ROIs(i).ROISlice;
+            end
+            %%
+            idx_list = [];
+            for i = 1:length(labels)
+                idx = roi_handle.findLabel(labels(i));
+                idx_list = [idx_list, idx];
+            end
+            im_handle = imagesc(obj.ax,image(:,:,channel)); % plot image
+            axis(obj.ax, 'image')
+            colormap('gray')
+            hold on           
+            for i = 1:length(idx_list)                
+                vertices = roi_handle.ROIs(idx_list(i)).Vertices;
+                roimod = roi_handle.ROIs(idx_list(i)).Mode;
+                    if strcmp(roimod, 'line')
+                        plot(obj.ax,[vertices(1, 1); vertices(2, 1)], [vertices(1, 2); vertices(2, 2)], 'r-', 'LineWidth', vertices(3, 1)); % Close the polygon
+                    else
+                        plot(obj.ax,[vertices(:, 1); vertices(1, 1)], [vertices(:, 2); vertices(1, 2)], 'r-', 'LineWidth', 2); % Close the polygon
+                    end
+            end
+
+            % Output the original image (no modifications made to the image itself)
+            imcontrast(im_handle)
+        end
+
+end
 
 
+%% axis 
     methods
         function initialize_axis(obj)
             if isempty(obj.ax)

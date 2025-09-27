@@ -1,4 +1,4 @@
-directories.load_dir = 'G:\tmp\01_igkltdt\hql080\250722_hql080_whiskerb\HQL080_whiskerb_250722_002';
+directories.load_dir = 'G:\tmp\01_igkltdt\hql080\250722_hql080_whiskerb\HQL080_whiskerb_250722_007';
 directories.save_dir = fullfile(directories.load_dir,"primary_analysis");
 directories.savefig_dir =  'E:\OneDrive - The Pennsylvania State University\2023_ECSpress\08_figures';
 
@@ -11,15 +11,15 @@ directories.savepath = fullfile(primary_datastruct.mdfextract.info.analyzefolder
 % load roi.mat if exist
 roilist = roi_handle(directories.save_dir);
 
-%% ROI Level1, PAX : 
+%% ROI Level 1.1, PAX : 
 % Primary axis (pax) - Where successful Kymograph generation to be guarented
 try
 roilist.addroi(roianalysis.preprocessed_ch1,'pax','line');
 catch ME
     disp(ME.message)
-    roilist.modifyroi(roianalysis.preprocessed_ch1,'pax');
+    roilist.modifyroi(roianalysis.preprocessed_ch2,'pax');
 end
-%% ROI Level1, Extraparenchyma : 
+%% ROI Level 1.2, Extraparenchyma : 
 % Extraparenchyma - For rough calculation of constricted, dilated state
 try
 roilist.addroi(roianalysis.preprocessed_ch2,'extraparenchyma','polygon');
@@ -27,15 +27,15 @@ catch ME
     disp(ME.message)
     roilist.modifyroi(roianalysis.preprocessed_ch1,'extraparenchyma');
 end
-%% ROI Level1, Dip in angle : 
+%% ROI Level 1.3, Dip in angle : 
 % Extraparenchyma - For rough calculation of constricted, dilated state
 try
-roilist.addroi(roianalysis.preprocessed_ch2,'dipin','line');
+roilist.addroi(roianalysis.preprocessed_ch1,'dipin','line');
 catch ME
     disp(ME.message)
     roilist.modifyroi(roianalysis.preprocessed_ch1,'dipin');
 end
-%% ROI Level1, Dip out angle : 
+%% ROI Level 1.4, Dip out angle : 
 % Extraparenchyma - For rough calculation of constricted, dilated state
 try
 roilist.addroi(roianalysis.preprocessed_ch2,'dipout','line');
@@ -43,9 +43,20 @@ catch ME
     disp(ME.message)
     roilist.modifyroi(roianalysis.preprocessed_ch1,'dipout');
 end
+
+%% Put image slice for Level 1 ROI list
+roilist.addimgchannel(cat(4,roianalysis.preprocessed_ch1,roianalysis.preprocessed_ch2),...
+    ["pax","extraparenchyma","dipin","dipout"]); % put image slices
+
+%%
+
+
 %% Rough calculation of BV area using multi sigma blending after thresholding 250920-250924
 roianalysis.exp_bv = roilist.applyvertices(roianalysis.preprocessed_ch1,'extraparenchyma');
-roianalysis.bv_psudoarea = analyze_quant_sigmablending(roianalysis.exp_bv);
+[roianalysis.bv_psudoarea,roianalysis.bv_stack] = analyze_quant_sigmablending(roianalysis.exp_bv);
+%%
+
+util_checkstack(roianalysis.bv_stack)
 %% Plot area
 plot_bvarea = make_fig('bvarea');
 plot_bvarea.update_figsize([8 4])
@@ -59,9 +70,43 @@ plot_bvarea.convert_background(true);
 %% Find constricted and dilated frame chunk
 [roianalysis.dilated_framechunks, roianalysis.dilatedlength] = analyze_prctileframecluster(roianalysis.bv_psudoarea ,[95 99]);
 [roianalysis.constricted_framechunks, roianalysis.constrictedlength] = analyze_prctileframecluster(roianalysis.bv_psudoarea ,[5 10]);
-
+%%
+roianalysis.dilated_ch1 = roianalysis.preprocessed_ch1(:,:,cat(1,roianalysis.dilated_framechunks{:}));
+roianalysis.dilated_ch2 = roianalysis.preprocessed_ch2(:,:,cat(1,roianalysis.dilated_framechunks{:}));
+roianalysis.constricted_ch1 = roianalysis.preprocessed_ch1(:,:,cat(1,roianalysis.constricted_framechunks{:}));
+roianalysis.constricted_ch2 = roianalysis.preprocessed_ch2(:,:,cat(1,roianalysis.constricted_framechunks{:}));
 % Using clustered frames to make constricted and dilated ROI 250925
 %% ROI level 2 
+try
+    roilist.copyroi('extraparenchyma','constricted_bv');
+catch ME
+    disp(ME.message)
+    roilist.modifyroi(roianalysis.preprocessed_ch1,'constricted_bv');
+end
+%%
+try
+    roilist.copyroi('extraparenchyma','constricted_bv');
+catch ME
+    disp(ME.message)
+    roilist.modifyroi(cluster3_bv,'constricted_bv');
+end
+
+%%
+try
+    roilist.copyroi('extraparenchyma','dilated_bv');
+catch ME
+    disp(ME.message)
+    roilist.modifyroi(roianalysis.preprocessed_ch2(:,:,kgph_lumen_columnidx),'dilated_bv');
+end
+%%
+try
+    roilist.copyroi('extraparenchyma','dilated_bv');
+catch ME
+    disp(ME.message)
+    roilist.modifyroi(cluster67_bv,'dilated_bv');
+end
+
+%%
 try
     roilist.copyroi('extraparenchyma','constricted_bv');
 catch ME
@@ -75,16 +120,38 @@ catch ME
     disp(ME.message)
     roilist.modifyroi(roianalysis.preprocessed_ch1(:,:,cat(1,roianalysis.dilated_framechunks{:})),'dilated_bv');
 end
+%% 
+roilist.addimgchannel(cat(4,roianalysis.preprocessed_ch1,roianalysis.preprocessed_ch2),...
+    ["dilated_bv","constricted_bv"]); % put image slices
 
 %%
-roilist.showroi('dilated_bv')
+roilist.addimgchannel(cat(4,roianalysis.dilated_ch1, roianalysis.dilated_ch2),"dilated_bv"); % put image slices
+roilist.addimgchannel(cat(4,roianalysis.constricted_ch1, roianalysis.constricted_ch2),"constricted_bv"); % put image slices
 
 %%
 roilist.save2disk
+%%
+roi_fig = make_fig('roi_fig');
+roi_fig.update_figsize([8 6])
 
+%%
+roi_fig.showroi(roilist,'dilated_bv',1)
+%%
+roi_fig.reset_axis
 
+roi_fig.showrois(roilist,2,["dilated_bv","constricted_bv"])
+%%
+roi_fig.reset_axis
+
+roi_fig.showrois(roilist,2,["constricted_bv","dilated_bv"])
+
+%%
+roi_fig.showrois(roilist,1,["dipin","dipout"])
+%%
+
+%%
 %% 2. Do polar analysis and get sinogram like things
-img = mean(roianalysis.preprocessed_ch2(:,:,dilated_frames{5}),3);
+img = mean(roianalysis.dilated_ch1,3);
 figure()
 imshow(mat2gray(img))
 %%
