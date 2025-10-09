@@ -188,11 +188,13 @@ function [idx, kymograph_mask,parameter] = analyze_fwhm(kymograph)
 
 
     uplocarray2d = repmat(idx.upperboundary, [sz(1), 1]); % 8.2
-    downlocarray2d = repmat(idx.lowerboundary, [sz(1), 1]); % 8.4
     upline = false(sz);
     upline(ori_row_idx_grid == uplocarray2d) = 1;
+
+    downlocarray2d = repmat(idx.lowerboundary, [sz(1), 1]); % 8.4
     downline = false(sz);
     downline(ori_row_idx_grid == downlocarray2d) = 1;
+    
     midline = false(sz);
     midline(row_idx_grid == ceil((downlocarray2d+uplocarray2d)/2)) = 1;
     

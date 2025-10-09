@@ -2,97 +2,224 @@ function [idx, kymographmask] = analyze_csfoutter(kymograph, bv_upidx, bv_downid
 % calculate_csf_boundaries - calculates upper and lower CSF boundaries based on given inputs.
 %
 % Inputs:
-%   c                  - normalized CSF intensity profile (2D array)
-%   upperboundary_idx  - upper boundary indices from blood vessel
-%   bottomboundary_idx - bottom boundary indices from blood vessel
-%   bv_centeridx       - blood vessel center indices
+%   kymograph          - normalized CSF intensity profile (2D array)
+%   bv_upidx  - upper boundary indices from blood vessel
+%   bv_downidx - bottom boundary indices from blood vessel
 %   threshold          - intensity threshold for boundary detection
-%   thresholded        - initial thresholded binary mask
+%   offset        - initial thresholded binary mask
 %
 % Outputs:
-%   up_csf_boundary    - upper CSF boundary indices
-%   down_csf_boundary  - lower CSF boundary indices
-%   cb_thresholded     - updated binary mask with CSF boundaries
+%   idx.up_csf_boundary    - upper CSF boundary indices
+%   idx.down_csf_boundary  - lower CSF boundary indices
+%   kymographmask.cb_thresholded     - updated binary mask with CSF boundaries
 
-    % output struct
+    %%
+    fig = figure('Name','Check kymograph'); % 0.1.1 initialize figure
+    ax = axes(fig); % 0.1.2 initialize axis 
+    imagesc(ax,kymograph) % 0.1.3 show original kymograph for interactive crop
+    %%
+    % 0. output struct
     idx = []; % 1D row index per slice
     kymographmask = []; % 2D Mask corresponding to kymograph or masked kymograph
+
+    % 1. size and grid matrix generation
     sz = size(kymograph);
     [row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 2D row index grid
-    bv_centeridx = ceil((bv_downidx+bv_upidx)/2);
+    % bv_centeridx = ceil((bv_downidx+bv_upidx)/2); % center point to
+    % divide kymograph  251013. CSF boundary restraint
+
+    %% Restrict scope
+
+    while true
+        cla(ax)
+        imagesc(ax,kymograph)
+        upcropval = input('Get upper crop idx: '); % 0.2.1 Get input
+        upcropkymograph = kymograph;
+
+        upcropkymograph(1:upcropval,:) = NaN;
+        imagesc(ax,upcropkymograph)
+        flag = input('looks ok? type "y":  ', 's'); % 0.3.5 check
+        if strcmp(flag,'y') % 0.3.5 check
+            break
+        end
+    end
+
+    while true
+        cla(ax)
+        imagesc(ax,kymograph)
+        downcropval = input('Get lower crop idx: '); % 0.2.1 Get input
+        cropkymograph = upcropkymograph;
+        cropkymograph(downcropval:end,:) = NaN;
+        imagesc(ax,cropkymograph)
+        flag = input('looks ok? type "y":  ', 's'); % 0.3.5 check
+        if strcmp(flag,'y') % 0.3.5 check
+            break
+        end
+    end
+
+
     
-    % Top process (CSF external boundary using vessel upper boundary)
-    edgebv_upkymograph = kymograph;
+    %% 2.Separation process (CSF external boundary using vessel upper boundary)
+    % 2.1 Upper vessel kymograph generation (above upper vessel boundary)
+    edgebv_upkymograph = cropkymograph;
     edgebv_upkymograph(row_idx_grid > bv_upidx) = NaN;
+    edgebv_downkymograph = cropkymograph;
+    edgebv_downkymograph(row_idx_grid < bv_downidx) = NaN;
     
-    % Outer boundary detection (upper)
-    up_offset = prctile(edgebv_upkymograph, offset, 1);
-    mask_up = edgebv_upkymograph < up_offset;
-    [~, upoffsetloc] = max(mask_up .* row_idx_grid, [], 1);
+    cla(ax)
+    imagesc(ax,edgebv_upkymograph);
+    hold on
+    plot(bv_upidx,'r')
+  
+    % 2.2 Shadow center detection (offset region) Outer boundary detection (upper)
+    % Protect CSF region from wrong shadow detection below PVS signal
+    %% 2.2.1 upmax position
+    up_maxoffset = prctile(edgebv_upkymograph, 75, 1);
+    up_maxidx = edgebv_upkymograph>=up_maxoffset;
+    up_maxidx = up_maxidx .* row_idx_grid;
+    up_maxidx(up_maxidx == 0) = NaN; % 1.6 convert 0 to NaN for median
+    up_maxidx = round(median(up_maxidx,1,"omitmissing")); % Median quarter idx
+    cla(ax)
+    imagesc(ax,edgebv_upkymograph);
+    plot(up_maxidx,'r')
     
-    % Upper FWHM calculation (CSF internal boundary using vessel center)
-    centbv_upkymograph = kymograph;
-    centbv_upkymograph(row_idx_grid > bv_centeridx | row_idx_grid < upoffsetloc) = NaN;
-    centbv_upkymograph = centbv_upkymograph - up_offset; % don't care about negative value will not effect on thresholding
-    maxup = max(centbv_upkymograph, [], 1);
-    centbv_upkymograph = centbv_upkymograph ./ maxup;
-    thr_cup = centbv_upkymograph > threshold;
-    csf_thridx = row_idx_grid .* thr_cup;
-    csf_thridx(csf_thridx == 0) = Inf;
-    upperupboundary_idx = min(csf_thridx, [], 1);
+    %% 2.2.1 downmax position
+    down_maxoffset = prctile(edgebv_downkymograph, 75, 1);
+    down_maxidx = edgebv_downkymograph>=down_maxoffset;
+    down_maxidx = down_maxidx .* row_idx_grid;
+    down_maxidx(down_maxidx == 0) = NaN; % 1.6 convert 0 to NaN for median
+    down_maxidx = round(median(down_maxidx,1,"omitmissing")); % Median quarter idx
+    cla(ax)
+    imagesc(ax,edgebv_downkymograph);
+    plot(down_maxidx,'r')
+
+    %% 2.2.2 shadow center (if its just gradient cut off 10% of remaining region)
+    edgebv_upmaxkymograph = edgebv_upkymograph;
+    edgebv_upmaxkymograph(row_idx_grid > up_maxidx) = NaN;
+    up_minoffset = prctile(edgebv_upmaxkymograph, 10, 1);
+    up_minidx = edgebv_upmaxkymograph<= up_minoffset;
+    up_minidx = up_minidx .* row_idx_grid;
+    up_minidx(up_minidx == 0) = NaN; % 1.6 convert 0 to NaN for median
+    up_minidx = round(median(up_minidx,1,"omitmissing")); % Median quarter idx
+    cla(ax)
+    imagesc(ax,edgebv_upmaxkymograph);
+    hold on
+    plot(up_minidx,'r')
+    %%
+    cla(ax)
+    imagesc(ax,kymograph);
+    hold on
+    plot(up_minidx,'r')
+    plot(up_maxidx,'r')
     
-    % Bottom process 
-    % CSF external boundary using vessel bottom boundary
-    edgebv_downkymograph = kymograph; % initialize bottom kymograph
-    edgebv_downkymograph(row_idx_grid < bv_downidx) = NaN; % 
-    down_offset = prctile(edgebv_downkymograph, offset, 1); % lower 10% of down kymograph 
-    mask_bot = edgebv_downkymograph < down_offset; % make mask of lower 10% intensity at the bottom side
-    mask_bot = mask_bot .* row_idx_grid;  % make row index array
-    mask_bot(mask_bot == 0) = Inf; % to find top most lower 10% intensity position, maked region changed to Inf 
-    [~, downoffsetloc] = min(mask_bot, [], 1); % find top most lower 10% intenisty position
+    %% 2.2.2 shadow center (if its just gradient cut off 10% of remaining region)
+    edgebv_downmaxkymograph = edgebv_downkymograph;
+    edgebv_downmaxkymograph(row_idx_grid < down_maxidx) = NaN;
+    down_minoffset = prctile(edgebv_downmaxkymograph, 10, 1);
+    down_minidx = edgebv_downmaxkymograph<= down_minoffset;
+    down_minidx = down_minidx .* row_idx_grid;
+    down_minidx(down_minidx == 0) = NaN; % 1.6 convert 0 to NaN for median
+    down_minidx = round(median(down_minidx,1,"omitmissing")); % Median quarter idx
+    cla(ax)
+    imagesc(ax,edgebv_downmaxkymograph);
+    hold on
+    plot(down_minidx,'r')
+    %%
+    cla(ax)
+    imagesc(ax,kymograph);
+    hold on
+    plot(up_minidx,'r')
+    plot(up_maxidx,'r')
+
+    plot(down_minidx,'r')
+    plot(down_maxidx,'r')
+
+    %% up PVS processing
+    % from the scope (upmax position to local minimum position)
+    up_mask = edgebv_upmaxkymograph;
+    up_mask(row_idx_grid<up_minidx) = NaN;
+    up_mask = up_mask -min(up_mask,[],1);
+    up_mask = up_mask./max(up_mask,[],1);
+    imagesc(ax, up_mask)
+
+    %%
+    % find half maximum points
+    upthresholded = up_mask>=threshold;
+    imagesc(ax, upthresholded)
+    upthresholded_rawidx = upthresholded.*row_idx_grid;
+    upthresholded_rawidx(upthresholded_rawidx==0) = Inf;
+    upthresholded_rawidx = min(upthresholded_rawidx,[],1);
+    %%
+    upthresholded = imfill(upthresholded,'holes');
+    nhood = [0 1 0; 0 0 0; 0 1 0];
+    upthresholded = imerode(upthresholded,nhood);
+    imagesc(ax,upthresholded)
+    %%
+    upperupboundary_idx = upthresholded.*row_idx_grid;
+    upperupboundary_idx(upperupboundary_idx==0) = Inf;
+    upperupboundary_idx = min(upperupboundary_idx,[],1);
+    upperupboundary_idx(upperupboundary_idx == 0) = upthresholded_rawidx(upperupboundary_idx == 0);
+    cla(ax)
+    imagesc(ax,kymograph);
+    hold on
+    plot(upperupboundary_idx,'r')
+  %%
+    % Bottom kymograph processing
+    % from the scope (upmax position to local minimum position)
+    down_mask = edgebv_downmaxkymograph;
+    imagesc(ax, down_mask)
+    hold on
+    plot(down_minidx,'r')
+    %%
+    down_mask(row_idx_grid>down_minidx) = NaN;
+    down_mask = down_mask - min(down_mask,[],1);
+    down_mask = down_mask./max(down_mask,[],1);
+    imagesc(ax, down_mask)
+    %%
+
+    %% find half maximum points
+    downthresholded = down_mask>=threshold;
+    imagesc(ax, downthresholded)
+
+    %%
+    downrawthr_idx = downthresholded.*row_idx_grid;
+    downrawthr_idx = max(downrawthr_idx,[],1);
+    downthresholded = imfill(downthresholded,'holes');
+    downthresholded = imerode(downthresholded,nhood);
+    imagesc(ax,downthresholded)
+    lowerlowboundary_idx = downthresholded.*row_idx_grid;
+    lowerlowboundary_idx = max(lowerlowboundary_idx,[],1);
+    lowerlowboundary_idx(lowerlowboundary_idx == 0) = downrawthr_idx(lowerlowboundary_idx == 0);
+    %%
+    cla(ax)
+    imagesc(ax,kymograph);
+    hold on
+    plot(lowerlowboundary_idx,'r')
+    plot(upperupboundary_idx,'r')
+    %%
     
-    centbv_downkymograph = kymograph;  % 1.1 Initialize array
-    centbv_downkymograph(row_idx_grid < bv_centeridx | row_idx_grid > downoffsetloc) = NaN;  % 1.2 Remove upper portion of image from center of vessel
-    kymographmask.csf_down = centbv_downkymograph;
-    centbv_downkymograph = centbv_downkymograph - down_offset;
-    maxdown = max(centbv_downkymograph, [], 1);
-    centbv_downkymograph = centbv_downkymograph ./ maxdown;
-    thr_cdown = centbv_downkymograph > threshold;
-    csf_thrdownidx = thr_cdown .* row_idx_grid;
-    lowerlowboundary_idx = max(csf_thrdownidx, [], 1);
-    mask = false(sz); % 8.1
-    
-    
-    uplocarray2d = repmat(upperupboundary_idx, [sz(1), 1]); % 8.2
-    mask(row_idx_grid >= uplocarray2d) = 1; % 8.3
-    mask(row_idx_grid > bv_upidx) =0; % 8.5
-    mask(row_idx_grid >= uplocarray2d) = 1; % 8.3
-    mask(row_idx_grid > bv_downidx) =1; % 8.5
-    lowerlocarray2d = repmat(lowerlowboundary_idx, [sz(1), 1]); % 8.2
-    mask(row_idx_grid >= lowerlocarray2d) = 0; % 8.3
-    upline = false(sz); % 8.1
-    upline(row_idx_grid == uplocarray2d) = 1;
-    downline = false(sz); % 8.1
-    downline(row_idx_grid == lowerlocarray2d) = 1;
-    
-    % output
-    idx.pvs_upmax = maxup;
-    idx.pvs_downmax = maxdown;
+    %% output
+    idx.pvs_upmax = up_maxidx;
+    idx.pvs_downmax = down_maxidx;
+    idx.pvs_upshadeloc = up_minidx;
+    idx.pvs_downshadeloc = down_minidx;
     idx.pvs_upperboundary = upperupboundary_idx;
     idx.pvs_lowerboundary = lowerlowboundary_idx;
-    idx.pvs_upshadeloc = upoffsetloc;
-    idx.pvs_downshadeloc = downoffsetloc;
+    %%
+    uplocarray2d = repmat(idx.pvs_upperboundary, [sz(1), 1]); % 8.2
+    upline = false(sz);
+    upline(row_idx_grid == uplocarray2d) = 1;
 
+    lowlocarray2d = repmat(idx.pvs_lowerboundary, [sz(1), 1]); % 8.2
+    downline = false(sz);
+    downline(row_idx_grid == lowlocarray2d) = 1;
+    %%
     kymographmask.pvs_upline = upline;
     kymographmask.pvs_downline = downline;
-    kymographmask.pvs_bwin = mask;
+    %%
     kymographmask.pvs_up = edgebv_upkymograph; % upper csf kymograph 
+    kymographmask.pvs_up(row_idx_grid<upperupboundary_idx) = NaN;
     kymographmask.pvs_down = edgebv_downkymograph; % lower csf kymograph 
-
+    kymographmask.pvs_down(row_idx_grid>lowerlowboundary_idx) = NaN; % lower csf kymograph 
+    %%
 end
-
-% Debug code
-% figure()
-% imagesc(c_up)
-% caxis([-2 1])
-

@@ -8,8 +8,7 @@ classdef line_fwhm < handle
         mask
         idx
         t_axis
-        param = struct('bv_thr',-1,'bv_offset',-1,'csf_thr',-1,'csf_offset',-1,...
-            'input_size',[-1,-1,-1], 'line_info',[-1,-1;-1,-1;-1,-999]); % 3x2 double, {x1,y1; x2,y2; linewidth,-999}
+        param = struct('input_size',[-1,-1,-1], 'line_info',[-1,-1;-1,-1;-1,-999]); % 3x2 double, {x1,y1; x2,y2; linewidth,-999}
     end
     
     
@@ -57,32 +56,25 @@ classdef line_fwhm < handle
         end
 
 
-        function fwhm(obj,stack_name,threshold,offset)
+        function fwhm(obj,stack_name)
              arguments
                 obj
                 stack_name (1,1) string {mustBeMember(stack_name,{'lumen','wall', 'pvs', 'outside'})}
-                threshold   (1,1) double = 0.5 % default halfmax
-                offset      (1,1) double = 10 % default 10% offset
              end
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here     
             name_kymograph = strcat("kgph_",stack_name,"_processed");
-            [tmp.idx, tmp.kgph_mask] = analyze_fwhm(obj.kymograph.(name_kymograph),threshold,offset);
-            obj.param.bv_thr = threshold;
-            obj.param.bv_offset = offset;
+            [tmp.idx, tmp.kgph_mask,tmp.param] = analyze_fwhm(obj.kymograph.(name_kymograph));
+            % obj.param.bv_thr = threshold;
+            % obj.param.bv_offset = offset;
             obj.idx = obj.mergestruct(obj.idx, tmp.idx);
             obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
         end
 
-        function csfanalysis(obj,csf_stack,threshold,offset)
+        function pvsanalysis(obj,threshold,offset)
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
-            
-            obj.rotatecrop.rc_csf =analyze_affine_rotate(csf_stack,obj.param.line_info(1:2,:), obj.param.line_info(3,1));
-            obj.kymograph.kgph_csf = squeeze(sum(obj.rotatecrop.rc_csf,1));
-            obj.kymograph.kgph_normcsf = (obj.kymograph.kgph_csf-min(obj.kymograph.kgph_csf,[],1))./max(obj.kymograph.kgph_csf,[],1);
-
-             [tmp.idx, tmp.kgph_mask] = analyze_csfoutter(obj.kymograph.kgph_csf, obj.idx.upperboundary, obj.idx.lowerboundary, threshold,offset);
+             [tmp.idx, tmp.kgph_mask] = analyze_csfoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperboundary, obj.idx.lowerboundary, threshold,offset);
 
              obj.param.csf_thr = threshold;
              obj.param.csf_offset = offset;
@@ -94,6 +86,11 @@ classdef line_fwhm < handle
             tmp.v_thr = repmat(kymomask,[1,1,size(obj.rotatecrop.rc_bv,1)]);
             tmp.v_thr = permute(tmp.v_thr,[3,1,2]);
             maskstack = analyze_affine_reverse(tmp.v_thr,obj.param.input_size,obj.param.line_info(1:2,:));
+        end
+
+        function save2disk(obj,savepath)
+            line_fwhm = obj;
+            save(savepath,'line_fwhm')
         end
 
 
