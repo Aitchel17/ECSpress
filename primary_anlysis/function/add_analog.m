@@ -15,11 +15,13 @@ else
     disp('loading previously saved analog data')
     primary_analog = loaded_data.analog;
     % ensure
-    if ~isfield(primary_analog, 'airtable') && isfield(primary_analog.data, 'raw_Air_puff1')
+    %%
+    %%
+    if  isempty(primary_analog.airtable) && isfield(primary_analog.data, 'raw_Air_puff1')
         disp('Get airtable')
         primary_analog.airtable = primary_analog.get_airtable('raw_Air_puff1');
     end
-    if ~isfield(primary_analog, 'ecogspectrum') && isfield(primary_analog.data, 'raw_ECoG')
+    if isempty(primary_analog.ecogspectrum) && isfield(primary_analog.data, 'raw_ECoG')
         disp('Calculate ecogspectrum')
         primary_analog.ecogspectrum = primary_analog.get_ecogspectrum('raw_ECoG');
     end

@@ -1,4 +1,4 @@
-function [idx, kymograph_mask,parameter] = get_fwhm(kymograph)
+function [idx, kymograph_mask,parameter] = get_bvoutter(kymograph)
 %% 0. Manual crop kymograph, initialize interactive window
 % 0.0 default paramter
 threshold = 0.5;

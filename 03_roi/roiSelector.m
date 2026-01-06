@@ -7,10 +7,10 @@ classdef roiSelector < handle
         Fig % uifigure object
         HAxes % axes handle (uiaxes)
         TheROI % ROI object
-        ResetFlag = false 
+        ResetFlag = false
         MinSlider % contrast(min) slider
         MaxSlider % contrast(max) slider
-        OverlayLine % line object for thickness marking 
+        OverlayLine % line object for thickness marking
         MoveListeners = event.listener.empty % line object listener
         WEdit % line width box
         WSlider % line width slider
@@ -67,35 +67,39 @@ classdef roiSelector < handle
             obj.normalizeStack();
 
             % 0. Main uiFigure
-            obj.Fig = uifigure('Name','Stack Explorer','Position',[100 100 600 950]);
+            obj.Fig = uifigure('Name','Stack Explorer','Position',[100 100 1000 700]);
 
             % 0. Main grid
-            mainlayout = uigridlayout(obj.Fig, [3,1]); % [이미지, 파라미터, 콘솔, 버튼]
-            mainlayout.RowHeight   = {'1x','fit','fit'};
-            mainlayout.ColumnWidth = {'1x'};
+            % Layout: 2 Rows, 2 Cols
+            % Col 1: Image (Spans Row 1-2)
+            % Col 2: Row 1=Console, Row 2=Button
+            mainlayout = uigridlayout(obj.Fig, [2,2]);
+            mainlayout.RowHeight   = {'1x','fit'};
+            mainlayout.ColumnWidth = {'1x', 350};
 
 
-            % 1) Image panel
+            % 1) Image panel (Left, Full Height)
             imgPanel = uipanel(mainlayout,'Title','Slice Viewer');
-            imgPanel.Layout.Row = 1; imgPanel.Layout.Column = 1;
+            imgPanel.Layout.Row = [1 2];
+            imgPanel.Layout.Column = 1;
 
             imgPanel_layout = uigridlayout(imgPanel, [1,1]);
             obj.HAxes = uiaxes(imgPanel_layout);
-            obj.HAxes.Layout.Row = 1; 
+            obj.HAxes.Layout.Row = 1;
             obj.HAxes.Layout.Column = 1;
             obj.HAxes.Toolbar.Visible = 'off';
             disableDefaultInteractivity(obj.HAxes);
             axis(obj.HAxes,'image'); axis(obj.HAxes,'off');
 
             obj.Displaystack = imshow(obj.Stack(:,:,obj.frame), [], ... % DISPLAY IMAGE
-                'Parent', obj.HAxes, 'InitialMagnification','fit'); 
+                'Parent', obj.HAxes, 'InitialMagnification','fit');
             obj.HAxes.CLim = [obj.minIntensity obj.maxIntensity];
 
-           
-            % 3) Console panel
+
+            % 3) Console panel (Right, Top)
             controlPanel = uipanel(mainlayout,'Title','Console','Scrollable','on');
-            controlPanel.Layout.Row = 2;
-            controlPanel.Layout.Column = 1;
+            controlPanel.Layout.Row = 1;
+            controlPanel.Layout.Column = 2;
 
             controlPanelLayout = uigridlayout(controlPanel,[3 1],'RowSpacing',8,'Padding',[10 10 10 10]);
             controlPanelLayout.RowHeight   = {'fit','fit','fit'};
@@ -141,10 +145,10 @@ classdef roiSelector < handle
             obj.WEdit = uieditfield(glw,'numeric','Limits',[0 30],'Value',5, ...
                 'ValueChangedFcn', @(src,~) obj.syncEditToSlider(src));
 
-            % 4) 버튼 패널
-            buttonPanel = uipanel(mainlayout); 
-            buttonPanel.Layout.Row = 3; 
-            buttonPanel.Layout.Column = 1;
+            % 4) 버튼 패널 (Right, Bottom)
+            buttonPanel = uipanel(mainlayout);
+            buttonPanel.Layout.Row = 2;
+            buttonPanel.Layout.Column = 2;
             button_layout = uigridlayout(buttonPanel, [1 2],'ColumnWidth',{'1x','1x'},'Padding',[6 6 6 6]);
             uibutton(button_layout,'Text','Reset','ButtonPushedFcn', @(~,~) obj.resetROI());
             uibutton(button_layout,'Text','Confirm','ButtonPushedFcn', @(~,~) uiresume(obj.Fig));
@@ -187,7 +191,15 @@ classdef roiSelector < handle
             if ~isempty(obj.PreexistingVertices)
                 switch obj.ROIType
                     case 'rectangle'
-                        roi = drawrectangle(obj.HAxes,'Position',obj.PreexistingVertices);
+                        if size(obj.PreexistingVertices,1) == 4 && size(obj.PreexistingVertices,2)==2
+                            x = min(obj.PreexistingVertices(:,1));
+                            y = min(obj.PreexistingVertices(:,2));
+                            w = max(obj.PreexistingVertices(:,1)) - x;
+                            h = max(obj.PreexistingVertices(:,2)) - y;
+                            roi = drawrectangle(obj.HAxes,'Position',[x y w h]);
+                        else
+                            roi = drawrectangle(obj.HAxes,'Position',obj.PreexistingVertices);
+                        end
                     case 'polygon'
                         roi = drawpolygon(obj.HAxes,'Position',obj.PreexistingVertices);
                     case 'line'
@@ -229,7 +241,7 @@ classdef roiSelector < handle
             if strcmp(obj.ROIType,'line')
                 if ~isempty(obj.MoveListeners)
                     try
-                        delete(obj.MoveListeners); 
+                        delete(obj.MoveListeners);
                     catch
                     end
                 end

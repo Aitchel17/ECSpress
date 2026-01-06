@@ -1,10 +1,9 @@
 classdef roi_handle < handle
     properties
-        % 한 요소 = 한 ROI (라벨 정확 일치로만 접근)
         ROIs = struct('Label',{}, 'Mode',{}, 'Vertices',{}, ...
-                      'Mask',{}, 'ImageSize',{}, ...
-                      'RefSlice',{}, 'ROISlice',{}, ...
-                      'Created',{}, 'Modified',{});
+            'Mask',{}, 'ImageSize',{}, ...
+            'RefSlice',{}, 'ROISlice',{}, ...
+            'Created',{}, 'Modified',{});
         savepath (1,:) char
         isloaded logical
     end
@@ -19,6 +18,21 @@ classdef roi_handle < handle
             else
                 obj.savepath = savepath;
                 obj.isloaded = false;
+            end
+        end
+
+        function addormodifyroi(obj, ref_stack, label, roimode)
+            arguments
+                obj
+                ref_stack (:,:,:) {mustBeNumeric}
+                label (1,:) char
+                roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','line'})}
+            end
+            try
+                obj.addroi(ref_stack, label, roimode);
+            catch
+                disp(['ROI "' label '" already exists. Modifying...']);
+                obj.modifyroi(ref_stack, label);
             end
         end
 
@@ -57,7 +71,6 @@ classdef roi_handle < handle
                 label   (1,:) char
                 roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','line'})}
             end
-            % 라벨 중복 금지
             if any(strcmp({obj.ROIs.Label}, label))
                 error('ROI label "%s" already exists.', label);
             end
@@ -131,7 +144,7 @@ classdef roi_handle < handle
             obj.ROIs(i).ROISlice  = vis_stack(:,:,sli);
             obj.ROIs(i).Modified  = datetime('now');
         end
-        
+
         function modifyrgb(obj, ref_stack, label)
             arguments
                 obj

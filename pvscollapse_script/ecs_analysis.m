@@ -1,0 +1,117 @@
+% load file ch1: CAG tdT ch2: Syn/GFAP EGFP, R.O. 150kDA FITC
+savepath = 'E:\OneDrive - The Pennsylvania State University\2023_ECSpress\01_primary_analysis\matlab_analysis';
+file1 = ECSanalysis(savepath);
+file1.analog = file1.loadanalog;
+file1.stackch1 = file1.loadstack("ch1");
+file1.stackch2 = file1.loadstack("ch2");
+
+%%
+outside = dilation(file1.stackch2,'polygon');
+
+%%
+outside = outside.modifyroi(file1.stackch1);
+
+%% using percentile, make mask image... but cell body first
+igkl_slice = file1.stackch2;
+tmp.ave_projected = mean(igkl_slice,3);
+thr_percentile = 90;
+tmp.precthr = prctile(tmp.ave_projected,thr_percentile,[1,2]);
+tmp.precmask = tmp.ave_projected > tmp.precthr;
+figure();
+imshow(tmp.precmask);
+
+%%
+x = downsample(file1.analog.data.raw_Air_puff1,10);
+
+%%
+figure("Name",'x')
+plot(x)
+
+%% Set region of interest
+eps = roi(file1.stackch2,'polygon');
+
+%% Modify region of interest using different channel
+eps = eps.modifyroi(file1.stackch1);
+
+%% apply ROI and put into stacks
+eps.stacks.epsbv = eps.addstack(file1.stackch1);
+eps.stacks.epsnonbv = eps.addstack(file1.stackch2);
+
+%% NaN value adjustment
+denoisedtest = imgaussfilt(eps.stacks.epsbv,1);
+background_mask = prctile(denoisedtest,25,[1,2]);
+background_mask = repmat(background_mask, size(denoisedtest,1), size(denoisedtest,2), 1);
+denoisedtest(isnan(denoisedtest)) = background_mask(isnan(denoisedtest));
+
+%% for denoising and boundary clearing
+figure("Name",'cropped')
+sliceViewer(int16(denoisedtest))
+
+%%
+test.nonbv = eps.stacks.epsnonbv;
+test.bv = eps.stacks.epsbv;
+
+%% just FITC brightness in BV ROI
+plot(mean(eps.stacks.epsbv))
+
+%% Approach 1 Weighted subtraction
+thr_percentile = 90;
+tmp.precmask = prctile(test.nonbv,thr_percentile,[1,2]);
+tmp.thresholded = test.nonbv<tmp.precmask;
+tmp.maskedbv = tmp.thresholded .* tmp.precmask;
+prctile(tmp.maskedbv+1,90,[1,2])
+tmp.weight =  prctile(tmp.maskedbv+1,thr_percentile,[1,2])./tmp.precmask;
+
+%%
+figure("Name",'channel2 groupaverage eps')
+sliceViewer(int16(eps.stacks.gave))
+%%
+
+
+%%
+denoise_teststack = eps.stacks.epsbv;
+denoise_teststack(denoise_teststack<prctile(denoise_teststack,50,[1,2])) = 0;
+denoise_teststack = medfilt3(int16(denoise_teststack));
+
+%%
+
+
+%%
+figure("Name",'channel2 denoised eps')
+sliceViewer(int16(denoise_teststack))
+
+%%
+
+figure("Name",'channel2 medfilt eps')
+sliceViewer(int32(tmp.medfiltch2))
+%%
+
+tmp.medfiltch2 = medfilt3(eps.stacks.epsbv);
+eps = eps.radonthresholding('epsbv');
+
+
+%%
+
+tmp.weightedch1 = eps.stacks.epsnonbv .*tmp.weight;
+%%
+
+eps.stacks.clearbv = eps.stacks.epsbv.*tmp.thresholded;
+%%
+eps.stacks.subtractedbv = tmp.medfiltch2 - tmp.medfiltch1;
+
+%%
+%%
+tmp.medfiltch1 = medfilt3(eps.stacks.epsnonbv);
+%% Approach 2 normalize and subtract and multiply
+tmp.normch2 = tmp.medfiltch2./mean(tmp.medfiltch2,[1,2]);
+tmp.normch1 = tmp.medfiltch1./mean(tmp.medfiltch1,[1,2]);
+tmp.differential = tmp.normch2 - tmp.normch1;
+prctile(tmp.normch1)
+figure();
+sliceViewer(tmp.differential.*tmp.normch2)
+
+
+%%
+figure("Name",'irtd')
+sliceViewer(eps.stacks.irtd_epsbv)
+

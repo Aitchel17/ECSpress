@@ -1,5 +1,4 @@
 function [ecog_spectrum] = analog_ecogspectrum(samplingfreq,ECoG)
-disp('Calculate multi taper spectrum')
 % ECoG processing
     detrended_ECoG = detrend(ECoG,'constant');
     ecog_spectrum.params.tapers = [5,9];

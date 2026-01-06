@@ -38,7 +38,7 @@ roilist = roilist.modifyroi(gausscsf, 'thin');
 roilist = roilist.modifyroi(gausscsf, 'thick');
 
 %%
-analyze_fwhm(gausscsf,0.5,0.1)
+get_bvoutter(gausscsf)
 %%
 roilist = loaded_data.roilist;
 roilist = roilist.modifyroi(gausscsf,'pax');
@@ -51,8 +51,8 @@ kgph_bi30_thick = squeeze(sum(rc_bi30_thick,1));
 rc_bi30_thin = analyze_affine_rotate(gausscsf,roilist.vertices.thin(1:2,:), roilist.vertices.thin(3,1));
 kgph_bi30_thin = squeeze(sum(rc_bi30_thin,1));
 %
-fwhm_thin = analyze_fwhm(kgph_bi30_thin,0.25,0.05);
-fwhm_thick = analyze_fwhm(kgph_bi30_thick,0.25,0.05);
+fwhm_thin = get_bvoutter(kgph_bi30_thin);
+fwhm_thick = get_bvoutter(kgph_bi30_thick);
 %
 figure()
 imagesc(kgph_bi30_thin)
@@ -133,7 +133,7 @@ ax = axes('Parent', fig);
 % % Simulated kymograph data
 % kymograph = pax_fwhm.kymograph.kgph_csf;
 % kymograph = (kymograph-min(kymograph,[],1))./max(kymograph,[],1);
-% 
+%
 % % Display kymograph using imagesc with colormap
 % imagesc(ax, kymograph);
 % colormap(ax, parula);  % Or your inferno colormap
@@ -196,9 +196,9 @@ hmap_x = linspace(1,size(bvkymograph,2)/fps,size(bvkymograph,2));
 
 
 %%
-set(gcf,'Units','inches','Position',[1 1 7 5]); 
+set(gcf,'Units','inches','Position',[1 1 7 5]);
 
-set(gca,'Units','inches','Position',[1 1 5.6 3]); 
+set(gca,'Units','inches','Position',[1 1 5.6 3]);
 %%
 
 
@@ -289,17 +289,17 @@ window1=figure(Name='window1',NumberTitle='off');
 figure(window1)
 %%
 for i = 1:3000
-irtd = stacks.irtd_radon(:,:,i);
-img = mat2gray(stack(:,:,i));
-resize_img = zeros(size(irtd));
-resize_img(ceil(size(irtd,1)/2)+1-floor(size(img,1)/2):ceil(size(irtd,1)/2)+floor(size(img,1)/2),...
-    ceil(size(irtd,1)/2)+1-floor(size(img,1)/2):ceil(size(irtd,1)/2)+floor(size(img,1)/2)) = img;
-rgb_img = zeros(size(irtd,1),size(irtd,2),3);
+    irtd = stacks.irtd_radon(:,:,i);
+    img = mat2gray(stack(:,:,i));
+    resize_img = zeros(size(irtd));
+    resize_img(ceil(size(irtd,1)/2)+1-floor(size(img,1)/2):ceil(size(irtd,1)/2)+floor(size(img,1)/2),...
+        ceil(size(irtd,1)/2)+1-floor(size(img,1)/2):ceil(size(irtd,1)/2)+floor(size(img,1)/2)) = img;
+    rgb_img = zeros(size(irtd,1),size(irtd,2),3);
 
-rgb_img(:,:,1) = mat2gray(resize_img);
-rgb_img(:,:,2) = mat2gray(irtd);
-rgb_img(:,:,3) = mat2gray(resize_img);
-imshow(rgb_img)
+    rgb_img(:,:,1) = mat2gray(resize_img);
+    rgb_img(:,:,2) = mat2gray(irtd);
+    rgb_img(:,:,3) = mat2gray(resize_img);
+    imshow(rgb_img)
 end
 figure(window1)
 imagesc(stacks.tirs_radon(:,:,1))

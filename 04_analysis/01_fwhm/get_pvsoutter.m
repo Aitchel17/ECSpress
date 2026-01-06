@@ -1,4 +1,4 @@
-function [idx, kymographmask] = get_csfoutter(kymograph, bv_upidx, bv_downidx)
+function [idx, kymographmask] = get_pvsoutter(kymograph, bv_upidx, bv_downidx)
 % calculate_csf_boundaries - calculates upper and lower CSF boundaries based on given inputs.
 %
 % Inputs:

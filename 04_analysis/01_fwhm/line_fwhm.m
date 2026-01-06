@@ -1,17 +1,20 @@
 classdef line_fwhm < handle
     %LINE_FWHM Summary of this class goes here
     %   Detailed explanation goes here
-    
-    properties 
+
+    properties
         rotatecrop = struct()
         kymograph = struct()
+        thickness = struct()
+        displacement = struct()
+        updynamic
         mask
         idx
         t_axis
         param = struct('input_size',[-1,-1,-1], 'line_info',[-1,-1;-1,-1;-1,-999]); % 3x2 double, {x1,y1; x2,y2; linewidth,-999}
     end
-    
-    
+
+
     methods
         function obj = line_fwhm(line_info)
             % Constructor function get roi info, ex: (x1,y1;x2,y2;,thickness,-999)
@@ -39,21 +42,21 @@ classdef line_fwhm < handle
                 rawkymograph = squeeze(max(rotatecroped_stack, [], 1));
             elseif strcmp(mode,'min')
                 disp('projection mode min')
-                    rawkymograph = squeeze(min(rotatecroped_stack,[],1));
+                rawkymograph = squeeze(min(rotatecroped_stack,[],1));
             elseif strcmp(mode,'median')
-                    rawkymograph = squeeze(median(rotatecroped_stack, 1));
+                rawkymograph = squeeze(median(rotatecroped_stack, 1));
             end
             obj.rotatecrop.(name_rotatecrop) = rotatecroped_stack;
             obj.kymograph.(name_kymograph) = rawkymograph;
             obj.kymograph.(name_normkymograph) = (rawkymograph-min(rawkymograph,[],1))./max(rawkymograph,[],1); % just for reference to see intermediate step, no offset
         end
-        
+
         function kymograph_afterprocess(obj,stack_name,window_size)
-         arguments
+            arguments
                 obj
                 stack_name (1,1) string {mustBeMember(stack_name,{'lumen','wall', 'pvs', 'outside'})}
                 window_size   (1,2) double = [1 3] % default halfmax
-         end
+            end
             name_kymograph = strcat("kgph_",stack_name);
             name_processed_kymograph = strcat(name_kymograph,'_processed');
             processed_kymograph = medfilt2(obj.kymograph.(name_kymograph),window_size);
@@ -68,14 +71,14 @@ classdef line_fwhm < handle
 
 
         function fwhm(obj,stack_name)
-             arguments
+            arguments
                 obj
                 stack_name (1,1) string {mustBeMember(stack_name,{'lumen','wall', 'pvs', 'outside'})}
-             end
+            end
             %METHOD1 Summary of this method goes here
-            %   Detailed explanation goes here     
+            %   Detailed explanation goes here
             name_kymograph = strcat("kgph_",stack_name,"_processed");
-            [tmp.idx, tmp.kgph_mask,tmp.param] = analyze_fwhm(obj.kymograph.(name_kymograph));
+            [tmp.idx, tmp.kgph_mask,tmp.param] = get_bvoutter(obj.kymograph.(name_kymograph));
             % obj.param.bv_thr = threshold;
             % obj.param.bv_offset = offset;
             obj.idx = obj.mergestruct(obj.idx, tmp.idx);
@@ -85,96 +88,79 @@ classdef line_fwhm < handle
         function pvsanalysis(obj)
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
-             [tmp.idx, tmp.kgph_mask] = analyze_csfoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperboundary, obj.idx.lowerboundary);
-             obj.idx = obj.mergestruct(obj.idx, tmp.idx);
-             obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
+            [tmp.idx, tmp.kgph_mask] = get_pvsoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperBVboundary, obj.idx.lowerBVboundary);
+            obj.idx = obj.mergestruct(obj.idx, tmp.idx);
+            obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
         end
 
         function clean_outlier(obj,overwrite)
-            idx_dataset = obj.idx;
-            idx_names = fieldnames(idx_dataset);
-            idx_names = string(idx_names');
-            processed_nameidx = startsWith(idx_names,'clean_');
-            processed_names = idx_names(processed_nameidx);
-            processed_names = erase(processed_names,'clean_');
-            original_names = idx_names(~processed_nameidx);
-            if overwrite
-                unprocessed_names = original_names;
+            arguments
+                obj
+                overwrite = false
+            end
+            obj.idx = clean_outlier(obj.idx, overwrite);
+        end
+
+        function getdiameter(obj)
+            obj.thickness = struct();
+            obj.thickness.bv = obj.idx.clean_lowerBVboundary - obj.idx.clean_upperBVboundary;
+            uppvs_thickness = obj.idx.clean_upperBVboundary - obj.idx.clean_pvsupedge_idx;
+            downpvs_thickness = obj.idx.clean_pvsdownedge_idx - obj.idx.clean_lowerBVboundary;
+            obj.thickness.totalpvs = uppvs_thickness + downpvs_thickness;
+            difference_pvs = uppvs_thickness - downpvs_thickness;
+            difference_pvs = medfilt1(difference_pvs,11); % smoothing the pvs thickness difference
+            % caclulate area under the curve of difference_pvs
+            difference_pvs = trapz(difference_pvs);
+            if difference_pvs > 0
+                disp('up pvs is dynamic')
+                obj.updynamic = true;
+                obj.thickness.dynamic_pvs = uppvs_thickness;
+                obj.thickness.static_pvs = downpvs_thickness;
             else
-                match_idx = ismember(processed_names,original_names);
-                unprocess_logic = true(size(original_names));
-                unprocess_logic(match_idx) = false;
-                unprocessed_names = original_names(unprocess_logic);
+                disp('up pvs is static')
+                obj.updynamic = false;
+                obj.thickness.dynamic_pvs = downpvs_thickness;
+                obj.thickness.static_pvs = uppvs_thickness;
             end
 
             %%
-            for idx_name = unprocessed_names
-                if isempty(idx_name)
-                    disp('all processed')
-                else
-                    disp(idx_name{:})
-                    idx_data = idx_dataset.(idx_name{:});
-                    ref_median = medfilt1(idx_data,31);
-                    diff_data = abs(idx_data - ref_median);
-                    above_noise = diff_data > 4;
-                    % above data already contains the positional information
-                    % make edge case at the starting point and the end point
-                    % Can not interpolate at the start and end
-                    % if it differ, just put median value
-                    % idx matching is tricky.. the interpolation 
-                    edge_thresholded = above_noise;
-                    edge_thresholded(1) = 0; % ensure that transit start from rising edge, if start is 1 falling edge is longer
-                    edge_thresholded(end) = 0; % ensure that transit end with falling edge, if end is 1 rising edge would longer
-                    transit_thr = diff(edge_thresholded);
-                    %
-                    if sum(transit_thr) == 0
-                        rise_logic = transit_thr == 1; 
-                        rise_logic = [rise_logic,false];
-                        fall_logic = transit_thr == -1;
-                        fall_logic = [false,fall_logic];
-                    else
-                        disp('number of rising and falling is different')
-                    end
-                    interp_data = (idx_data(rise_logic)+idx_data(fall_logic))/2;
-                    %
-                    run = [1, abs(transit_thr)];
-                    run = cumsum(run);  % make transition point to have unique value
-                    unique_run = run(edge_thresholded==1); % extract values at the threshold
-                    unique_run = unique(unique_run);   % get unique values
-                    [~,runidx] = ismember(run,unique_run); % find position of unique run if run matches unique_run
-                    
-                    idxdata_interp_idx = runidx>0;
-                    interp_idx = runidx(idxdata_interp_idx);
-                    
-                    corrected_data = idx_data;
-                    %
-                    corrected_data(idxdata_interp_idx) = interp_data(interp_idx);  
-                    idx_dataset.(['clean_' idx_name{:}]) = corrected_data;
-                    obj.idx = idx_dataset;
-                end
-                
+            obj.thickness.median_totalpvs = median(obj.thickness.totalpvs);
+            obj.thickness.median_staticpvs = median(obj.thickness.static_pvs);
+            obj.thickness.median_dynamicpvs = median(obj.thickness.dynamic_pvs);
+            %%
+            obj.thickness.median_bv = median(obj.thickness.bv);
+            obj.thickness.bvchanges = obj.thickness.bv - obj.thickness.median_bv;
+            obj.thickness.pvschanges_total = obj.thickness.totalpvs - obj.thickness.median_totalpvs;
+            obj.thickness.pvschanges_dynamic = obj.thickness.dynamic_pvs - obj.thickness.median_dynamicpvs;
+            obj.thickness.pvschanges_static = obj.thickness.static_pvs - obj.thickness.median_staticpvs;
+            %%
+            obj.thickness.ecschanges_residual = obj.thickness.bvchanges + obj.thickness.pvschanges_total;
+            %%
+        end
+
+        function getdisplacement(obj)
+            % GETDISPLACEMENT Calculates displacement and subtracts slow component
+            obj.displacement = struct();
+            % 2. Calculate and subtract slow component (using large window median filter)
+            % "entire length of data" implies a very slow trend. Using 500 pts (~15-50s depending on Hz)
+            obj.displacement.slow_uppvs = medfilt1(obj.idx.clean_pvsupedge_idx, 3000, 'truncate');
+            obj.displacement.slow_upbv = medfilt1(obj.idx.clean_upperBVboundary, 3000, 'truncate');
+            obj.displacement.slow_downbv = medfilt1(obj.idx.clean_lowerBVboundary, 3000, 'truncate');
+            obj.displacement.slow_downpvs = medfilt1(obj.idx.clean_pvsdownedge_idx, 3000, 'truncate');
+
+
+            % 3. Calculate changes (High-pass)
+            if obj.updynamic
+                obj.displacement.dynamicpvs = -(obj.idx.clean_pvsupedge_idx - obj.displacement.slow_uppvs);
+                obj.displacement.staticpvs = obj.idx.clean_pvsdownedge_idx - obj.displacement.slow_downpvs;
+                obj.displacement.dynamicbv = -(obj.idx.upperBVboundary - obj.displacement.slow_upbv);
+                obj.displacement.staticbv = obj.idx.lowerBVboundary - obj.displacement.slow_downbv;
+            else
+                obj.displacement.staticpvs = -(obj.idx.clean_pvsupedge_idx - obj.displacement.slow_uppvs);
+                obj.displacement.dynamicpvs = obj.idx.clean_pvsdownedge_idx - obj.displacement.slow_downpvs;
+                obj.displacement.staticbv = -(obj.idx.upperBVboundary - obj.displacement.slow_upbv);
+                obj.displacement.dynamicbv = obj.idx.lowerBVboundary - obj.displacement.slow_downbv;
             end
-            %%
-          
-            
-            %% debuging code
-            % tfig = figure();
-            % tax = axes();
-            % %%
-            % figure(tfig)
-            % cla(tax)
-            % hold(tax,'on')
-            % plot(rise_logic+mean(ref_median),'r*')
-            % plot(fall_logic+mean(ref_median),'go')
-            % plot(edge_thresholded+mean(ref_median),'ms')
-            % %%
-            % plot(line_data,'g')
-            % plot(ref_median,'r')
-            % plot(corrected_data,'k')
-            %%
-
-            %%
-
         end
 
         function maskstack = reconstruction(obj,kymomask)

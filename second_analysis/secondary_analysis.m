@@ -32,6 +32,7 @@ savepath= struct();
 savepath.loadsplit = strsplit(path,filesep);
 savepath.primarystruct = fullfile(savepath.loadsplit{1:end-1},'primarystruct.mat');
 savepath.secondarystruct = fullfile(savepath.loadsplit{1:end-1},'paxfwhm_struct.mat');
+%%
 primarystruct = primary_integration(string(path));
 %% 1. kymograph selection
 tmp.fig = plot_tile_kymograph(primarystruct,'all');

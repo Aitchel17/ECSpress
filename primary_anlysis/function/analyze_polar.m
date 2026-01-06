@@ -1,4 +1,4 @@
-function [polarstruct,angleid_map,radius_map] = analyze_polar(Stack, Centervertice,Start_angle,equidistance_mode)
+function [polarstruct,radius_map,centered_anglemap,angleid_map] = analyze_polar(Stack, Centervertice,Start_angle,n_angles,equidistance_mode)
 %ANALYZE_POLAR Summary of this function goes here
 %   Detailed explanation goes here
     % Input: Stack, Centervertice,Start_angle,equidistance_mode
@@ -26,9 +26,9 @@ function [polarstruct,angleid_map,radius_map] = analyze_polar(Stack, Centerverti
     % 3.2 Get idlist
 % 4.
 %% Hard coded parameter
-angle_range = 30;
+angle_range = 360/n_angles; % 30 12 section
 bin_pixel = 15; % 15 pixels for binedge calculation
-bin_distance = 3; % 5 pixel distance for equidistance binedge calculation
+bin_distance = 2; % 5 pixel distance for equidistance binedge calculation
 nframes = size(Stack,3);
 %% Initialize data container
 polarstruct = struct('angle_id', {}, 'kymograph', {}, 'radius_bin', {},'angle_range', {});
@@ -38,6 +38,8 @@ polarstruct = struct('angle_id', {}, 'kymograph', {}, 'radius_bin', {},'angle_ra
 meshx = meshx - Centervertice(1); % 1.2
 meshy = meshy - Centervertice(2); % 1.2
 [theta_map, radius_map] = cart2pol(meshx,meshy); % 1.3
+%% 
+
 %% 2. Anglemask Modification
 theta_map = rad2deg(theta_map); % 2.1
 theta_map = mod(-theta_map,360); % 2.2
@@ -77,9 +79,6 @@ for angle_idx = angle_idlist' % 4.2
         ts = mean(collapsed_stack(M, :), 1, 'omitnan');  % 1 x T, 프레임별 평균
         polarstruct(angle_idx).kymograph(radius_idx,:) = squeeze(ts);
     end
-%%
-%
-
 
 end
 

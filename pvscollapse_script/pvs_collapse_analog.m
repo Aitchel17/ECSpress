@@ -1,0 +1,63 @@
+test_extract = mdfExtractLoader();
+test_extract.analog = test_extract.loadanalog;
+data=test_extract.analog.data;
+info = test_extract.analog.info;
+%%
+primary_analog = analysis_analog(info,data);
+primary_analog.ecogspectrum = primary_analog.get_ecogspectrum('raw_ECoG');
+primary_analog.airtable = primary_analog.get_airtable('raw_Air_puff1');
+
+
+
+
+%%
+%%
+figure(Name='force')
+plot(primary_analog.data.taxis,primary_analog.data.raw_Force)
+
+
+%%
+tmp.air_durationlist = unique(round(airtable.Duration))';
+tmp.airpuff_error_tol = 0.3;
+% calculate triggered average
+airpuff_startframe = [];
+for duration = tmp.air_durationlist
+    tmp.fieldname = ['dur',num2str(duration)];
+    disp(tmp.fieldname)
+    tmp.airpuff_starttime = airtable(abs(airtable.Duration-duration) < tmp.airpuff_error_tol,:).StartTime;
+    [~,airpuff_startframe.(tmp.fieldname)] = min(abs(roi1.mean.t'-tmp.airpuff_starttime),[],2);
+end
+%% filtering successful trial
+roi1.mean.cbv_ch1_airtrig15=analyze_trigaverage(roi1.mean.cbv_ch1,roi1.analog.data.airpuff_startframe.dur15,30,90);
+roi1.mean.pvs_ch1_airtrig15=analyze_trigaverage(roi1.mean.pvs_ch1,roi1.analog.data.airpuff_startframe.dur15,30,90);
+roi1.mean.filtered_idx = find(max(roi1.mean.pvs_ch1_airtrig15.list(30:end,:),[],1)>0.1);
+%% filtering and recalculate
+roi1.mean.pvs_ch1_airtrig15=analyze_trigaverage(roi1.mean.pvs_ch1,roi1.analog.data.airpuff_startframe.dur15(roi1.mean.filtered_idx),30,90);
+roi1.mean.pvs_ch2_airtrig15=analyze_trigaverage(roi1.mean.pvs_ch2,roi1.analog.data.airpuff_startframe.dur15(roi1.mean.filtered_idx),30,90);
+roi1.mean.ip_ch2_airtrig15=analyze_trigaverage(roi1.mean.ip_ch2,roi1.analog.data.airpuff_startframe.dur15(roi1.mean.filtered_idx),30,90);
+roi1.mean.ip_ch1_airtrig15=analyze_trigaverage(roi1.mean.ip_ch1,roi1.analog.data.airpuff_startframe.dur15(roi1.mean.filtered_idx),30,90);
+roi1.analog.data.airpuff_startframe.dur15(roi1.mean.filtered_idx)
+%%
+roi1.analog.data
+%%
+ecog_spectrum =primary_analog.ecogspectrum;
+
+%%
+
+plot_ecogspectrum(ecog_spectrum)
+%%
+fig = figure(Name='ECoG spectrum');
+ax = axes('Parent', fig);
+
+surface(ax, ecog_spectrum.t_axis / 60, ...
+    ecog_spectrum.f_axis, ...
+    zeros(size(ecog_spectrum.log_norm_spectrum)), ...
+    ecog_spectrum.log_norm_spectrum, ...
+    'LineStyle', 'none');
+
+set(ax, 'YScale', 'log');
+xlim(ax, [0 30]);
+ylabel(ax, 'Freq (Hz)');
+xlabel(ax, 'min');
+set(ax, 'FontSize', 14);
+

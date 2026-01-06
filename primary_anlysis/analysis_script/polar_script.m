@@ -1,115 +1,194 @@
-% roilist = roilist.addroi(preprocessed_ch1,'test','line');
-% roilist = roilist.modifyroi(preprocessed_ch1,'test');
-% roilist = roilist.removeroi('test');
-
 %% load stack, vertices from main_primary script
-bv_stack = preprocessed_ch1;
-pax_vertices = roilist.getvertices('pax');
-pax_vertices = pax_vertices(1:2,:);
-%% Primary axis used for 1d calculation
-pax_angle = pax_vertices(2,:)-pax_vertices(1,:);
-pax_angle = atan2d(pax_angle(2),pax_angle(1));
-
-%% bin angle
-angle_range = 30;
-% section area
-bin_pixel = 15;
-%% calculate centerposition by projecting center point to PAX line
-pax_vertices = roilist.getvertices('pax'); %(1:2,:);
-pax_vertices = pax_vertices(1:2,:);
-exp_center = (min(roilist.getvertices('extraparenchyma'),[],1) + max(roilist.getvertices('extraparenchyma'),[],1))/2;
-pax_center = analyze_dpoint2line(exp_center,pax_vertices);
-%% show center position
-roilist.showroi('extraparenchyma')
-hold on
-ax = gca;
-plot(ax,[pax_vertices(:, 1); pax_vertices(1, 1)], [pax_vertices(:, 2); pax_vertices(1, 2)], 'r-', 'LineWidth', 2);
-plot(ax, exp_center(1), exp_center(2), 'g+', 'MarkerSize', 10, 'LineWidth', 1);
-plot(ax, pax_center(1), pax_center(2), 'g+', 'MarkerSize', 10, 'LineWidth', 1);
-%%
-x = analyze_polar(bv_stack,pax_center,pax_angle,true);
-%%
-figure()
-imagesc(x(6).kymograph)
-
-
-
-%% bring center position to cropped mask
-exp_center = exp_center-min(roilist.getvertices('extraparenchyma'),[],1);
-pax_center = pax_center-min(roilist.getvertices('extraparenchyma'),[],1);
-pax_vertices = pax_vertices-min(roilist.getvertices('extraparenchyma'),[],1);
-%% show center position on cropped mask
-fig = figure();
-ax  = axes('Parent',fig);
-imshow(tmp.nonnan2d, 'Parent', ax);
-hold on
-ax = gca;
-plot(ax,[pax_vertices(:, 1); pax_vertices(1, 1)], [pax_vertices(:, 2); pax_vertices(1, 2)], 'r-', 'LineWidth', 2);
-plot(ax, exp_center(1), exp_center(2), 'g+', 'MarkerSize', 10, 'LineWidth', 2);
-plot(ax, pax_center(1), pax_center(2), 'g+', 'MarkerSize', 10, 'LineWidth', 2);
-%% polar coordination
-% input mask, output polar coordinate with origin from center of mask
-% center coordinate of PVS
-bv_holdstack = roi_applyvertices(bv_stack,roilist.getvertices('extraparenchyma'));
-
-nframes = size(bv_stack,3);
-tmp.nonnan2d = ~isnan(bv_stack(:,:,1));
-[~,center.loc_x] = max(sum(tmp.nonnan2d,2));
-[~,center.loc_y] = max(sum(tmp.nonnan2d,1));
-[tmp.meshx,tmp.meshy] = meshgrid(1:size(tmp.nonnan2d,2),1:size(tmp.nonnan2d,1));
-tmp.meshx = tmp.meshx - center.loc_x;
-tmp.meshy = tmp.meshy - center.loc_y;
-% get polar coordination
-[theta_map, radius_map] = cart2pol(tmp.meshx,tmp.meshy);
-theta_map_deg = rad2deg(theta_map);
-theta_map_deg = mod(-theta_map_deg,360); % clockwise
 
 %%
-pax_anglemap = mod(theta_map_deg - bin_start, 360);
-%% divide and floor to get angular section
-angleid_map = floor( pax_anglemap / angle_range ) + 1;
-angle_idlist = unique(angleid_map);
-%%
-idx = find(angleid_map ==1); % pixel position corresopond to angular id 1
-radius_idxvalue = radius_map(idx);
-radius_idxvalue = sort(radius_idxvalue,'ascend');
-%%
-radius_nbins = floor(length(radius_idxvalue)/bin_pixel);
-%% radius edge
-radius_edges = zeros(1, radius_nbins+1);
-radius_edges(1) = 0;
-for bincount = 1:radius_nbins
-    radius_edges(1+bincount) = radius_idxvalue(bincount*bin_pixel); 
-end 
-%%
-wedge_t = zeros([radius_nbins, nframes]);
-%%
-clc
-for radius_idx = 1:radius_nbins
-    % the final submask
-    submask = (angleid_map == 1) & (radius_map > radius_edges(radius_idx)) & (radius_map <= radius_edges(radius_idx+1));
-    % apply final submask to get average values over time
-    X = reshape(bv_holdstack, [], nframes);  % (H*W) x T
-    M = reshape(submask,[],1);
-    %
-    ts = mean(X(M, :), 1, 'omitnan');  % 1 x T, 프레임별 평균
-    wedge_t(radius_idx,:) = squeeze(ts);
+polar_analysis = struct();
+
+%% load pax_cluster and roilist
+if exist('pax_cluster','var')
+    paxc = pax_cluster;
+elseif isfield(primary_datastruct,'pax_cluster')
+    paxc = primary_datastruct.pax_cluster;
+else
+    disp('Prerequisite run cluster_analysis_script.mat')
 end
-%%
-util_checkstack(bv_holdstack)
+if isfield(primary_datastruct,'roilist')
+    roilist = primary_datastruct.roilist;
+end
+%% make filtered (>10frames) cluster idx and clustered stack for polar analysis
+polar_analysis.filtered_dilated_cluster_idx = find(paxc.filtered_clusteridx==paxc.dilated_cluster_idx);
+polar_analysis.filtered_constricted_cluster_idx = find(paxc.filtered_clusteridx==paxc.constricted_cluster_idx);
+tmp.bvclusterstack = paxc.clust_med_bv(:,:,paxc.filtered_clusteridx);
+tmp.pvsclusterstack = paxc.clust_med_csf(:,:,paxc.filtered_clusteridx);
+%% %% make filtered (>10frames) cluster idx for polar analysis
+tmp.pax_vertices = roilist.getvertices('pax');
+tmp.pax_vertices = tmp.pax_vertices(1:2,:);
+% Primary axis used for 1d calculation
+tmp.pax_angle = tmp.pax_vertices(2,:)-tmp.pax_vertices(1,:);
+polar_analysis.parm.pax_angle = atan2d(tmp.pax_angle(2),tmp.pax_angle(1));
+% calculate centerposition by projecting center point to PAX line
+tmp.pax_vertices = roilist.getvertices('pax'); %(1:2,:);
+tmp.pax_vertices = tmp.pax_vertices(1:2,:);
+polar_analysis.parm.constricted_center = (min(roilist.getvertices('constricted_bv'),[],1) + max(roilist.getvertices('constricted_bv'),[],1))/2;
+polar_analysis.parm.pax_center = analyze_dpoint2line(polar_analysis.parm.constricted_center,tmp.pax_vertices);
+
+%% Polar calculation for sinogram-kymograph
+polar_analysis.parm.n_angles = 24;
+polar_analysis.bvcluster = analyze_polar(tmp.bvclusterstack,...
+    polar_analysis.parm.constricted_center,...
+    polar_analysis.parm.pax_angle, polar_analysis.parm.n_angles ,true);
+polar_analysis.pvscluster = analyze_polar(tmp.pvsclusterstack,...
+    polar_analysis.parm.constricted_center,...
+    polar_analysis.parm.pax_angle, polar_analysis.parm.n_angles ,true);
+
+% Trim the kymograph at each angle and merge to make sinogram-kymograph array
+polar_analysis.parm.minlength = min(arrayfun(@(s) size(s.kymograph, 1), polar_analysis.bvcluster));
+% BV trimming
+tmp.trimmed_polarbv = arrayfun(@(s) s.kymograph(1:polar_analysis.parm.minlength,:), ...
+    polar_analysis.bvcluster,'UniformOutput', false);
+polar_analysis.sgram_kgph_bv = cat(3,tmp.trimmed_polarbv{:}); % [rho,cluster,angle]
+% PVS trimming
+tmp.trimmed_polarpvs = arrayfun(@(s) s.kymograph(1:polar_analysis.parm.minlength,:), ...
+    polar_analysis.pvscluster,'UniformOutput', false);
+polar_analysis.sgram_kgph_pvs = cat(3,tmp.trimmed_polarpvs{:});
+% Normalization at each column
+% bv sinogram-kymograph normalization
+polar_analysis.norm_sgram_kgph_bv = polar_analysis.sgram_kgph_bv-min(polar_analysis.sgram_kgph_bv,[],1);
+polar_analysis.norm_sgram_kgph_bv = polar_analysis.norm_sgram_kgph_bv./max(polar_analysis.norm_sgram_kgph_bv,[],1);
+% pvs sinogram-kymograph normalization
+polar_analysis.norm_sgram_kgph_pvs = polar_analysis.sgram_kgph_pvs-min(polar_analysis.sgram_kgph_pvs,[],1);
+polar_analysis.norm_sgram_kgph_pvs = polar_analysis.norm_sgram_kgph_pvs./max(polar_analysis.norm_sgram_kgph_pvs,[],1);
+% Make input array for bv/pvs constricted/dilated sinogram
+polar_analysis.constdial_sgram = zeros([size(polar_analysis.norm_sgram_kgph_bv,1,3),2,2]);
+%
+polar_analysis.constdial_sgram(:,:,1,1) = squeeze(polar_analysis.norm_sgram_kgph_bv(:,polar_analysis.filtered_constricted_cluster_idx,:)); % bv - const
+polar_analysis.constdial_sgram(:,:,1,2) = squeeze(polar_analysis.norm_sgram_kgph_bv(:,polar_analysis.filtered_dilated_cluster_idx,:));% bv - dial
+polar_analysis.constdial_sgram(:,:,2,1) = squeeze(polar_analysis.norm_sgram_kgph_pvs(:,polar_analysis.filtered_constricted_cluster_idx,:)); % pvs - const
+polar_analysis.constdial_sgram(:,:,2,2) = squeeze(polar_analysis.norm_sgram_kgph_pvs(:,polar_analysis.filtered_dilated_cluster_idx,:)); % pvs - dial
+
+
+
+
 
 %%
-t = [1:nframes];
+polar_analysis.parm.bvthr = 0.25;
+polar_analysis.parm.bvoffset = 5;
+polar_analysis.parm.pvsthr = 0.5;
+polar_analysis.parm.pvsoffset = 5;
+
+polar_analysis.polar_boundary = polar_halfmax(polar_analysis.constdial_sgram,...
+    polar_analysis.parm.bvthr,polar_analysis.parm.bvoffset,...
+    polar_analysis.parm.pvsthr,polar_analysis.parm.pvsoffset);
+polar_analysis.bvdilation =polar_analysis.polar_boundary.dilate_bvboundary-polar_analysis.polar_boundary.const_bvboundary;
+polar_analysis.compression = polar_analysis.polar_boundary.dilate_pvsboundary-polar_analysis.polar_boundary.const_pvsboundary;
+polar_analysis.dilate_pvsthickness = polar_analysis.polar_boundary.dilate_pvsboundary-polar_analysis.polar_boundary.dilate_bvboundary;
+polar_analysis.const_pvsthickness = polar_analysis.polar_boundary.const_pvsboundary-polar_analysis.polar_boundary.const_bvboundary;
+polar_analysis.pvschange = polar_analysis.const_pvsthickness- polar_analysis.dilate_pvsthickness;
 %%
-figure()
-surface(t,radius_edges(2:end),zeros(size(wedge_t)),(wedge_t),'LineStyle','none');
-q = gca;
-q.Layer = 'top'; % put the axes/ticks on the top layer
+save(fullfile(directories.save_dir,'polar_analysis.mat'),"polar_analysis")
+
 %%
-figure()
-imagesc(line_fwhms.pax.kymograph.kgph_bv)
+%% confirm by figure
+fig.polar_sgram_cbv = make_fig('polar_sinogram_bv_const');
 %%
-set(gca,'YDir','normal')
+fig.polar_sgram_cbv.bring_fig
+fig.polar_sgram_cbv.update_figsize([8,5])
+fig.polar_sgram_cbv.reset_axis
+fig.polar_sgram_cbv.plot_kymograph(polar_analysis.constdial_sgram(:,:,1,1)) % constricted pvs
+fig.polar_sgram_cbv.plot_line(polar_analysis.polar_boundary.const_pvsboundary,'g');
+fig.polar_sgram_cbv.plot_line(polar_analysis.polar_boundary.const_bvboundary,'r');
+fig.polar_sgram_cbv.plot_line(polar_analysis.polar_boundary.dilate_pvsboundary,clee.clist.darkgreen);
+fig.polar_sgram_cbv.plot_line(polar_analysis.polar_boundary.dilate_bvboundary,clee.clist.magenta);
+fig.polar_sgram_cbv.save2svg(directories.save_dir)
 %%
-figure()
-plot(radius_edges(2:end),wedge_t(:,2500))
+fig.polar_sgram_dbv = make_fig('polar_sinogram_bv_dilate');
+%%
+fig.polar_sgram_dbv.bring_fig
+fig.polar_sgram_dbv.update_figsize([8,5])
+fig.polar_sgram_dbv.reset_axis
+fig.polar_sgram_dbv.plot_kymograph(polar_analysis.constdial_sgram(:,:,1,2)) % constricted pvs
+fig.polar_sgram_dbv.plot_line(polar_analysis.polar_boundary.const_pvsboundary,'g');
+fig.polar_sgram_dbv.plot_line(polar_analysis.polar_boundary.const_bvboundary,'r');
+fig.polar_sgram_dbv.plot_line(polar_analysis.polar_boundary.dilate_pvsboundary,clee.clist.darkgreen);
+fig.polar_sgram_dbv.plot_line(polar_analysis.polar_boundary.dilate_bvboundary,clee.clist.magenta);
+fig.polar_sgram_dbv.save2svg(directories.save_dir)
+
+%%
+fig.polar_sgram_cpvs = make_fig('polar_sinogram_pvs_const');
+fig.polar_sgram_cpvs.update_figsize([8,5])
+%%
+fig.polar_sgram_cpvs.bring_fig
+
+fig.polar_sgram_cpvs.reset_axis
+fig.polar_sgram_cpvs.plot_kymograph(polar_analysis.constdial_sgram(:,:,2,1)) % constricted pvs
+fig.polar_sgram_cpvs.plot_line(polar_analysis.polar_boundary.const_pvsboundary,'g');
+fig.polar_sgram_cpvs.plot_line(polar_analysis.polar_boundary.const_bvboundary,'r');
+fig.polar_sgram_cpvs.plot_line(polar_analysis.polar_boundary.dilate_pvsboundary,clee.clist.darkgreen);
+fig.polar_sgram_cpvs.plot_line(polar_analysis.polar_boundary.dilate_bvboundary,clee.clist.magenta);
+fig.polar_sgram_cpvs.save2svg(directories.save_dir)
+
+%%
+fig.polar_sgram_dpvs = make_fig('polar_sinogram_pvs_dilate');
+fig.polar_sgram_dpvs.update_figsize([8,5])
+%%
+fig.polar_sgram_dpvs.bring_fig
+fig.polar_sgram_dpvs.reset_axis
+fig.polar_sgram_dpvs.plot_kymograph(polar_analysis.constdial_sgram(:,:,2,2)) % constricted pvs
+fig.polar_sgram_dpvs.plot_line(polar_analysis.polar_boundary.const_pvsboundary,'g');
+fig.polar_sgram_dpvs.plot_line(polar_analysis.polar_boundary.const_bvboundary,'r');
+fig.polar_sgram_dpvs.plot_line(polar_analysis.polar_boundary.dilate_pvsboundary,clee.clist.darkgreen);
+fig.polar_sgram_dpvs.plot_line(polar_analysis.polar_boundary.dilate_bvboundary,clee.clist.magenta);
+fig.polar_sgram_dpvs.save2svg(directories.save_dir)
+fig.polar_sgram_dpvs.save2svg(directories.save_dir)
+
+
+
+%% Draw all boundary (constrict, dilate bv and pvs outter boundary)
+fig.polar_boundary = make_fig('polar_boundary_all','polar');
+fig.polar_boundary.update_figsize([6,6])
+fig.polar_boundary.plot_polar(polar_analysis.polar_boundary.const_bvboundary,clee.clist.red,'*')
+hold(fig.polar_boundary.ax,"on")
+fig.polar_boundary.plot_polar(polar_analysis.polar_boundary.dilate_bvboundary,clee.clist.magenta,'*')
+fig.polar_boundary.plot_polar(polar_analysis.polar_boundary.const_pvsboundary,clee.clist.darkgreen,'*')
+fig.polar_boundary.plot_polar(polar_analysis.polar_boundary.dilate_pvsboundary,clee.clist.green,'*')
+fig.polar_boundary.save2svg(directories.save_dir)
+
+%% Draw all thickness
+fig.polar_thickness = make_fig('polar_thickness','polar');
+%%
+fig.polar_thickness.bring_fig
+fig.polar_thickness.reset_axis
+fig.polar_thickness.update_figsize([6,6])
+%
+fig.polar_thickness.plot_polar(polar_analysis.polar_boundary.const_bvboundary,clee.clist.red,'*')
+hold(fig.polar_thickness.ax,"on")
+fig.polar_thickness.plot_polar(polar_analysis.polar_boundary.dilate_bvboundary,clee.clist.magenta,'*')
+fig.polar_thickness.plot_polar(polar_analysis.const_pvsthickness,clee.clist.darkgreen,'*')
+fig.polar_thickness.plot_polar(polar_analysis.dilate_pvsthickness,clee.clist.green,'*')
+
+%%
+fig.polar_diffboundary = make_fig('polar_boundary_differential','polar');
+%%
+fig.polar_diffboundary.reset_axis
+fig.polar_diffboundary.update_figsize([6,6])
+%
+fig.polar_diffboundary.plot_polar(polar_analysis.bvdilation,clee.clist.red,'*')
+hold(fig.polar_diffboundary.ax,"on")
+fig.polar_diffboundary.plot_polar(polar_analysis.pvschange,clee.clist.darkgreen,'*')
+%%
+fig.polar_diffboundary.plot_polar(polar_analysis.compression,clee.clist.black,'*')
+fig.polar_diffboundary.save2svg(directories.save_dir)
+
+%% show center position
+fig.roi_polarpaxcenter = make_fig('polar_paxcenter');
+fig.roi_polarpaxcenter.update_figsize([8 6])
+%%
+fig.roi_polarpaxcenter.reset_axis
+fig.roi_polarpaxcenter.showrois(roilist,2,["constricted_bv","dilated_bv"],["-y","-y"])
+hold on
+ax = gca;
+plot(ax,[tmp.pax_vertices(:, 1); tmp.pax_vertices(1, 1)], [tmp.pax_vertices(:, 2); tmp.pax_vertices(1, 2)], 'r-', 'LineWidth', 2);
+plot(ax, polar_analysis.parm.constricted_center(1), polar_analysis.parm.constricted_center(2), 'g+', 'MarkerSize', 10, 'LineWidth', 1);
+plot(ax, polar_analysis.parm.pax_center(1), polar_analysis.parm.pax_center(2), 'g+', 'MarkerSize', 10, 'LineWidth', 1);
+
+%%
+fig.roi_polarpaxcenter.save2svg(directories.save_dir)
