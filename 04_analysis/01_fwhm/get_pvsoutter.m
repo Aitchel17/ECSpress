@@ -1,12 +1,10 @@
-function [idx, kymographmask] = analyze_csfoutter(kymograph, bv_upidx, bv_downidx, threshold, offset)
+function [idx, kymographmask] = get_csfoutter(kymograph, bv_upidx, bv_downidx)
 % calculate_csf_boundaries - calculates upper and lower CSF boundaries based on given inputs.
 %
 % Inputs:
 %   kymograph          - normalized CSF intensity profile (2D array)
 %   bv_upidx  - upper boundary indices from blood vessel
 %   bv_downidx - bottom boundary indices from blood vessel
-%   threshold          - intensity threshold for boundary detection
-%   offset        - initial thresholded binary mask
 %
 % Outputs:
 %   idx.up_csf_boundary    - upper CSF boundary indices
@@ -263,7 +261,6 @@ cla(debug_ax);
 imagesc(debug_ax,clean_kymograph)
 %%
 for c_idx = 1: x_length
-    disp(c_idx)
     szfilt.x = clean_kymograph(:,c_idx);
     szfilt.dx =diff([0;szfilt.x;0]);
     szfilt.sx = find(szfilt.dx == 1);

@@ -14,36 +14,73 @@ classdef make_fig < handle
         fps = 1; % Default x axis unit:frame
         blackbackground = 0;
         fig
+        axis_type
         ax
         loc = struct('x',[],'y',[]);
     end
     
     methods
-        function obj = make_fig(fig_name)
+        function obj = make_fig(fig_name,axis_opt)
+            arguments
+                fig_name char
+                axis_opt char {mustBeMember(axis_opt, {'normal','polar'})} = 'normal'
+            end
             obj.fig = figure("Name",fig_name);
             set(obj.fig,'Units','inches',...
-                "Position",[obj.monitor_xyinch(1) obj.monitor_xyinch(2) obj.xy_sizeinch(1) obj.xy_sizeinch(2)]) % 
-            obj.initialize_axis
+                "Position",[obj.monitor_xyinch(1) obj.monitor_xyinch(2) obj.xy_sizeinch(1) obj.xy_sizeinch(2)])
+            obj.axis_type = axis_opt;
+            if strcmp(axis_opt, 'normal')
+                obj.initialize_axis;
+            elseif strcmp(axis_opt, 'polar')
+                obj.ax = polaraxes(obj.fig);
+            end
         end
 
-        
+        function plot_polar(obj,theta,angular_position,color,marker)
+            % angular_position = [angular_position,angular_position(1)];
+            % theta = linspace(0,2*pi,length(angular_position));          
+            pplot = polarplot(obj.ax,theta,angular_position);
+            pplot.Color = color;
+            pplot.Marker = marker;
+        end
 
-        
-        function plot_kymograph(obj,kymograph_data)
+        function polar_init(obj,angular_position,color,marker)
+            cla(obj.ax)
+        end
+
+        function plot_kymograph(obj,kymograph_data,taxis)
+            arguments
+                obj
+                kymograph_data
+                taxis = []
+            end
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
             numel_x = size(kymograph_data,2);
             numel_y = size(kymograph_data,1);
-            obj.loc.x = linspace(0,(numel_x-1)/obj.fps,numel_x); % start from 0
+            if ~isempty(taxis)
+                obj.loc.x = taxis;
+            else
+                obj.loc.x = linspace(0,(numel_x-1)/obj.fps,numel_x); % start from 0
+            end
             obj.loc.y = linspace(0,(numel_y-1)*obj.resolution,numel_y); % start from 0
             hold(obj.ax,"on")
-            imagesc(obj.ax,obj.loc.x,obj.loc.y,kymograph_data);
-            xlim(obj.ax,[0 numel_x]); 
-            ylim(obj.ax,[0 numel_y]);
+            imagesc(obj.ax,obj.loc.x, obj.loc.y, kymograph_data);
+            xlim(obj.ax,[0 max(obj.loc.x)]); 
+            ylim(obj.ax,[0 max(obj.loc.y)]);
             colormap('gray')
         end
 
-        function plot_line(obj,line_data,line_spec)
+
+
+        function plot_line(obj,line_data,color,marker, linestyle)
+            arguments
+                obj
+                line_data
+                color
+                marker = 'none'
+                linestyle = '-'
+            end
             numel_x = length(line_data);
             if isempty(obj.loc.x)
                obj.loc.x = linspace(0,(numel_x-1)/obj.fps,numel_x);
@@ -56,14 +93,26 @@ classdef make_fig < handle
                     obj.loc.x = linspace(0,(numel_x-1)/obj.fps,numel_x);
                 end
             end
-            plot(obj.ax,obj.loc.x,line_data*obj.resolution,line_spec)
-            xlim(obj.ax,[0 numel_x]);
+            p = plot(obj.ax,obj.loc.x,line_data*obj.resolution);
+            p.Color = color;
+            p.Marker = marker;
+            p.LineStyle =  linestyle;
+            xlim(obj.ax,[0 max(obj.loc.x)]); 
             if isempty(obj.loc.y)
                 ylim(obj.ax,[min(line_data) max(line_data)]);
             else
-                ylim(obj.ax,[0 numel(obj.loc.y)]);
+                ylim(obj.ax,[0 max(obj.loc.y)]);
             end
             obj.preset_axis
+        end
+
+        function plot_xline(obj,line_coordination,line_spec)
+            if ~isempty(obj.loc.x)
+                line_coordination = obj.loc.x(line_coordination);
+            end
+           for k = 1:length(line_coordination)
+                xline(obj.ax,line_coordination-0.5,line_spec,'LineWidth',1); % x axis start position should be 0
+           end
         end
 
         function plot_scatter(obj,x_axis,y_axis,scatter_spec)
@@ -113,13 +162,22 @@ methods
             % Output the original image (no modifications made to the image itself)
             imcontrast(im_handle)
         end
+        
+        function showimg(obj,image)
+            im_handle = imagesc(obj.ax,image(:,:)); % plot image
+            axis(obj.ax, 'image')
+            colormap('gray')
+            % Output the original image (no modifications made to the image itself)
+            imcontrast(im_handle)
+        end
 
-        function showrois(obj, roi_handle, channel, labels) % 250925, display all region of interest
+        function showrois(obj, roi_handle, channel, labels,colorlist) % 250925, display all region of interest
             arguments
                 obj
                 roi_handle
                 channel
                 labels = []
+                colorlist = []
             end
             if isempty(labels)
                 image = zeros(size(roi_handle.ROIs(1).ROISlice));
@@ -133,22 +191,53 @@ methods
                 idx = roi_handle.findLabel(labels(i));
                 idx_list = [idx_list, idx];
             end
-            im_handle = imagesc(obj.ax,image(:,:,channel)); % plot image
+            % 251015_rgb mode added
+            if channel == 3
+                rgb_image = zeros([size(image,1),size(image,2),3]);
+                ch1_min = prctile(image(:,:,1),5,'all');
+                ch2_min = prctile(image(:,:,2),5,'all');
+                ch1_max = prctile(image(:,:,1),95,'all');
+                ch2_max = prctile(image(:,:,2),95,'all');
+                rgb_image(:,:,1) = mat2gray(image(:,:,1),[ch1_min ch1_max]);
+                rgb_image(:,:,2) = mat2gray(image(:,:,2),[ch2_min ch2_max]);
+                im_handle = imagesc(obj.ax,rgb_image); % plot image
+            else
+                im_handle = imagesc(obj.ax,image(:,:,channel)); % plot image
+            end
+
             axis(obj.ax, 'image')
             colormap('gray')
             hold on           
             for i = 1:length(idx_list)                
                 vertices = roi_handle.ROIs(idx_list(i)).Vertices;
                 roimod = roi_handle.ROIs(idx_list(i)).Mode;
+                lineprofile = colorlist(i);
                     if strcmp(roimod, 'line')
-                        plot(obj.ax,[vertices(1, 1); vertices(2, 1)], [vertices(1, 2); vertices(2, 2)], 'r-', 'LineWidth', vertices(3, 1)); % Close the polygon
+                        plot(obj.ax,[vertices(1, 1); vertices(2, 1)], [vertices(1, 2); vertices(2, 2)], lineprofile, 'LineWidth', vertices(3, 1)); % Close the polygon
                     else
-                        plot(obj.ax,[vertices(:, 1); vertices(1, 1)], [vertices(:, 2); vertices(1, 2)], 'r-', 'LineWidth', 2); % Close the polygon
+                        plot(obj.ax,[vertices(:, 1); vertices(1, 1)], [vertices(:, 2); vertices(1, 2)], lineprofile, 'LineWidth', 1); % Close the polygon
                     end
             end
 
             % Output the original image (no modifications made to the image itself)
-            imcontrast(im_handle)
+            if channel ~=3
+                imcontrast(im_handle)
+            end
+        end
+
+        function save2svg(obj,save_path)
+            arguments
+                obj
+                save_path = [];
+            end
+            %%
+            if isempty(save_path)
+                path = fullfile(obj.save_path, obj.fig.Name);
+            else
+                path = fullfile(save_path, obj.fig.Name);
+            end
+                print(obj.fig, path, "-dsvg", "-vector");
+          
         end
 
 end
@@ -168,8 +257,6 @@ end
             obj.xy_sizeinch = size_inch;
             set(obj.fig,'Units','inches',...
              "Position",[obj.monitor_xyinch(1) obj.monitor_xyinch(2) obj.xy_sizeinch(1) obj.xy_sizeinch(2)])
-            obj.preset_axis
-
         end
 
         function update_position(obj,position_inch)
@@ -182,6 +269,7 @@ end
             cla(obj.ax);
             obj.loc = struct('x',[],'y',[]);
         end
+
 
         function bring_fig(obj)
             figure(obj.fig)
