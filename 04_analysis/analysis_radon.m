@@ -7,6 +7,7 @@ classdef analysis_radon < handle
         radon_result
         roi_image
         channel
+
     end
 
     methods
@@ -21,6 +22,8 @@ classdef analysis_radon < handle
             end
             obj.channel = target_channel;
 
+
+
             % Extract the stack using the 'radon' ROI from Target Channel
             disp(['Extracting Radon ROI stack from ' obj.channel '...']);
             try
@@ -32,6 +35,7 @@ classdef analysis_radon < handle
             % Run the analysis function (Stats only)
             disp('Running Radon Analysis (Stats)...');
             obj.radon_result = analyze_radon(obj.roi_image);
+
 
             % Perform Event Selection
             disp('Selecting Events...');

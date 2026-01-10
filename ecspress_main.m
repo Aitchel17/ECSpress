@@ -22,23 +22,21 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\00_igkl\hql090\251020_hql090_whiskerb\HQL090_whiskerb251020_002';
+base_path = 'G:\tmp\00_igkl\hql073\250626_hql073_whisker\HQL073_whisker250623_007';
 directories = manage_directories(base_path);
-%%
 
 %% 1. Load data
 mdfExtract = load_mdfextract(directories.load_dir);
 % 2. Twophoton data FPS matching & preprocessing
 twophoton_processed = twophoton_preprocess(mdfExtract);
-% 3. ROIlist generation
-roilist = roi_handle(fullfile(directories.primary_analysis,"roilist.mat"));
+%% 3. Load processed data & ROIlist generation
+[roilist, pax_fwhm, polarcluster, radon_analysis] = initialize_analysis_workspace(directories);
 
 %% 4.1 FWHM Analysis
-% 4.1.1 FWHM analysis - ROI Setup
+% 4.1.1 FWHM analysis - ROI Setupw
 roilist.addormodifyroi(twophoton_processed.ch2,'pax','line');
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 pax_fwhm = line_fwhm(roilist.getvertices('pax'));
-
 % Lumen (vessel) processing
 pax_fwhm.addkymograph("lumen", twophoton_processed.ch1,"max")
 pax_fwhm.kymograph_afterprocess('lumen',[1 3])
@@ -48,49 +46,29 @@ pax_fwhm.fwhm("lumen");
 pax_fwhm.addkymograph("pvs", twophoton_processed.ch2,"median")
 pax_fwhm.kymograph_afterprocess('pvs',[3 5])
 pax_fwhm.pvsanalysis();
+%%
 pax_fwhm.clean_outlier(true)
 pax_fwhm.getdiameter;
 pax_fwhm.getdisplacement;
+pax_fwhm.save2disk(directories.primary_analysis);
+roilist.save2disk
 %% 4.1.4 FWHM analysis figure generation
 analysis_pax_makefig(pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, directories.figures_fwhm);
-roilist.save2disk
+
 
 %% 4.2 Cluster polar analysis
-% 5.1 Make cluster
-pax_cluster = analysis_clusterpolar(pax_fwhm, twophoton_processed, directories.primary_analysis);
+%% 5.1 Make cluster
+polarcluster = analysis_clusterpolar(pax_fwhm, twophoton_processed, directories.primary_analysis);
 %% 5.2 Make cluster figure
-analysis_clusterpolar_makefig(pax_cluster, pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, directories.figures_cluster);
+analysis_clusterpolar_makefig(polarcluster, roilist, pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, directories.figures_polarcluster);
 %% 5.3 Manual Contour Correction
-pax_cluster = analysis_clusterpolar_contour(pax_cluster, roilist);
+polarcluster = analysis_clusterpolar_contour(polarcluster, roilist);
 %% 5.4 Polar Plot of Contours
-analysis_clusterpolar_polarplot(pax_cluster, roilist, directories.figures_cluster);
-%%
-figure()
-imagesc(pax_cluster.manual_roi(1).EdgeMask+pax_cluster.manual_roi(2).EdgeMask)
-%%
-figure()
-imagesc(pax_cluster.manual_roi(3).EdgeMask+pax_cluster.manual_roi(4).EdgeMask)
-%%
-figure()
-imagesc(pax_cluster.manual_roi(2).EdgeMask+pax_cluster.manual_roi(4).EdgeMask)
-%%
+analysis_clusterpolar_polarplot(polarcluster, roilist, directories.figures_polarcluster);
 roilist.save2disk();
-save(fullfile(directories.primary_analysis, 'pax_cluster.mat'), "pax_cluster");
-%%
-figure()
-imagesc(pax_cluster.cluster_bvcsf_constdil(:,:,1,1))
-axis image
-%%
-imcontrast
+save(fullfile(directories.primary_analysis, 'polarcluster.mat'), "polarcluster");
 
-%%
-figure()
-%%
-imagesc(pax_cluster.manual_roi(1).SelectionMask)
-axis image
-%%
 
-% 5.2 Polar analysis (with findimage edge, watershed algorithm)
 %% 6. Dynamic time warping based analysis
 %% 7. PIV analysis
 
@@ -99,10 +77,14 @@ roilist.addormodifyroi(twophoton_processed.ch1,'radon','rectangle');
 radon_analysis = analysis_radon(twophoton_processed, roilist, 'ch1');
 
 %% 8.2 Radon figures
-analysis_radon_makefig(radon_analysis, twophoton_processed.t_axis, directories.figures_radon);
+analysis_radon_makefig(radon_analysis, twophoton_processed.t_axis, directories.figures_radon, twophoton_processed.pixel2um);
 %%
 radon_analysis.save2disk(directories.primary_analysis);
 roilist.save2disk
+%%
+util_checkstack(radon_analysis.radon_result.events(4).irtd)
 
 %% 7. ROI Setup
 setup_rois(roilist, twophoton_processed);
+%% 7.1 ROI Setup verification figures (Manual ROIs)
+setup_rois_makefig(roilist, twophoton_processed.ch1, twophoton_processed.ch2, directories.figures_roi);

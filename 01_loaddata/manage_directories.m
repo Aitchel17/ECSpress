@@ -38,9 +38,14 @@ if ~exist(directories.figures_radon, 'dir')
     mkdir(directories.figures_radon);
 end
 
-directories.figures_cluster = fullfile(directories.figures, 'cluster');
-if ~exist(directories.figures_cluster, 'dir')
-    mkdir(directories.figures_cluster);
+directories.figures_polarcluster = fullfile(directories.figures, 'polarcluster');
+if ~exist(directories.figures_polarcluster, 'dir')
+    mkdir(directories.figures_polarcluster);
+end
+
+directories.figures_roi = fullfile(directories.figures, 'roi_fig');
+if ~exist(directories.figures_roi, 'dir')
+    mkdir(directories.figures_roi);
 end
 
 end

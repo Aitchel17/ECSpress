@@ -1,4 +1,4 @@
-function pax_cluster = analysis_clusterpolar_contour(pax_cluster, roilist)
+function polarcluster = analysis_clusterpolar_contour(polarcluster, roilist)
 % ANALYSIS_PAX_CLUSTER_CONTOUR Semi-automatic contouring of cluster median images.
 %   Now integrates with roilist for persistence of the Selection Polygon.
 %
@@ -7,23 +7,23 @@ function pax_cluster = analysis_clusterpolar_contour(pax_cluster, roilist)
 %   3. Display edges + (Existing Polygon OR New Polygon).
 %   4. User adjusts/draws polygon to KEEP edges.
 %   5. Updates roilist with the Polygon (Vertices/Mask).
-%   6. Updates pax_cluster with the Filtered EdgeMask.
+%   6. Updates polarcluster with the Filtered EdgeMask.
 %
 % Inputs:
-%   pax_cluster: Struct containing cluster images
+%   polarcluster: Struct containing cluster images
 %   roilist: roi_handle object
 %
 % Outputs:
-%   pax_cluster: Updated struct with 'manual_roi' containing filtered EdgeMask.
+%   polarcluster: Updated struct with 'manual_roi' containing filtered EdgeMask.
 
 % Check if 4D data exists
-if ~isfield(pax_cluster, 'cluster_bvcsf_constdil')
-    error('pax_cluster must contain cluster_bvcsf_constdil (x,y,ch,state).');
+if ~isfield(polarcluster, 'cluster_bvcsf_constdil')
+    error('polarcluster must contain cluster_bvcsf_constdil (x,y,ch,state).');
 end
 
 % Initialize manual_roi if not exists
-if ~isfield(pax_cluster, 'manual_roi')
-    pax_cluster.manual_roi = struct();
+if ~isfield(polarcluster, 'manual_roi')
+    polarcluster.manual_roi = struct();
 end
 
 state_names = {'constricted', 'dilated'};
@@ -38,11 +38,11 @@ for state_idx = 1:2
         counter = counter + 1;
 
         % Generate names and description
-        contour_name = sprintf('%s_%s', state_names{state_idx}, ch_names{ch_idx});
+        contour_name = sprintf('%s%s_contour', state_names{state_idx}, upper(ch_names{ch_idx}));
         disp_msg     = sprintf('%s %s', state_names{state_idx}, ch_names{ch_idx});
 
         % Extract Image: (x, y, ch, state)
-        img = pax_cluster.cluster_bvcsf_constdil(:,:,ch_idx,state_idx);
+        img = polarcluster.cluster_bvcsf_constdil(:,:,ch_idx,state_idx);
         img_norm = mat2gray(img);
 
         % 1. Auto-detect edges
@@ -82,61 +82,71 @@ for state_idx = 1:2
         title({['Step 1: Detected Edges for ' disp_msg], 'Step 2: Adjust/Draw Green Polygon to KEEP edges.'});
 
         % 4. User Interaction
-        try
-            if ~isempty(existing_pos)
-                poly = drawpolygon('Color', 'g', 'LineWidth', 2, 'Position', existing_pos);
-            else
-                poly = drawpolygon('Color', 'g', 'LineWidth', 2);
-            end
+        valid_selection = false;
 
-            % Wait for completion
-            custom_wait(poly);
-
-            if isvalid(poly)
-                user_mask = createMask(poly);
-                vtx = poly.Position;
-
-                % 5. Filter Edges using Polygon
-                filtered_edges = edges & user_mask;
-
-                % 6. Update ROILIST (Persistence)
-                nowt = datetime('now');
-                if ~isempty(roi_idx)
-                    % Modify existing
-                    roilist.ROIs(roi_idx).Vertices = vtx;
-                    roilist.ROIs(roi_idx).Mask = user_mask;
-                    roilist.ROIs(roi_idx).Modified = nowt;
-                    roilist.ROIs(roi_idx).ImageSize = size(user_mask);
+        while ~valid_selection && isvalid(hF)
+            try
+                if ~isempty(existing_pos)
+                    poly = drawpolygon('Color', 'g', 'LineWidth', 2, 'Position', existing_pos);
+                    existing_pos = []; % Reset so consecutive redraws start fresh if user deleted it
                 else
-                    % Create new
-                    newroi.Label     = contour_name;
-                    newroi.Mode      = 'polygon';
-                    newroi.Vertices  = vtx;
-                    newroi.Mask      = user_mask;
-                    newroi.ImageSize = size(user_mask);
-                    newroi.RefSlice  = 1;
-                    newroi.ROISlice  = [];
-                    newroi.Created   = nowt;
-                    newroi.Modified  = nowt;
-                    roilist.ROIs(end+1) = newroi;
+                    poly = drawpolygon('Color', 'g', 'LineWidth', 2);
                 end
 
-                % 7. Store Result in pax_cluster (Analysis)
-                pax_cluster.manual_roi(counter).contour_name = contour_name;
-                pax_cluster.manual_roi(counter).EdgeMask = filtered_edges;
-                pax_cluster.manual_roi(counter).SelectionMask = user_mask;
-                pax_cluster.manual_roi(counter).State = state_names{state_idx};
-                pax_cluster.manual_roi(counter).Channel = ch_names{ch_idx};
-                pax_cluster.manual_roi(counter).Modified = nowt;
+                % Wait for completion
+                custom_wait(poly);
 
-                disp(['Saved selection for ' disp_msg]);
-            else
-                disp('Selection was cancelled or invalid.');
+                if isvalid(poly)
+                    user_mask = createMask(poly);
+                    vtx = poly.Position;
+
+                    % 5. Filter Edges using Polygon
+                    % filtered_edges = edges & user_mask; % Unused now
+
+                    % 6. Update ROILIST (Persistence)
+                    nowt = datetime('now');
+                    if ~isempty(roi_idx)
+                        % Modify existing
+                        roilist.ROIs(roi_idx).Vertices = vtx;
+                        roilist.ROIs(roi_idx).Mask = user_mask;
+                        roilist.ROIs(roi_idx).Modified = nowt;
+                        roilist.ROIs(roi_idx).ImageSize = size(user_mask);
+                    else
+                        % Create new
+                        newroi.Label     = contour_name;
+                        newroi.Mode      = 'polygon';
+                        newroi.Vertices  = vtx;
+                        newroi.Mask      = user_mask;
+                        newroi.ImageSize = size(user_mask);
+                        newroi.RefSlice  = 1;
+                        newroi.ROISlice  = [];
+                        newroi.Created   = nowt;
+                        newroi.Modified  = nowt;
+                        roilist.ROIs(end+1) = newroi;
+                    end
+
+                    disp(['Saved selection for ' disp_msg]);
+                    valid_selection = true;
+                else
+                    if isvalid(hF)
+                        disp('Polygon deleted. Returning to drawing mode...');
+                        title({['Step 1: Detected Edges for ' disp_msg], 'Polygon deleted. Please Draw New Polygon.'});
+                    else
+                        disp('Figure closed. Skipping...');
+                    end
+                end
+
+            catch ME
+                if ~isvalid(hF)
+                    disp('Figure closed during interaction.');
+                    break;
+                end
+                disp(['Selection error: ' ME.message]);
+                break; % Exit loop on error to prevent infinite loop
             end
-
-        catch ME
-            disp(['Selection error: ' ME.message]);
         end
+
+
 
         if isvalid(hF)
             close(hF);
