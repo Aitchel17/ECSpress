@@ -1,0 +1,6 @@
+# MATLAB autosave
+*.asv
+
+# Large data / outputs (adjust to your needs)
+*.mat
+*.tif
