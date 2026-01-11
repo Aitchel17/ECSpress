@@ -1,4 +1,4 @@
-function p = nUpdateWaitbar(data, h)
+function p = util_pbar(data, h)
 persistent TOTAL COUNT H
 if nargin == 2
     % initialisation mode
