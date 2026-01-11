@@ -4,3 +4,6 @@
 # Large data / outputs (adjust to your needs)
 *.mat
 *.tif
+
+# Archive of legacy/unused files
+99_notinuse/
