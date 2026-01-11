@@ -25,6 +25,8 @@ hStack = sliceViewer(stack, 'Parent', imgPanel);
 % Extract the underlying axes object from the sliceViewer
 hAxes = getAxesHandle(hStack);
 
+
+%%%% For user interface
 % Add a label for the intensity range slider
 uilabel(controlPanel, 'Text', 'Intensity Range:', 'Position', [20, 60, 100, 20]);
 
@@ -54,9 +56,10 @@ uibutton(controlPanel, ...
     'Text', 'Reject', ...
     'Position', [400, 10, 70, 30], ...
     'ButtonPushedFcn', @(~, ~) uiresume(fig));
-uiwait(fig);
 
-% Close the figure
+% Wait until uiresume to be run by confirm() or reject
+uiwait(fig);
+%%% Once confirm button clicked Close the figure
 close(fig);
 
 % Function to update intensity range dynamically
@@ -65,7 +68,7 @@ close(fig);
     end
 
 
-% Function to reset ROI
+% Function to confirm stack
     function confirm()
         state = hStack.SliceNumber; % Set the reset flag
         uiresume(fig); % Resume
