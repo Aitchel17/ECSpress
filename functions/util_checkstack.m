@@ -9,7 +9,7 @@ end
 stack = double(stack);
 min_val = min(stack,[],'all');
 max_val = max(stack,[],'all');
-stack = (stack - min_val) / (max_val - min_val) * 65535;
+stack = (stack - min_val) / (max_val - min_val) * 65535; % Normalize and stretch to min and max pixels.
 stack = uint16(stack);
 state = false;
 
