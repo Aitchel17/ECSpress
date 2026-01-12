@@ -24,7 +24,7 @@ radon_kymo_fig.update_figsize([18 3]); % 6:1 ratio for 2 subplots (each 3:1)
 % Subplot 1: Raw Diameter (SCALED)
 ax1 = subplot(1, 2, 1, 'Parent', radon_kymo_fig.fig);
 radon_kymo_fig.ax = ax1;
-radon_kymo_fig.plot_kymograph(radon_analysis.radon_result.diameter * pixel2um, t_axis, clee.gradient.inferno);
+radon_kymo_fig.plot_kymograph(radon_analysis.diameter * pixel2um, t_axis, clee.gradient.inferno);
 title(ax1, 'Raw Diameter (um)');
 radon_kymo_fig.put_xaxistitle('Time (s)');
 radon_kymo_fig.put_yaxistitle('Angle (deg)');
@@ -32,7 +32,7 @@ radon_kymo_fig.put_yaxistitle('Angle (deg)');
 % Subplot 2: Normalized Diameter
 ax2 = subplot(1, 2, 2, 'Parent', radon_kymo_fig.fig);
 radon_kymo_fig.ax = ax2;
-radon_kymo_fig.plot_kymograph(radon_analysis.radon_result.normalized_diameterchange, t_axis, clee.gradient.inferno);
+radon_kymo_fig.plot_kymograph(radon_analysis.normalized_diameterchange, t_axis, clee.gradient.inferno);
 title(ax2, 'Normalized Diameter');
 radon_kymo_fig.put_xaxistitle('Time (s)');
 radon_kymo_fig.put_yaxistitle('Angle (deg)');
@@ -48,7 +48,7 @@ ax3 = subplot(1, 2, 1, 'Parent', radon_var_fig.fig);
 radon_var_fig.ax = ax3;
 % Variance scales with square of unit
 scale_var = pixel2um^2;
-radon_var_fig.plot_line(radon_analysis.radon_result.var_diameter * scale_var, 'k');
+radon_var_fig.plot_line(radon_analysis.var_diameter * scale_var, 'k');
 title(ax3, 'Angle Variance (um^2)');
 radon_var_fig.put_xaxistitle('Angle (deg)');
 radon_var_fig.put_yaxistitle('Variance');
@@ -56,7 +56,7 @@ radon_var_fig.put_yaxistitle('Variance');
 % Subplot 2: Normalized Variance
 ax4 = subplot(1, 2, 2, 'Parent', radon_var_fig.fig);
 radon_var_fig.ax = ax4;
-radon_var_fig.plot_line(radon_analysis.radon_result.var_normdiameter, 'k');
+radon_var_fig.plot_line(radon_analysis.var_normdiameter, 'k');
 title(ax4, 'Normalized Angle Variance');
 radon_var_fig.put_xaxistitle('Angle (deg)');
 radon_var_fig.put_yaxistitle('Variance');
@@ -66,16 +66,16 @@ radon_var_fig.save2svg(save_dir);
 % 3. Median Diameter
 radonmedian_diameter_fig = make_fig("Median_diameter","normal");
 radonmedian_diameter_fig.update_figsize([5 5]); % Square figure
-radonmedian_diameter_fig.plot_line(radon_analysis.radon_result.median_diameter * pixel2um, 'k');
+radonmedian_diameter_fig.plot_line(radon_analysis.median_diameter * pixel2um, 'k');
 radonmedian_diameter_fig.put_xaxistitle('Angle (deg)');
 radonmedian_diameter_fig.put_yaxistitle('Median Diameter (um)');
 radonmedian_diameter_fig.save2svg(save_dir);
 
 % 5. Event Images (Dilate/Constrict)
 %%
-if isfield(radon_analysis.radon_result, 'events')
-    for eventn = 1:length(radon_analysis.radon_result.events)
-        event = radon_analysis.radon_result.events(eventn);
+if isfield(radon_analysis, 'events')
+    for eventn = 1:length(radon_analysis.events)
+        event = radon_analysis.events(eventn);
 
         % Determine if dual-channel (RGB plotting) or single channel analysis
         if size(event.median_projected, 3) == 2
