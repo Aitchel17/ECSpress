@@ -22,7 +22,7 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\00_igkl\hql088\251006_hql088_whiskerb\HQL088_whiskerb251006_007_pa03';
+base_path = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
@@ -58,14 +58,14 @@ session.pax_fwhm.getdisplacement;
 session.pax_fwhm.save2disk(session.directories.primary_analysis);
 session.roilist.save2disk
 %% 4.1.4 FWHM analysis figure generation
-analysis_pax_makefig(session.pax_fwhm,twophoton_processed.t_axis, twophoton_processed.p, session.directories.figures_fwhm);
+analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.directories.figures_fwhm);
 
 
 %% 4.2 Cluster polar analysis
 %% 5.1 Make cluster
 session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.directories.primary_analysis);
 %% 5.2 Make cluster figure
-analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax_fwhm, session.img_param.t_axis, twophoton_processed.pixel2um, session.directories.figures_polarcluster);
+analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.directories.figures_polarcluster);
 %% 5.3 Manual Contour Correction
 session.polarcluster = analysis_clusterpolar_contour(session.polarcluster, session.roilist);
 %% 5.4 Polar Plot of Contours

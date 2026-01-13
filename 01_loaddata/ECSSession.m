@@ -6,8 +6,8 @@ classdef ECSSession < mdfExtractLoader
 
     properties
         img_param       % Structure containing imaging parameters (fps, um/pixel, time axis)
-        results         % Structure containing analysis results (analog, roilist, etc.)
-        directories     % Structure containing relevant directory paths
+
+        % directories     % Removed: merged into dir_struct (inherited from mdfExtractLoader)
         stackch1        % Image stack channel 1
         stackch2        % Image stack channel 2
 
@@ -32,7 +32,7 @@ classdef ECSSession < mdfExtractLoader
             obj@mdfExtractLoader(args{:});
 
             % Initialize container structs
-            obj.results = struct();
+
 
             % Setup Directories
             if nargin > 0
@@ -58,7 +58,10 @@ classdef ECSSession < mdfExtractLoader
             obj.img_param.imgstarttime = obj.img_param.imgstartframe / obj.img_param.record_fps;
             obj.img_param.imgendframe = str2double(obj.info.loadend);
             obj.img_param.imgendtime = obj.img_param.imgendframe / obj.img_param.record_fps;
-            obj.img_param.pixel2um = str2double(obj.info.objpix(1:end-2));
+            obj.img_param.pixel2um = str2double(obj.info.objpix);
+            if isnan(obj.img_param.pixel2um)
+                obj.img_param.pixel2um = str2double(obj.info.objpix(1:end-2));
+            end
 
             % Note: taxis requires stack size. We can infer it from info or load it.
             % load_mdfextract loaded the stack to get size(stackch1,3).
@@ -80,38 +83,13 @@ classdef ECSSession < mdfExtractLoader
 
             if nargin < 2
                 % Default to the folder of the MDF data if not provided
-                extractfolder_path = obj.path_struct.info; % This is a file path, we need folder
+                extractfolder_path = obj.dir_struct.info; % This is a file path, we need folder
                 [extractfolder_path, ~, ~] = fileparts(extractfolder_path);
             end
 
             savepath = fullfile(extractfolder_path, 'primary_analysis');
             if ~exist(savepath, 'dir')
                 mkdir(savepath);
-            end
-
-            % --- Load Analog ---
-            analog_file = fullfile(savepath, 'analog.mat');
-            if isfile(analog_file)
-                tmp = load(analog_file);
-                obj.results.analog = tmp.primary_analog;
-            else
-                fprintf('analog file does not exist, generating new one...\n');
-                % Use INHERITED method
-                raw_analog = obj.loadanalog();
-
-                % Create primary_analog object (assuming analysis_analog is available)
-                primary_analog = analysis_analog(raw_analog.info, raw_analog.data);
-
-                if isfield(primary_analog.data, 'raw_Air_puff1')
-                    primary_analog.airtable = primary_analog.get_airtable('raw_Air_puff1');
-                end
-                if isfield(primary_analog.data, 'raw_ECoG')
-                    primary_analog.ecogspectrum = primary_analog.get_ecogspectrum('raw_ECoG');
-                end
-
-                % Save it
-                save(analog_file, "primary_analog");
-                obj.results.analog = primary_analog;
             end
 
             % --- Load Other Results ---
@@ -140,15 +118,7 @@ classdef ECSSession < mdfExtractLoader
                 end
             end
 
-            % Manual Polar structs (Storing in results struct for now as they are less standard)
-            if isfile(fullfile(savepath, 'manual_polar.mat'))
-                tmp = load(fullfile(savepath, 'manual_polar.mat'));
-                obj.results.manual_polar_roilist = tmp.roilist;
-            end
-            if isfile(fullfile(savepath, 'manual_polarstruct.mat'))
-                tmp = load(fullfile(savepath, 'manual_polarstruct.mat'));
-                obj.results.manual_polarstruct = tmp.manual_polarstruct;
-            end
+
 
             % Ensure roilist is initialized so downstream code (addormodifyroi) doesn't crash
             if isempty(obj.roilist)
@@ -165,24 +135,25 @@ classdef ECSSession < mdfExtractLoader
     methods (Access = private)
         function obj = setup_directories(obj, base_path)
             % Integated from manage_directories.m
+            % Now merges into dir_struct (inherited from mdfExtractLoader)
 
-            obj.directories = struct();
-            obj.directories.load_dir = base_path;
-            obj.directories.primary_analysis = fullfile(base_path, 'primary_analysis');
+            % obj.dir_struct is already initialized by superclass constructor
+            obj.dir_struct.load_dir = base_path;
+            obj.dir_struct.primary_analysis = fullfile(base_path, 'primary_analysis');
 
             % Ensure primary_analysis directory exists
-            if ~exist(obj.directories.primary_analysis, 'dir')
-                mkdir(obj.directories.primary_analysis);
-                disp(['Created directory: ', obj.directories.primary_analysis]);
+            if ~exist(obj.dir_struct.primary_analysis, 'dir')
+                mkdir(obj.dir_struct.primary_analysis);
+                disp(['Created directory: ', obj.dir_struct.primary_analysis]);
             end
 
             % Create unique figure directory to preserve results
             timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-            obj.directories.figures = fullfile(obj.directories.primary_analysis, ['figures_', timestamp]);
+            obj.dir_struct.figures = fullfile(obj.dir_struct.primary_analysis, ['figures_', timestamp]);
 
-            if ~exist(obj.directories.figures, 'dir')
-                mkdir(obj.directories.figures);
-                disp(['Created figure directory: ', obj.directories.figures]);
+            if ~exist(obj.dir_struct.figures, 'dir')
+                mkdir(obj.dir_struct.figures);
+                disp(['Created figure directory: ', obj.dir_struct.figures]);
             end
 
             % Create subdirectories
@@ -190,11 +161,11 @@ classdef ECSSession < mdfExtractLoader
             fields  = {'figures_fwhm', 'figures_radon', 'figures_polarcluster', 'figures_roi'};
 
             for i = 1:numel(subdirs)
-                dpath = fullfile(obj.directories.figures, subdirs{i});
+                dpath = fullfile(obj.dir_struct.figures, subdirs{i});
                 if ~exist(dpath, 'dir')
                     mkdir(dpath);
                 end
-                obj.directories.(fields{i}) = dpath;
+                obj.dir_struct.(fields{i}) = dpath;
             end
         end
     end

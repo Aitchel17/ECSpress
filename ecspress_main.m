@@ -22,14 +22,14 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\00_igkl\hql088\251006_hql088_whiskerb\HQL088_whiskerb251006_007_pa03';
+base_path = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_005';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(base_path);
 session = session.load_primary_results();
-%%
+%
 % 2. Twophoton data FPS matching & preprocessing
 % Note: twophoton_preprocess expects a struct with stackch1/2 and img_param.
 % ECSSession object works here as it has these properties.
@@ -39,7 +39,7 @@ twophoton_processed = twophoton_preprocess(session);
 
 %% 4.1 FWHM Analysis
 % 4.1.1 FWHM analysis - ROI Setupw
-session.roilist.addormodifyroi(twophoton_processed.ch2,'pax','line');
+session.roilist.addormodifyroi(twophoton_processed.ch1,'pax','line');
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 % Lumen (vessel) processing
@@ -55,23 +55,25 @@ session.pax_fwhm.pvsanalysis();
 session.pax_fwhm.clean_outlier(true)
 session.pax_fwhm.getdiameter;
 session.pax_fwhm.getdisplacement;
-session.pax_fwhm.save2disk(session.directories.primary_analysis);
+session.pax_fwhm.save2disk(session.dir_struct.primary_analysis);
 session.roilist.save2disk
 %% 4.1.4 FWHM analysis figure generation
-analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.directories.figures_fwhm);
+analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
 
 
 %% 4.2 Cluster polar analysis
 %% 5.1 Make cluster
-session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.directories.primary_analysis);
+session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.dir_struct.primary_analysis);
 %% 5.2 Make cluster figure
-analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.directories.figures_polarcluster);
+analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_polarcluster);
 %% 5.3 Manual Contour Correction
 session.polarcluster = analysis_clusterpolar_contour(session.polarcluster, session.roilist);
 %% 5.4 Polar Plot of Contours
-analysis_clusterpolar_polarplot(session.polarcluster, session.roilist, session.directories.figures_polarcluster);
+analysis_clusterpolar_polarplot(session.polarcluster, session.roilist, session.dir_struct.figures_polarcluster);
 session.roilist.save2disk();
-save(fullfile(session.directories.primary_analysis, 'polarcluster.mat'), "polarcluster");
+% 5.5 save polar cluster
+polarcluster = session.polarcluster;
+save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcluster");
 
 
 %% 6. Dynamic time warping based analysis
@@ -82,9 +84,9 @@ session.roilist.addormodifyroi(twophoton_processed.ch1,'radon','rectangle');
 session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, 'ch1');
 
 %% 8.2 Radon figures
-analysis_radon_makefig(session.radon_analysis, twophoton_processed.t_axis, session.directories.figures_radon, twophoton_processed.pixel2um);
+analysis_radon_makefig(session.radon_analysis.radon_result, twophoton_processed.t_axis, session.dir_struct.figures_radon, twophoton_processed.pixel2um);
 %%
-session.radon_analysis.save2disk(session.directories.primary_analysis);
+session.radon_analysis.save2disk(session.dir_struct.primary_analysis);
 session.roilist.save2disk
 %%
 util_checkstack(session.radon_analysis.radon_result.events(4).irtd)
@@ -92,4 +94,4 @@ util_checkstack(session.radon_analysis.radon_result.events(4).irtd)
 %% 7. ROI Setup
 setup_rois(session.roilist, twophoton_processed);
 %% 7.1 ROI Setup verification figures (Manual ROIs)
-setup_rois_makefig(session.roilist, twophoton_processed.ch1, twophoton_processed.ch2, session.directories.figures_roi);
+setup_rois_makefig(session.roilist, twophoton_processed.ch1, twophoton_processed.ch2, session.dir_struct.figures_roi);

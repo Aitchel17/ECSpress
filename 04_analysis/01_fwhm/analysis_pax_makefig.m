@@ -26,6 +26,8 @@ fig_bv.reset_axis();
 
 fig_bv.plot_kymograph(pax_fwhm.kymograph.kgph_lumen_processed, t_axis);
 
+%%
+
 % Plot boundaries - use new names 'upperBVboundary' / 'lowerBVboundary'
 % Also check for legacy names just in case
 if isfield(pax_fwhm.idx, 'clean_lowerBVboundary')
