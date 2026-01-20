@@ -22,14 +22,19 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_005';
+base_path = 'G:\tmp\00_igkl\hql072\250319_hql072_backup\HQL072_250319_002_PA05';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(base_path);
+%%
 session = session.load_primary_results();
-%
+session = session.loadstack('ch1');
+session = session.loadstack('ch2');
+%%
+
+
 % 2. Twophoton data FPS matching & preprocessing
 % Note: twophoton_preprocess expects a struct with stackch1/2 and img_param.
 % ECSSession object works here as it has these properties.

@@ -31,9 +31,6 @@ classdef ECSSession < mdfExtractLoader
             end
             obj@mdfExtractLoader(args{:});
 
-            % Initialize container structs
-
-
             % Setup Directories
             if nargin > 0
                 obj = obj.setup_directories(extract_dir);
@@ -41,12 +38,6 @@ classdef ECSSession < mdfExtractLoader
 
             % Calculate Imaging Parameters
             obj = obj.calculate_img_params();
-
-            % Load Stacks
-            if nargin > 0
-                obj.stackch1 = obj.loadstack('ch1');
-                obj.stackch2 = obj.loadstack('ch2');
-            end
         end
 
         function obj = calculate_img_params(obj)
@@ -59,23 +50,38 @@ classdef ECSSession < mdfExtractLoader
             obj.img_param.imgendframe = str2double(obj.info.loadend);
             obj.img_param.imgendtime = obj.img_param.imgendframe / obj.img_param.record_fps;
             obj.img_param.pixel2um = str2double(obj.info.objpix);
-            if isnan(obj.img_param.pixel2um)
-                obj.img_param.pixel2um = str2double(obj.info.objpix(1:end-2));
-            end
+            
+            % Get group projection and duration
+            groupz = str2double(obj.info.groupz);
+            fduration_ms = str2double(obj.info.fduration); % Usually in ms
 
-            % Note: taxis requires stack size. We can infer it from info or load it.
-            % load_mdfextract loaded the stack to get size(stackch1,3).
-            % To avoid loading stacks eagerly just for taxis, we can use info.loadend - info.loadstart?
-            % Or just calculate it when stacks are actually loaded.
-            % For now, let's keep it consistent: We might need to load stack info without full data.
-            % But mdfExtractLoader doesn't expose frame count easily without loading.
-            % Let's use the frame range from info for now.
-            num_frames = obj.img_param.imgendframe - obj.img_param.imgstartframe + 1; % Approximation
+            % Frames
+            start_frame_idx = str2double(obj.info.loadstart);
+            end_frame_idx = str2double(obj.info.loadend);
+            total_raw_frames = end_frame_idx - start_frame_idx + 1;
 
-            % However, load_mdfextract did: linspace(start, end, size(stack,3))
-            % Let's rely on info for T-axis generation to be lazy (efficient).
-            obj.img_param.taxis = linspace(obj.img_param.imgstarttime, obj.img_param.imgendtime, num_frames);
+            % Deprecated frames at the end
+            deprecated_frames = mod(total_raw_frames, groupz);
+            valid_raw_frames = total_raw_frames - deprecated_frames;
+
+            % Resulting frames in stack (after grouping)
+            num_stack_frames = valid_raw_frames / groupz;
+
+            % Time calculation (fduration is usually ms per frame)
+            % Start time (seconds)
+            obj.img_param.imgstarttime = (start_frame_idx * fduration_ms) / 1000;
+
+            % End time (seconds)
+            % Use valid_raw_frames to exclude deprecated ones
+            duration_sec = (valid_raw_frames * fduration_ms) / 1000;
+            obj.img_param.imgendtime = obj.img_param.imgstarttime + duration_sec;
+
+            % T-axis
+            % Time points corresponding to the CENTER of each group? Or Start?
+            % Usually linspace from start to end.
+            obj.img_param.taxis = linspace(obj.img_param.imgstarttime, obj.img_param.imgendtime, num_stack_frames);
         end
+
 
         function obj = load_primary_results(obj, extractfolder_path)
             % Logic ported from load_primaryresult.m
@@ -117,8 +123,6 @@ classdef ECSSession < mdfExtractLoader
                     end
                 end
             end
-
-
 
             % Ensure roilist is initialized so downstream code (addormodifyroi) doesn't crash
             if isempty(obj.roilist)
