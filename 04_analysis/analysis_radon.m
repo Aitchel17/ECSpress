@@ -57,7 +57,9 @@ classdef analysis_radon < handle
             % 1. Identify Highest Varying Angle & Smooth Trace
             [~, max_var_idx] = max(radon_result.var_diameter);
             raw_trace = radon_result.diameter(max_var_idx, :);
-            if isa(raw_trace, 'gpuArray'), raw_trace = gather(raw_trace); end
+            if isa(raw_trace, 'gpuArray')
+                raw_trace = gather(raw_trace); 
+            end
             smooth_trace = movmedian(raw_trace, 5); % Smoothing
             med_val = median(smooth_trace);
 
