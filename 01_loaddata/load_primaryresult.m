@@ -28,7 +28,16 @@ if isfile(fullfile(extractfolder_path,'primary_analysis/polarcluster.mat'))
 end
 
 
-if isfile(fullfile(extractfolder_path,'primary_analysis/radon_result.mat'))
+if isfile(fullfile(extractfolder_path,'primary_analysis/radon_analysis.mat'))
+    tmp.load = load(fullfile(extractfolder_path,'primary_analysis/radon_analysis.mat'));
+    if isfield(tmp.load, 'radon_analysis')
+        loadstruct.radon_analysis = tmp.load.radon_analysis;
+    else
+        % Fallback if variable name inside matches old convention or other
+        fields = fieldnames(tmp.load);
+        loadstruct.radon_analysis = tmp.load.(fields{1});
+    end
+elseif isfile(fullfile(extractfolder_path,'primary_analysis/radon_result.mat'))
     tmp.load = load(fullfile(extractfolder_path,'primary_analysis/radon_result.mat'));
     loadstruct.radon_result = tmp.load.radon_result;
 end

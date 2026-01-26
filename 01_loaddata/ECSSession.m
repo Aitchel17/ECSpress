@@ -50,7 +50,7 @@ classdef ECSSession < mdfExtractLoader
             obj.img_param.imgendframe = str2double(obj.info.loadend);
             obj.img_param.imgendtime = obj.img_param.imgendframe / obj.img_param.record_fps;
             obj.img_param.pixel2um = str2double(obj.info.objpix);
-            
+
             % Get group projection and duration
             groupz = str2double(obj.info.groupz);
             fduration_ms = str2double(obj.info.fduration); % Usually in ms
@@ -103,7 +103,8 @@ classdef ECSSession < mdfExtractLoader
                 'line_fwhm.mat', 'pax_fwhm'; % Map internal name to class property
                 'roilist.mat', 'roilist';
                 'polarcluster.mat', 'polarcluster';
-                'radon_result.mat', 'radon_analysis'; % Assuming filename
+                'radon_analysis.mat', 'radon_analysis'; % Use new file name
+                'radon_result.mat', 'radon_analysis'; % Fallback for legacy files
                 };
 
             for i = 1:size(files_to_load, 1)

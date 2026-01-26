@@ -58,7 +58,7 @@ classdef analysis_radon < handle
             [~, max_var_idx] = max(radon_result.var_diameter);
             raw_trace = radon_result.diameter(max_var_idx, :);
             if isa(raw_trace, 'gpuArray')
-                raw_trace = gather(raw_trace); 
+                raw_trace = gather(raw_trace);
             end
             smooth_trace = movmedian(raw_trace, 5); % Smoothing
             med_val = median(smooth_trace);
@@ -209,10 +209,10 @@ classdef analysis_radon < handle
                 mkdir(save_dir);
             end
 
-            radon_result = obj.radon_result; % Extract for saving variable name
-            save_path = fullfile(save_dir, 'radon_result.mat');
+            radon_analysis = obj; % Save the object itself
+            save_path = fullfile(save_dir, 'radon_analysis.mat');
             disp(['Saving Radon results to: ' save_path]);
-            save(save_path, 'radon_result', '-v7.3');
+            save(save_path, 'radon_analysis');
         end
     end
 end
