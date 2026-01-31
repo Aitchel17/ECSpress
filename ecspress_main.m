@@ -22,19 +22,15 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\00_igkl\hql072\250319_hql072_backup\HQL072_250319_002_PA05';
+base_path = 'G:\tmp\00_igkl\hql088\250927_hql088_sleep\HQL088_sleep250927_009';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(base_path);
-%%
 session = session.load_primary_results();
-session = session.loadstack('ch1');
-session = session.loadstack('ch2');
-%%
-
-
+session.stackch1 = session.loadstack('ch1');
+session.stackch2 = session.loadstack('ch2');
 % 2. Twophoton data FPS matching & preprocessing
 % Note: twophoton_preprocess expects a struct with stackch1/2 and img_param.
 % ECSSession object works here as it has these properties.
@@ -44,7 +40,7 @@ twophoton_processed = twophoton_preprocess(session);
 
 %% 4.1 FWHM Analysis
 % 4.1.1 FWHM analysis - ROI Setupw
-session.roilist.addormodifyroi(twophoton_processed.ch1,'pax','line');
+session.roilist.addormodifyroi(twophoton_processed.ch2,'pax','line');
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 % Lumen (vessel) processing
@@ -54,13 +50,13 @@ session.pax_fwhm.fwhm("lumen");
 %% 4.1.3 PVS Analysis
 % PVS processing (using channel 2)
 session.pax_fwhm.addkymograph("pvs", twophoton_processed.ch2,"median")
-session.pax_fwhm.kymograph_afterprocess('pvs',[3 5])
+session.pax_fwhm.kymograph_afterprocess('pvs',[1 3])
 session.pax_fwhm.pvsanalysis();
 %%
 session.pax_fwhm.clean_outlier(true)
 session.pax_fwhm.getdiameter;
 session.pax_fwhm.getdisplacement;
-session.pax_fwhm.save2disk(session.dir_struct.primary_analysis);
+session.pax_fwhm.save2disk('paxfwhm',session.dir_struct.primary_analysis);
 session.roilist.save2disk
 %% 4.1.4 FWHM analysis figure generation
 analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);

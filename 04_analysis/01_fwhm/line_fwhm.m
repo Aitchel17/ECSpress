@@ -60,10 +60,10 @@ classdef line_fwhm < handle
             name_kymograph = strcat("kgph_",stack_name);
             name_processed_kymograph = strcat(name_kymograph,'_processed');
             processed_kymograph = medfilt2(obj.kymograph.(name_kymograph),window_size);
-            prctile10 = prctile(processed_kymograph,10,1);
-            prctile90 = prctile(processed_kymograph,90,1);
-            processed_kymograph = min(processed_kymograph, prctile90);
-            processed_kymograph = max(processed_kymograph, prctile10);
+            prctile5 = prctile(processed_kymograph,5,1);
+            prctile95 = prctile(processed_kymograph,95,1);
+            processed_kymograph = min(processed_kymograph, prctile95);
+            processed_kymograph = max(processed_kymograph, prctile5);
             processed_kymograph = processed_kymograph - min(processed_kymograph,[],1);
             processed_kymograph = processed_kymograph./max(processed_kymograph,[],1);
             obj.kymograph.(name_processed_kymograph) = processed_kymograph;
@@ -169,9 +169,9 @@ classdef line_fwhm < handle
             maskstack = analyze_affine_reverse(tmp.v_thr,obj.param.input_size,obj.param.line_info(1:2,:));
         end
 
-        function save2disk(obj,savepath)
+        function save2disk(obj,name,savepath)
             line_fwhm = obj;
-            save(fullfile(savepath,'line_fwhm.mat'),'line_fwhm')
+            save(fullfile(savepath,[name,'.mat']),'line_fwhm')
         end
 
 

@@ -16,10 +16,10 @@ end
 
 disp('twophoton_preprocess ch2 downsample')
 [preprocessed_ch2, outfps_ch2] = ...
-    analyze_resample(session_instance.stackch2, session_instance.img_param.save_fps, downsampled_2p.targetfrequency);
+analyze_resample(session_instance.stackch2, session_instance.img_param.save_fps, downsampled_2p.targetfrequency);
 disp('twophoton_preprocess ch1 downsample')
 [preprocessed_ch1, ~] = ...
-    analyze_resample(session_instance.stackch1, session_instance.img_param.save_fps, downsampled_2p.targetfrequency);
+analyze_resample(session_instance.stackch1, session_instance.img_param.save_fps, downsampled_2p.targetfrequency);
 downsampled_2p.outfps = outfps_ch2;
 
 disp('twophoton_preprocess ch1 medfilt')

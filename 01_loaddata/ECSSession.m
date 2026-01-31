@@ -46,14 +46,14 @@ classdef ECSSession < mdfExtractLoader
             obj.img_param.save_fps = str2double(obj.info.savefps);
             obj.img_param.record_fps = str2double(obj.info.fps);
             obj.img_param.imgstartframe = str2double(obj.info.loadstart);
-            obj.img_param.imgstarttime = obj.img_param.imgstartframe / obj.img_param.record_fps;
             obj.img_param.imgendframe = str2double(obj.info.loadend);
-            obj.img_param.imgendtime = obj.img_param.imgendframe / obj.img_param.record_fps;
-            obj.img_param.pixel2um = str2double(obj.info.objpix);
+            objpix = strsplit(obj.info.objpix);
+            obj.img_param.pixel2um = str2double(objpix{1});
+            
 
             % Get group projection and duration
             groupz = str2double(obj.info.groupz);
-            fduration_ms = str2double(obj.info.fduration); % Usually in ms
+            fduration_sec = str2double(obj.info.fduration(1:end-1)); % Usually in ms
 
             % Frames
             start_frame_idx = str2double(obj.info.loadstart);
@@ -69,11 +69,11 @@ classdef ECSSession < mdfExtractLoader
 
             % Time calculation (fduration is usually ms per frame)
             % Start time (seconds)
-            obj.img_param.imgstarttime = (start_frame_idx * fduration_ms) / 1000;
+            obj.img_param.imgstarttime = (start_frame_idx * fduration_sec);
 
             % End time (seconds)
             % Use valid_raw_frames to exclude deprecated ones
-            duration_sec = (valid_raw_frames * fduration_ms) / 1000;
+            duration_sec = (valid_raw_frames * fduration_sec);
             obj.img_param.imgendtime = obj.img_param.imgstarttime + duration_sec;
 
             % T-axis
@@ -100,11 +100,9 @@ classdef ECSSession < mdfExtractLoader
 
             % --- Load Other Results ---
             files_to_load = {
-                'line_fwhm.mat', 'pax_fwhm'; % Map internal name to class property
+                'paxfwhm.mat', 'line_fwhm'; % Map internal name to class property
                 'roilist.mat', 'roilist';
                 'polarcluster.mat', 'polarcluster';
-                'radon_analysis.mat', 'radon_analysis'; % Use new file name
-                'radon_result.mat', 'radon_analysis'; % Fallback for legacy files
                 };
 
             for i = 1:size(files_to_load, 1)
@@ -116,13 +114,29 @@ classdef ECSSession < mdfExtractLoader
                     tmp = load(fpath);
                     % Try to match property name first
                     if isfield(tmp, prop_name)
-                        obj.(prop_name) = tmp.(prop_name);
+                        if strcmp(fname, 'paxfwhm.mat')
+                            obj.pax_fwhm = tmp.(prop_name);
+                        else
+                            obj.(prop_name) = tmp.(prop_name);
+                        end
+
                     else
                         % Fallback: take the first field
                         fields = fieldnames(tmp);
                         obj.(prop_name) = tmp.(fields{1});
                     end
                 end
+            end
+
+            % Radon
+            % Try loading the new object-based file first
+            if isfile(fullfile(savepath, 'radon_analysis.mat'))
+                tmp = load(fullfile(savepath, 'radon_analysis.mat'));
+                obj.radon_analysis = tmp.radon_analysis;
+                % Fallback to the old struct-based file
+            elseif isfile(fullfile(savepath, 'radon_result.mat'))
+                tmp = load(fullfile(savepath, 'radon_result.mat'));
+                obj.radon_analysis = tmp.radon_result;
             end
 
             % Ensure roilist is initialized so downstream code (addormodifyroi) doesn't crash
@@ -139,10 +153,6 @@ classdef ECSSession < mdfExtractLoader
 
     methods (Access = private)
         function obj = setup_directories(obj, base_path)
-            % Integated from manage_directories.m
-            % Now merges into dir_struct (inherited from mdfExtractLoader)
-
-            % obj.dir_struct is already initialized by superclass constructor
             obj.dir_struct.load_dir = base_path;
             obj.dir_struct.primary_analysis = fullfile(base_path, 'primary_analysis');
 

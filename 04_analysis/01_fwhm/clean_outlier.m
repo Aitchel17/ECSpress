@@ -34,9 +34,9 @@ for idx_name = unprocessed_names
         idx_data = idx_dataset.(idx_name{:});
 
         % Median filtering for reference
-        ref_median = medfilt1(idx_data,31);
+        ref_median = medfilt1(idx_data,9);
         diff_data = abs(idx_data - ref_median);
-        above_noise = diff_data > 4;
+        above_noise = diff_data > 8;
 
         % Edge case handling
         edge_thresholded = above_noise;
