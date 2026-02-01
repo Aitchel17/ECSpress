@@ -1,36 +1,152 @@
 sessiondir = 'G:\tmp\00_igkl\hql088\250927_hql088_sleep\HQL088_sleep250927_010';
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
-%
+%%
 session.stackch1 = session.loadstack('ch1');
 session.stackch2 = session.loadstack('ch2');
-% Two photon analysis time axis calculation
+%% Two photon analysis time axis calculation
 session.pax_fwhm.t_axis = linspace(session.img_param.imgstarttime,session.img_param.imgendtime,numel(session.pax_fwhm.idx.upperBVboundary));
 sleep_score = load(fullfile(sessiondir,"peripheral","sleep_score.mat"));
 t_axis = linspace(session.img_param.imgstarttime,session.img_param.imgendtime,numel(session.pax_fwhm.idx.upperBVboundary));
 % Calculate
 % Find indices for all REM epochs
-fwhmloc.rem = statebin2frame(sleep_score.REMTimes,t_axis);
-fwhmloc.nrem = statebin2frame(sleep_score.NREMTimes,t_axis);
-fwhmloc.awake = statebin2frame(sleep_score.NREMTimes,t_axis);
-fwhmloc.drowsy = statebin2frame(sleep_score.DrowsyTimes,t_axis);
+rem.fwhmloc = statebin2frame(sleep_score.REMTimes,t_axis);
+nrem.fwhmloc = statebin2frame(sleep_score.NREMTimes,sleep_score.uArousalTimes,t_axis);
+awake.fwhmloc = statebin2frame(sleep_score.AwakeTimes,t_axis);
+drowsy.fwhmloc = statebin2frame(sleep_score.DrowsyTimes,t_axis);
 sleep_score.behavState
 % Image frame location
-imgloc.rem = statebin2frame(sleep_score.REMTimes,session.img_param.taxis);
-imgloc.nrem = statebin2frame(sleep_score.NREMTimes,session.img_param.taxis);
-imgloc.awake = statebin2frame(sleep_score.NREMTimes,session.img_param.taxis);
-imgloc.drowsy = statebin2frame(sleep_score.DrowsyTimes,session.img_param.taxis);
+rem.imgloc = statebin2frame(sleep_score.REMTimes,session.img_param.taxis);
+nrem.imgloc = statebin2frame(sleep_score.NREMTimes,sleep_score.uArousalTimes,session.img_param.taxis);
+awake.imgloc = statebin2frame(sleep_score.AwakeTimes,session.img_param.taxis);
+drowsy.imgloc = statebin2frame(sleep_score.DrowsyTimes,session.img_param.taxis);
+% bouts loc of fwhm thickness
+nrem.fwhmloc_bouts = stateidx2bouts(nrem.fwhmloc);
+awake.fwhmloc_bouts = stateidx2bouts(awake.fwhmloc);
+rem.fwhmloc_bouts = stateidx2bouts(rem.fwhmloc);
+drowsy.fwhmloc_bouts = stateidx2bouts(drowsy.fwhmloc);
+% bouts loc of image
+nrem.imgloc_bouts = stateidx2bouts(nrem.imgloc);
+awake.imgloc_bouts = stateidx2bouts(awake.imgloc);
+rem.imgloc_bouts = stateidx2bouts(rem.imgloc);
+drowsy.imgloc_bouts = stateidx2bouts(drowsy.imgloc);
+%%
+rem.thickness.bv_spectrogramlist = get_spectboutarray(rem.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
+awake.thickness.bv_spectrogramlist = get_spectboutarray(awake.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
+nrem.thickness.bv_spectrogramlist = get_spectboutarray(nrem.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
+drowsy.thickness.bv_spectrogramlist = get_spectboutarray(drowsy.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
+%%
+% Average Spectrograms (handle varying frequency axes)
+
+
+%%
+figure()
+hold on
+% Plot individual (log-log)
+target = rem.thickness;
+for i = 1:numel(target.bv_spectrogramlist)
+    loglog(target.bv_spectrogramlist(i).F,target.bv_spectrogramlist(i).S, 'Color', [0.8 0.8 0.8]) % light grey
+end
+% Plot average
+loglog(target.bv_spectrogram.F, target.bv_spectrogram.S, 'r', 'LineWidth', 2)
+set(gca, 'XScale', 'log', 'YScale', 'log')
+xlabel('Frequency (Hz)'); ylabel('Power');
+title('Average Spectrogram');
+%%
+
+%%
+
+%% mtspectrum based analysis of fwhm thickness
+
+%% spectral analysis
+focus = awake.fwhmloc_bouts;
+cnt = 1;
+for i = 1:numel(focus)
+    loc = focus{i};
+    if numel(loc)>eventlen_thr
+        disp(i)
+        % Preprocessing: Sgolay filter + Detrend
+        bv_signal = session.pax_fwhm.thickness.bvchanges(loc);
+        % bv_signal = detrend(sgolayfilt(bv_signal, 3, 5));
+        bv_spectrogram = get_spectrogram(session.pax_fwhm.param.fs,bv_signal);
+        bv_spectrogram.boutidx = i;
+        bv_spectrogramlist(cnt) = bv_spectrogram;
+        cnt = cnt + 1;
+    end
+end
+
+
+%%
+figure(name='nrem_pvs')
+hold on
+clc
+for i = 1:numel(focus)
+    loc = focus{i};
+    if numel(loc)>eventlen_thr
+        disp(i)
+        % Preprocessing: Sgolay filter + Detrend
+        pvs_signal = session.pax_fwhm.thickness.pvschanges_total(loc);
+        % bv_signal = detrend(sgolayfilt(bv_signal, 3, 5));
+        bv_spectrogram = get_spectrogram(session.pax_fwhm.param.fs,pvs_signal);
+        loglog(bv_spectrogram.F,bv_spectrogram.S)
+    end
+end
+
+%%
+
+% Calculate PSD for each NREM bout
+nrem_psd = struct('bv', {}, 'pvs', {});
+fs = session.pax_fwhm.param.fs; % Calculate fs from actual time axis
+
+for i = 1:numel(fwhmloc.nrem_bouts)
+    loc = fwhmloc.nrem_bouts{i};
+
+    % Preprocessing: Sgolay filter + Detrend
+    bv_signal = session.pax_fwhm.thickness.bvchanges(loc);
+    bv_signal = detrend(sgolayfilt(bv_signal, 3, 11));
+
+    pvs_signal = session.pax_fwhm.thickness.pvschanges_dynamic(loc);
+    pvs_signal = detrend(sgolayfilt(pvs_signal, 3, 11));
+
+    % BV power spectrum
+    [pxx_bv, f] = pwelch(bv_signal-mean(bv_signal), [], [], [], fs);
+    nrem_psd(i).bv.Pxx = pxx_bv;
+    nrem_psd(i).bv.F = f;
+
+    % PVS power spectrum
+    [pxx_pvs, f] = pwelch(pvs_signal-mean(pvs_signal), [], [], [], fs);
+    nrem_psd(i).pvs.Pxx = pxx_pvs;
+    nrem_psd(i).pvs.F = f;
+end
+
+
 %%
 
 fig = figure('Name','Thickness plot');
-t = tiledlayout(1,1);
-%%
-ax.bvthickness = axes(t);
-%%
-plot(ax.bvthickness,t_axis(fwhmloc.nrem),session.pax_fwhm.thickness.pvschanges_dynamic(fwhmloc.nrem))
+t = tiledlayout(fig,3,1);
+loc = fwhmloc.nrem;
+ax.idx = nexttile(t, 1);
+hold on
+imagesc(ax.idx, t_axis, 1:size(session.pax_fwhm.kymograph.kgph_pvs_processed,1), session.pax_fwhm.kymograph.kgph_pvs_processed)
+plot(ax.idx,t_axis,session.pax_fwhm.idx.clean_lowerBVboundary,'r')
+plot(ax.idx,t_axis,session.pax_fwhm.idx.clean_pvsdownedge_idx,'b')
+plot(ax.idx,t_axis,session.pax_fwhm.idx.clean_upperBVboundary,'r')
+plot(ax.idx,t_axis,session.pax_fwhm.idx.clean_pvsupedge_idx,'b')
 
 
+ax.upidx = nexttile(t, 3);
+plot(ax.upidx,t_axis(loc),session.pax_fwhm.idx.clean_upperBVboundary(loc),'r')
+hold on
+plot(ax.upidx,t_axis(loc),session.pax_fwhm.idx.clean_pvsdownedge_idx(loc),'b')
 
+ax.thickness = nexttile(t, 2);
+plot(ax.thickness,t_axis(loc),session.pax_fwhm.thickness.bvchanges(loc),'r')
+hold on
+plot(ax.thickness,t_axis(loc),session.pax_fwhm.thickness.pvschanges_dynamic(loc),'b')
+
+all_axes = struct2cell(ax);
+all_axes = [all_axes{:}]; % Convert cell array to object array
+linkaxes(all_axes, 'x');
 
 
 

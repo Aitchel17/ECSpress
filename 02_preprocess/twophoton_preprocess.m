@@ -5,8 +5,8 @@ function downsampled_2p = twophoton_preprocess(session_instance)
 
 %   Detailed explanation goes here
 disp('twophoton_preprocess running')
-downsampled_2p.targetfrequency = 5;
-downsampled_2p.medianframes = 5;
+downsampled_2p.targetfrequency = 3;
+downsampled_2p.medianframes = 11;
 
 % Transfer metadata
 if isfield(session_instance, 'img_param')
