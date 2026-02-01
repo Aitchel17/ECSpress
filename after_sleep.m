@@ -37,13 +37,13 @@ nrem.thickness.bv_spectrogramlist = get_spectboutarray(nrem.fwhmloc_bouts,sessio
 drowsy.thickness.bv_spectrogramlist = get_spectboutarray(drowsy.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
 %%
 % Average Spectrograms (handle varying frequency axes)
-
+get_summaryspectrogram(rem.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs)
 
 %%
 figure()
 hold on
 % Plot individual (log-log)
-target = rem.thickness;
+target = nrem.thickness;
 for i = 1:numel(target.bv_spectrogramlist)
     loglog(target.bv_spectrogramlist(i).F,target.bv_spectrogramlist(i).S, 'Color', [0.8 0.8 0.8]) % light grey
 end
