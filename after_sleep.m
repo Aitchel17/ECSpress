@@ -1,4 +1,4 @@
-sessiondir = 'G:\tmp\00_igkl\hql088\250927_hql088_sleep\HQL088_sleep250927_010';
+sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_006';
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
 %%
@@ -7,59 +7,72 @@ session.stackch2 = session.loadstack('ch2');
 %% Two photon analysis time axis calculation
 session.pax_fwhm.t_axis = linspace(session.img_param.imgstarttime,session.img_param.imgendtime,numel(session.pax_fwhm.idx.upperBVboundary));
 sleep_score = load(fullfile(sessiondir,"peripheral","sleep_score.mat"));
-t_axis = linspace(session.img_param.imgstarttime,session.img_param.imgendtime,numel(session.pax_fwhm.idx.upperBVboundary));
 % Calculate
 % Find indices for all REM epochs
-rem.fwhmloc = statebin2frame(sleep_score.REMTimes,t_axis);
-nrem.fwhmloc = statebin2frame(sleep_score.NREMTimes,sleep_score.uArousalTimes,t_axis);
-awake.fwhmloc = statebin2frame(sleep_score.AwakeTimes,t_axis);
-drowsy.fwhmloc = statebin2frame(sleep_score.DrowsyTimes,t_axis);
-sleep_score.behavState
-% Image frame location
-rem.imgloc = statebin2frame(sleep_score.REMTimes,session.img_param.taxis);
-nrem.imgloc = statebin2frame(sleep_score.NREMTimes,sleep_score.uArousalTimes,session.img_param.taxis);
-awake.imgloc = statebin2frame(sleep_score.AwakeTimes,session.img_param.taxis);
-drowsy.imgloc = statebin2frame(sleep_score.DrowsyTimes,session.img_param.taxis);
-% bouts loc of fwhm thickness
-nrem.fwhmloc_bouts = stateidx2bouts(nrem.fwhmloc);
-awake.fwhmloc_bouts = stateidx2bouts(awake.fwhmloc);
-rem.fwhmloc_bouts = stateidx2bouts(rem.fwhmloc);
-drowsy.fwhmloc_bouts = stateidx2bouts(drowsy.fwhmloc);
-% bouts loc of image
-nrem.imgloc_bouts = stateidx2bouts(nrem.imgloc);
-awake.imgloc_bouts = stateidx2bouts(awake.imgloc);
-rem.imgloc_bouts = stateidx2bouts(rem.imgloc);
-drowsy.imgloc_bouts = stateidx2bouts(drowsy.imgloc);
+% Calculate State Analysis (Indices, Bouts, Sliced Data)
+rem.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.REMTimes);
 %%
-rem.thickness.bv_spectrogramlist = get_spectboutarray(rem.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
-awake.thickness.bv_spectrogramlist = get_spectboutarray(awake.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
-nrem.thickness.bv_spectrogramlist = get_spectboutarray(nrem.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
-drowsy.thickness.bv_spectrogramlist = get_spectboutarray(drowsy.fwhmloc_bouts,session.pax_fwhm.thickness.bvchanges,session.pax_fwhm.param.fs, 0.1);
+nrem.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.NREMTimes, sleep_score.uArousalTimes);
+
+%%
+awake.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.AwakeTimes);
+drowsy.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.DrowsyTimes);
+
+% Image frame location (kept separate for now as it uses img_param.taxis)
+rem.img.stateidx = statebin2frame(sleep_score.REMTimes, session.img_param.taxis);
+nrem.img.stateidx = statebin2frame(sleep_score.NREMTimes, sleep_score.uArousalTimes, session.img_param.taxis);
+awake.img.stateidx = statebin2frame(sleep_score.AwakeTimes, session.img_param.taxis);
+drowsy.img.stateidx = statebin2frame(sleep_score.DrowsyTimes, session.img_param.taxis);
+
+% bouts loc of image
+nrem.img.bouts = stateidx2bouts(nrem.img.stateidx);
+awake.img.bouts = stateidx2bouts(awake.img.stateidx);
+rem.img.bouts = stateidx2bouts(rem.img.stateidx);
+drowsy.img.bouts = stateidx2bouts(drowsy.img.stateidx);
+
+%% Spectrogram Calculation
+% Using the bouts from the structured analysis
+rem.thickness.bv_spectrogramlist = get_spectboutarray(rem.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
+awake.thickness.bv_spectrogramlist = get_spectboutarray(awake.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
+nrem.thickness.bv_spectrogramlist = get_spectboutarray(nrem.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
+drowsy.thickness.bv_spectrogramlist = get_spectboutarray(drowsy.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
 %%
 % Average Spectrograms (handle varying frequency axes)
-get_summaryspectrogram(rem.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs)
+nrem.thickness.bv_spectral_summary = get_summaryspectrogram(nrem.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
+rem.thickness.bv_spectral_summary = get_summaryspectrogram(rem.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
+awake.thickness.bv_spectral_summary = get_summaryspectrogram(awake.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
+drowsy.thickness.bv_spectral_summary = get_summaryspectrogram(drowsy.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
 
 %%
 figure()
 hold on
 % Plot individual (log-log)
-target = nrem.thickness;
+target = awake.thickness;
 for i = 1:numel(target.bv_spectrogramlist)
-    loglog(target.bv_spectrogramlist(i).F,target.bv_spectrogramlist(i).S, 'Color', [0.8 0.8 0.8]) % light grey
+    loglog(target.bv_spectrogramlist(i).F,target.bv_spectrogramlist(i).S, 'Color', [0.8 0.6 0.6]) % light grey
 end
 % Plot average
-loglog(target.bv_spectrogram.F, target.bv_spectrogram.S, 'r', 'LineWidth', 2)
-set(gca, 'XScale', 'log', 'YScale', 'log')
+loglog(target.bv_spectral_summary.F, target.bv_spectral_summary.S, 'r', 'LineWidth', 2)
 xlabel('Frequency (Hz)'); ylabel('Power');
-title('Average Spectrogram');
-%%
+title('Average spectral density');
 
-%%
+% Plot individual (log-log)
+
+target = nrem.thickness;
+for i = 1:numel(target.bv_spectrogramlist)
+    loglog(target.bv_spectrogramlist(i).F,target.bv_spectrogramlist(i).S, 'Color', [0.6 0.8 0.6]) % light grey
+end
+% Plot average
+loglog(target.bv_spectral_summary.F, target.bv_spectral_summary.S, 'g', 'LineWidth', 2)
+set(gca, 'XScale', 'linear', 'YScale', 'linear')
+xlabel('Frequency (Hz)'); ylabel('Power');
+title('Average spectral density');
 
 %% mtspectrum based analysis of fwhm thickness
 
 %% spectral analysis
-focus = awake.fwhmloc_bouts;
+
+focus = drowsy.fwhmloc_bouts;
 cnt = 1;
 for i = 1:numel(focus)
     loc = focus{i};

@@ -29,6 +29,7 @@ base_path = 'G:\tmp\01_igkltdt\hql086\250912_hql086_sleep\HQL086_sleep250912_009
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(base_path);
 session = session.load_primary_results();
+%%
 session.stackch1 = session.loadstack('ch1');
 session.stackch2 = session.loadstack('ch2');
 % 2. Twophoton data FPS matching & preprocessing
