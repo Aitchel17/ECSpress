@@ -11,62 +11,113 @@ sleep_score = load(fullfile(sessiondir,"peripheral","sleep_score.mat"));
 % Find indices for all REM epochs
 % Calculate State Analysis (Indices, Bouts, Sliced Data)
 rem.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.REMTimes);
-%%
 nrem.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.NREMTimes, sleep_score.uArousalTimes);
-
-%%
 awake.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.AwakeTimes);
 drowsy.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.DrowsyTimes);
 
-% Image frame location (kept separate for now as it uses img_param.taxis)
+%% Image frame location (kept separate for now as it uses img_param.taxis)
+rem.img.param = session.img_param;
 rem.img.stateidx = statebin2frame(sleep_score.REMTimes, session.img_param.taxis);
+nrem.img.param = session.img_param;
 nrem.img.stateidx = statebin2frame(sleep_score.NREMTimes, sleep_score.uArousalTimes, session.img_param.taxis);
+awake.img.param = session.img_param;
 awake.img.stateidx = statebin2frame(sleep_score.AwakeTimes, session.img_param.taxis);
+drowsy.img.param = session.img_param;
 drowsy.img.stateidx = statebin2frame(sleep_score.DrowsyTimes, session.img_param.taxis);
-
 % bouts loc of image
 nrem.img.bouts = stateidx2bouts(nrem.img.stateidx);
 awake.img.bouts = stateidx2bouts(awake.img.stateidx);
 rem.img.bouts = stateidx2bouts(rem.img.stateidx);
 drowsy.img.bouts = stateidx2bouts(drowsy.img.stateidx);
 
-%% Spectrogram Calculation
-% Using the bouts from the structured analysis
-rem.thickness.bv_spectrogramlist = get_spectboutarray(rem.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
-awake.thickness.bv_spectrogramlist = get_spectboutarray(awake.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
-nrem.thickness.bv_spectrogramlist = get_spectboutarray(nrem.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
-drowsy.thickness.bv_spectrogramlist = get_spectboutarray(drowsy.pax_fwhm.bouts, session.pax_fwhm.thickness.bvchanges, session.pax_fwhm.param.fs, 0.1);
+%% Spectrogram Calculation (Batch Process All 1D Data)
+param_fs = session.pax_fwhm.param.fs;
+
+rem.spectral_analysis = get_all_spectra(rem.pax_fwhm.bouts, session.pax_fwhm, param_fs);
+nrem.spectral_analysis = get_all_spectra(nrem.pax_fwhm.bouts, session.pax_fwhm, param_fs);
+awake.spectral_analysis = get_all_spectra(awake.pax_fwhm.bouts, session.pax_fwhm, param_fs);
+drowsy.spectral_analysis = get_all_spectra(drowsy.pax_fwhm.bouts, session.pax_fwhm, param_fs);
 %%
-% Average Spectrograms (handle varying frequency axes)
-nrem.thickness.bv_spectral_summary = get_summaryspectrogram(nrem.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
-rem.thickness.bv_spectral_summary = get_summaryspectrogram(rem.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
-awake.thickness.bv_spectral_summary = get_summaryspectrogram(awake.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
-drowsy.thickness.bv_spectral_summary = get_summaryspectrogram(drowsy.thickness.bv_spectrogramlist,session.pax_fwhm.param.fs);
+focus = awake;
+figure()
+plot(focus.pax_fwhm.thickness(1).bvchanges,'color',[0.5 0.5 0.5])
+hold on
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.continuous{1},'k')
+
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.vlf{1},'r')
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.lf{1},'g')
+xlim([0 150])
+ylim([-5 5])
 
 %%
 figure()
+plot(focus.pax_fwhm.thickness(1).pvschanges_total,'color',[0.5 0.5 0.5])
 hold on
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.continuous{1},'k')
+
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.vlf{1},'r')
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.lf{1},'g')
+xlim([0 150])
+ylim([-5 5])
+
+%%
+
+figure()
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.vlf{1})
+
+hold on
+
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.vlf{1})
+ylim([-4 4])
+xlim([0 150])
+
+%%
+focus = awake;
+
+[c, lags] = xcorr(focus.spectral_analysis.thickness.bvchanges.decomposed.vlf{1}, focus.spectral_analysis.thickness.pvschanges_total.decomposed.vlf{1});
+%%
+figure()
+%%
+plot(lags, c)
+
+
+
+%%
+%% Plotting Summary
+figure()
+hold on
+
+% Define target for plotting (Example: Awake BV Changes)
+% Access path: state.spectral_analysis.structName.fieldName.summary
+target_summary = awake.spectral_analysis.thickness.bvchanges.summary;
+target_list = awake.spectral_analysis.thickness.bvchanges.list;
+
 % Plot individual (log-log)
-target = awake.thickness;
-for i = 1:numel(target.bv_spectrogramlist)
-    loglog(target.bv_spectrogramlist(i).F,target.bv_spectrogramlist(i).S, 'Color', [0.8 0.6 0.6]) % light grey
+for i = 1:numel(target_list)
+    loglog(target_list(i).F, target_list(i).S, 'Color', [0.8 0.6 0.6]) % light red
 end
 % Plot average
-loglog(target.bv_spectral_summary.F, target.bv_spectral_summary.S, 'r', 'LineWidth', 2)
+loglog(target_summary.F, target_summary.S, 'r', 'LineWidth', 2)
+
 xlabel('Frequency (Hz)'); ylabel('Power');
-title('Average spectral density');
+title('Average spectral density (Awake - BV)');
 
-% Plot individual (log-log)
 
-target = nrem.thickness;
-for i = 1:numel(target.bv_spectrogramlist)
-    loglog(target.bv_spectrogramlist(i).F,target.bv_spectrogramlist(i).S, 'Color', [0.6 0.8 0.6]) % light grey
+% Plot individual (log-log) - NREM
+target_summary_nrem = nrem.spectral_analysis.thickness.bvchanges.summary;
+target_list_nrem = nrem.spectral_analysis.thickness.bvchanges.list;
+
+for i = 1:numel(target_list_nrem)
+    loglog(target_list_nrem(i).F, target_list_nrem(i).S, 'Color', [0.6 0.8 0.6]) % light green
 end
 % Plot average
-loglog(target.bv_spectral_summary.F, target.bv_spectral_summary.S, 'g', 'LineWidth', 2)
+loglog(target_summary_nrem.F, target_summary_nrem.S, 'g', 'LineWidth', 2)
 set(gca, 'XScale', 'linear', 'YScale', 'linear')
+% Note: user previously requested linear scale here, but loglog implies log.
+% Resetting to log since mostly spectral plots are log-log.
+set(gca, 'XScale', 'log', 'YScale', 'log')
 xlabel('Frequency (Hz)'); ylabel('Power');
-title('Average spectral density');
+title('Average spectral density (Awake vs NREM BV)');
 
 %% mtspectrum based analysis of fwhm thickness
 
