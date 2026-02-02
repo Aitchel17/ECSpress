@@ -33,12 +33,20 @@ if strcmp(class(analysis), 'line_fwhm')
                     contents_names = fieldnames(target_property);
                     for idx = 1:numel(contents_names)
                         data = analysis.(property_fieldnames{property_idx}).(contents_names{idx});
-                        target_len = length(data);
-                        if target_len == data_len
-                            entry.(contents_names{idx}) = data(bouts{cnt});
+
+                        if isnumeric(data) || islogical(data)
+                            sz = size(data);
+                            t_dim = find(sz == data_len, 1, 'last'); % Assume time is last matching dim if ambiguous
+
+                            if ~isempty(t_dim)
+                                % Prepare dynamic slicing indices
+                                idx_subs = repmat({':'}, 1, ndims(data));
+                                idx_subs{t_dim} = bouts{cnt};
+                                entry.(contents_names{idx}) = data(idx_subs{:});
+                            end
                         end
                     end
-                    if ~strcmp(property_fieldnames{property_idx},'param')
+                    if ~strcmp(property_fieldnames{property_idx},'param') && (numel(fieldnames(entry)) > 1)
                         bout_struct.(property_fieldnames{property_idx})(cnt) = entry;
                     end
                 end
