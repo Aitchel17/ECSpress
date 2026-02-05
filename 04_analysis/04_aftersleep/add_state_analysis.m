@@ -28,27 +28,27 @@ if strcmp(class(analysis), 'line_fwhm')
 
                 target_property = analysis.(property_fieldnames{property_idx});
                 if isstruct(target_property)
-                    entry = struct();
-                    entry.bout_idx = cnt;
-                    contents_names = fieldnames(target_property);
-                    for idx = 1:numel(contents_names)
-                        data = analysis.(property_fieldnames{property_idx}).(contents_names{idx});
+                entry = struct();
+                entry.bout_idx = cnt;
+                contents_names = fieldnames(target_property);
+                for idx = 1:numel(contents_names)
+                    data = analysis.(property_fieldnames{property_idx}).(contents_names{idx});
 
-                        if isnumeric(data) || islogical(data)
-                            sz = size(data);
-                            t_dim = find(sz == data_len, 1, 'last'); % Assume time is last matching dim if ambiguous
+                if isnumeric(data) || islogical(data)
+                    sz = size(data);
+                    t_dim = find(sz == data_len, 1, 'last'); % Assume time is last matching dim if ambiguous
 
-                            if ~isempty(t_dim)
-                                % Prepare dynamic slicing indices
-                                idx_subs = repmat({':'}, 1, ndims(data));
-                                idx_subs{t_dim} = bouts{cnt};
-                                entry.(contents_names{idx}) = data(idx_subs{:});
-                            end
-                        end
+                    if ~isempty(t_dim)
+                        % Prepare dynamic slicing indices
+                        idx_subs = repmat({':'}, 1, ndims(data));
+                        idx_subs{t_dim} = bouts{cnt};
+                        entry.(contents_names{idx}) = data(idx_subs{:});
                     end
-                    if ~strcmp(property_fieldnames{property_idx},'param') && (numel(fieldnames(entry)) > 1)
-                        bout_struct.(property_fieldnames{property_idx})(cnt) = entry;
-                    end
+                end
+                end
+                if ~strcmp(property_fieldnames{property_idx},'param') && (numel(fieldnames(entry)) > 1)
+                bout_struct.(property_fieldnames{property_idx})(cnt) = entry;
+                end
                 end
             end
         end

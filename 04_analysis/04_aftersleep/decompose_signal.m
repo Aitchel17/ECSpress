@@ -18,13 +18,17 @@ fn = fs / 2;
 % Order
 n = 3;
 
-%% 1. Continuous (0 - 0.1 Hz) -> Lowpass
-f_cutoff = 0.1;
+%% 0. Continuous (0 - 0.01 Hz) -> Lowpass
+f_cutoff = 0.01;
 Wn = f_cutoff / fn;
 [b, a] = butter(n, Wn, 'low');
 decomposed.continuous = filtfilt(b, a, signal);
-
-%% 2. VLF (0.1 - 0.3 Hz) -> Bandpass
+%% 1. Infraslow (0.01 - 0.05) -> Bandpass
+f_range = [0.01, 0.05];
+Wn = f_range / fn;
+[b, a] = butter(n, Wn, 'bandpass');
+decomposed.isf = filtfilt(b, a, signal);
+%% 2. VLF (0.05 - 0.3 Hz) -> Bandpass
 f_range = [0.1, 0.3];
 Wn = f_range / fn;
 [b, a] = butter(n, Wn, 'bandpass');

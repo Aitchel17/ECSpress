@@ -1,21 +1,104 @@
-sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_006';
+sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
+
+sleep_score = load(fullfile(sessiondir,"peripheral","sleep_score.mat"));
+sleep_integrate = sleep_integration(sleep_score);
+paxfwhm_state = StateAnalysis_1D(sleep_integrate);
+paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
+%%
+paxfwhm_state.get_summary('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual) % 0.04 Hz for 25 second window
+paxfwhm_state.get_summary('BV_thickness',session.pax_fwhm.thickness.bv) % 0.04 Hz for 25 second window
+paxfwhm_state.get_summary('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs) % 0.04 Hz for 25 second window
+paxfwhm_state.get_summary('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs) % 0.04 Hz for 25 second window
+paxfwhm_state.get_summary('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs) % 0.04 Hz for 25 second window
+
+%%
+% todo: 20260205
+% 0. Change the prpoerty name... maybe summaryanalysis -> state_summary,
+% poweranalysis powerdensitym, decomposition--> band_decomposition analysis
+
+% 1. Add start time, end time, and composition to the summary analysis
+% 2. Embed decomposition analysis(pp pt) to stateanalysis_1d
+% 3. Transition analysis need to be seperated from summary_analysis and
+% treated seperately
+% 4. Saving mechanism
+% 5. Integration (manually in script to show something tomorrow)
+% 6. Embed plot_sleep_patches(gca, sleep_score); to make_fig 
+
+
+%%
+
+paxfwhm_state.get_powerdensity('bv_thickness',session.pax_fwhm.thickness.bv) % 0.04 Hz for 25 second window
+
+%%
+
+
+
+tmp.decomposed_bv = decompose_signal(session.pax_fwhm.thickness.bv,session.pax_fwhm.param.fs);
+tmp.decomposed_pvs = decompose_signal(session.pax_fwhm.thickness.totalpvs,session.pax_fwhm.param.fs);
+
+%%
+figure()
+
+plot(session.pax_fwhm.t_axis,tmp.decomposed_bv.continuous,'k');
+hold on
+plot(session.pax_fwhm.t_axis,tmp.decomposed_pvs.continuous ,'b');
+%%
+
+
+
+
+
+tmp.data = tmp.decomposed_bv.vlf;
+plot(session.pax_fwhm.t_axis,tmp.data,'k');
+
+
+
+
+
+%%
+plot_sleep_patches(gca, sleep_score);
+
+
+
+
+
+
+%%
+data1d.thickness = session.pax_fwhm.thickness;
+data1d.displacement = session.pax_fwhm.displacement;
+data1d.idx = session.pax_fwhm.idx;
+%%
+
+
+StateAnalysis_1D(sleep_integrate,session)
+%%
+clee = color_lee;
 %%
 session.stackch1 = session.loadstack('ch1');
 session.stackch2 = session.loadstack('ch2');
 %% Two photon analysis time axis calculation
 session.pax_fwhm.t_axis = linspace(session.img_param.imgstarttime,session.img_param.imgendtime,numel(session.pax_fwhm.idx.upperBVboundary));
 sleep_score = load(fullfile(sessiondir,"peripheral","sleep_score.mat"));
+%%
+
+
+
+%%
 % Calculate
 % Find indices for all REM epochs
 % Calculate State Analysis (Indices, Bouts, Sliced Data)
 rem.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.REMTimes);
 nrem.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.NREMTimes, sleep_score.uArousalTimes);
+%% Big Chunk Spectral Analysis (300s)
+param_fs = session.pax_fwhm.param.fs; % Moved definition of param_fs here to ensure it's available
+rem.bigchunk = get_bigchunk_analysis(session.pax_fwhm, sleep_score, "REM", param_fs, 300);
+nrem.bigchunk = get_bigchunk_analysis(session.pax_fwhm, sleep_score, "NREM", param_fs, 300);
+awake.bigchunk = get_bigchunk_analysis(session.pax_fwhm, sleep_score, "Awake", param_fs, 300);
+drowsy.bigchunk = get_bigchunk_analysis(session.pax_fwhm, sleep_score, "Drowsy", param_fs, 300);
 awake.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.AwakeTimes);
 drowsy.pax_fwhm = add_state_analysis(session.pax_fwhm, sleep_score.DrowsyTimes);
-
-%% Image frame location (kept separate for now as it uses img_param.taxis)
 rem.img.param = session.img_param;
 rem.img.stateidx = statebin2frame(sleep_score.REMTimes, session.img_param.taxis);
 nrem.img.param = session.img_param;
@@ -29,47 +112,219 @@ nrem.img.bouts = stateidx2bouts(nrem.img.stateidx);
 awake.img.bouts = stateidx2bouts(awake.img.stateidx);
 rem.img.bouts = stateidx2bouts(rem.img.stateidx);
 drowsy.img.bouts = stateidx2bouts(drowsy.img.stateidx);
-
-%% Spectrogram Calculation (Batch Process All 1D Data)
+% Spectrogram Calculation (Batch Process All 1D Data)
 param_fs = session.pax_fwhm.param.fs;
-
 rem.spectral_analysis = get_all_spectra(rem.pax_fwhm.bouts, session.pax_fwhm, param_fs);
 nrem.spectral_analysis = get_all_spectra(nrem.pax_fwhm.bouts, session.pax_fwhm, param_fs);
 awake.spectral_analysis = get_all_spectra(awake.pax_fwhm.bouts, session.pax_fwhm, param_fs);
 drowsy.spectral_analysis = get_all_spectra(drowsy.pax_fwhm.bouts, session.pax_fwhm, param_fs);
+
+%%
+transition.roughawake = statebin2timetable(sleep_score.AwakeTimes, sleep_score.DrowsyTimes);
+transition.roughnrem = statebin2timetable(sleep_score.NREMTimes, sleep_score.uArousalTimes);
+transition.rem = statebin2timetable(sleep_score.REMTimes);
+%%
+
+%%
+transition.window = 25;
+transition.NA.timetable = get_transition(transition.window,transition.roughnrem, transition.roughawake);
+transition.NA.fwhmidx = timearr2frame(session.pax_fwhm.t_axis, transition.NA.timetable);
+transition.AN.timetable = get_transition(transition.window,transition.roughawake, transition.roughnrem);
+transition.AN.fwhmidx = timearr2frame(session.pax_fwhm.t_axis, transition.AN.timetable);
+transition.NR.timetable = get_transition(transition.window,transition.roughnrem, transition.rem);
+transition.NR.fwhmidx = timearr2frame(session.pax_fwhm.t_axis, transition.NR.timetable);
+transition.RA.timetable = get_transition(transition.window,transition.rem, transition.roughawake);
+transition.RA.fwhmidx = timearr2frame(session.pax_fwhm.t_axis, transition.RA.timetable);
+%%
+tmp.dataname = 'ecschanges_residual'; % totalpvs, bv
+tmp.transitname = 'RA';
+
+figure('Name',strcat(tmp.dataname,'_',tmp.transitname))
+
+
+tmp.sumarray = [];
+cla
+hold on
+tmp.data = sgolayfilt(session.pax_fwhm.thickness.(tmp.dataname),3,5);
+tmp.ndata = size(transition.(tmp.transitname).fwhmidx,1);
+tmp.idx = transition.(tmp.transitname).fwhmidx;
+
+if strcmp(tmp.dataname,'bv')
+    sub_color = [0.9 0.8 0.8];
+    main_color = 'r';
+else
+    sub_color = [0.8 0.9 0.8];
+    main_color = 'g';
+end
+
+for idx = 1:tmp.ndata
+    tmp.start = tmp.idx(idx,1);
+    tmp.end = tmp.idx(idx,2);
+    tmp.plottarget = tmp.data(1,tmp.start:tmp.end);
+    tmp.sumarray = [tmp.sumarray; tmp.plottarget];
+    tmp.plottaxis = linspace(-transition.window,transition.window,length(tmp.plottarget));
+    plot(tmp.plottaxis,tmp.plottarget, color=sub_color)
+end
+
+tmp.meantarget = mean(tmp.sumarray,1);
+tmp.sem = std(tmp.sumarray, 0, 1, 'omitnan') ./ sqrt(tmp.ndata);
+tmp.t_score = tinv(0.975, tmp.ndata-1); % 95% CI
+tmp.ci = tmp.t_score * tmp.sem;
+
+tmp.upci = tmp.meantarget + tmp.ci;
+tmp.downci = tmp.meantarget - tmp.ci;
+
+patch([tmp.plottaxis, fliplr(tmp.plottaxis)], [tmp.upci, fliplr(tmp.downci)],main_color, 'FaceAlpha', 0.1, 'EdgeColor', 'none');
+plot(tmp.plottaxis,tmp.meantarget, main_color)
+xlim([-transition.window transition.window])
+xline(0)
+%%
+
+
+
+%%
+transition.RA
+transition.AN
+transition.NR
+%%
+
+
+
+
+
+%%
+if ~isfolder(fullfile(sessiondir,'sleep_analysis'))
+    mkdir(fullfile(sessiondir,'sleep_analysis'))
+end
+
+%% Image frame location (kept separate for now as it uses img_param.taxis)
+
+%% OVERVIEW
+
+
+figure()
+%%
+cla
+plot(session.pax_fwhm.t_axis,sgolayfilt(session.pax_fwhm.thickness.bvchanges,2,5),'Color',clee.clist.red)
+hold on
+plot(session.pax_fwhm.t_axis,sgolayfilt(session.pax_fwhm.thickness.pvschanges_total,2,5),'Color',clee.clist.darkgreen)
+
+yl = ylim;
+% Draw Patches for Sleep States
+% Draw Patches for Sleep States
+plot_sleep_patches(gca, sleep_score);
+
+
+
+
+
+
+
 %%
 focus = awake;
-figure()
-plot(focus.pax_fwhm.thickness(1).bvchanges,'color',[0.5 0.5 0.5])
+bouts = 5;
+figure(name='bvchanges_nrem')
+plot(focus.pax_fwhm.thickness(bouts).bvchanges,'color',[0.5 0.5 0.5])
 hold on
-plot(focus.spectral_analysis.thickness.bvchanges.decomposed.continuous{1},'k')
-
-plot(focus.spectral_analysis.thickness.bvchanges.decomposed.vlf{1},'r')
-plot(focus.spectral_analysis.thickness.bvchanges.decomposed.lf{1},'g')
-xlim([0 150])
-ylim([-5 5])
-
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.continuous.data{bouts},'k')
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.vlf.data{bouts},'r')
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.lf.data{bouts},'g')
 %%
-figure()
-plot(focus.pax_fwhm.thickness(1).pvschanges_total,'color',[0.5 0.5 0.5])
-hold on
-plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.continuous{1},'k')
-
-plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.vlf{1},'r')
-plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.lf{1},'g')
 xlim([0 150])
 ylim([-5 5])
+%%
+%%
+figure(name='pvschanges_nrem')
+plot(focus.pax_fwhm.thickness(bouts).pvschanges_total,'color',[0.5 0.5 0.5])
+hold on
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.continuous.data{bouts},'k')
 
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.vlf.data{bouts},'r')
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.lf.data{bouts},'g')
 %%
 
 figure()
-plot(focus.spectral_analysis.thickness.bvchanges.decomposed.vlf{1})
+plot(focus.pax_fwhm.thickness(bouts).ecschanges_residual,'color',[0.5 0.5 0.5])
+hold on
+plot(focus.spectral_analysis.thickness.ecschanges_residual.decomposed.continuous{bouts},'k')
+
+plot(focus.spectral_analysis.thickness.ecschanges_residual.decomposed.vlf{bouts},'r')
+plot(focus.spectral_analysis.thickness.ecschanges_residual.decomposed.lf{bouts},'g')
+
+
+%%
+figure()
+plot(focus.pax_fwhm.displacement(1).dynamicpvs,'color',[0.5 0.5 0.5])
+hold on
+plot(focus.spectral_analysis.displacement.dynamicpvs.decomposed.continuous{1},'k')
+
+plot(focus.spectral_analysis.displacement.dynamicpvs.decomposed.vlf{1},'r')
+plot(focus.spectral_analysis.displacement.dynamicpvs.decomposed.lf{1},'g')
+
+%%
+xlim([0 150])
+ylim([-5 5])
+%%
+
+figure(name='vlf bv pvs ecs awake')
+plot(focus.spectral_analysis.thickness.bvchanges.decomposed.vlf.data{1},'r')
 
 hold on
 
-plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.vlf{1})
+plot(focus.spectral_analysis.thickness.pvschanges_total.decomposed.vlf.data{1},'g')
+
+plot(focus.spectral_analysis.thickness.ecschanges_residual.decomposed.vlf.data{1},'color',[0.5 0.5 0.5])
+
+
 ylim([-4 4])
 xlim([0 150])
+%%
+
+
+
+mean(nrem.spectral_analysis.thickness.bv.peak_analysis.lf.p2t_avg)
+mean(awake.spectral_analysis.thickness.bv.peak_analysis.lf.p2t_avg)
+
+
+%%
+clc
+mean(awake.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+mean(drowsy.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+mean(nrem.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+mean(rem.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+%%
+clc
+mean(awake.spectral_analysis.thickness.bv.peak_analysis.vlf.p2t_avg,'omitmissing')
+mean(drowsy.spectral_analysis.thickness.bv.peak_analysis.vlf.p2t_avg,'omitmissing')
+mean(nrem.spectral_analysis.thickness.bv.peak_analysis.vlf.p2t_avg,'omitmissing')
+mean(rem.spectral_analysis.thickness.bv.peak_analysis.vlf.p2t_avg,'omitmissing')
+%%
+mean(awake.spectral_analysis.thickness.bv.peak_analysis.lf.p2t_avg,'omitmissing')
+mean(drowsy.spectral_analysis.thickness.bv.peak_analysis.lf.p2t_avg,'omitmissing')
+mean(nrem.spectral_analysis.thickness.bv.peak_analysis.lf.p2t_avg,'omitmissing')
+mean(rem.spectral_analysis.thickness.bv.peak_analysis.lf.p2t_avg,'omitmissing')
+%%
+
+mean(awake.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+mean(drowsy.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+mean(nrem.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+mean(rem.spectral_analysis.thickness.bv.peak_analysis.continuous.p2t_avg,'omitmissing')
+
+%%
+clc
+mean(awake.spectral_analysis.thickness.pvschanges_total.peak_analysis.lf.p2t_avg,'omitmissing')
+mean(drowsy.spectral_analysis.thickness.pvschanges_total.peak_analysis.lf.p2t_avg,'omitmissing')
+mean(nrem.spectral_analysis.thickness.pvschanges_total.peak_analysis.lf.p2t_avg,'omitmissing')
+mean(rem.spectral_analysis.thickness.pvschanges_total.peak_analysis.lf.p2t_avg,'omitmissing')
+%%
+clc
+mean(awake.spectral_analysis.thickness.pvschanges_total.peak_analysis.vlf.p2t_avg,'omitmissing')
+mean(drowsy.spectral_analysis.thickness.pvschanges_total.peak_analysis.vlf.p2t_avg,'omitmissing')
+mean(nrem.spectral_analysis.thickness.pvschanges_total.peak_analysis.vlf.p2t_avg,'omitmissing')
+mean(rem.spectral_analysis.thickness.pvschanges_total.peak_analysis.vlf.p2t_avg,'omitmissing')
+
+
+%%
 
 %%
 focus = awake;
@@ -89,7 +344,7 @@ hold on
 
 % Define target for plotting (Example: Awake BV Changes)
 % Access path: state.spectral_analysis.structName.fieldName.summary
-target_summary = awake.spectral_analysis.thickness.bvchanges.summary;
+target_summary = awake.spectral_analysis.thickness.bvchanges.spec_summary;
 target_list = awake.spectral_analysis.thickness.bvchanges.list;
 
 % Plot individual (log-log)
@@ -104,7 +359,7 @@ title('Average spectral density (Awake - BV)');
 
 
 % Plot individual (log-log) - NREM
-target_summary_nrem = nrem.spectral_analysis.thickness.bvchanges.summary;
+target_summary_nrem = nrem.spectral_analysis.thickness.bvchanges.spec_summary;
 target_list_nrem = nrem.spectral_analysis.thickness.bvchanges.list;
 
 for i = 1:numel(target_list_nrem)

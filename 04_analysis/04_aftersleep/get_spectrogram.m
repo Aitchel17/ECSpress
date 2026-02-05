@@ -1,7 +1,7 @@
 function spectrogram = get_spectrogram(samplingfreq,signal_1d)
 % ECoG processing
 detrended_ECoG = detrend(signal_1d,'constant');
-spectrogram.params.tapers = [5,9]; % [Time*bandWidth #taper]
+spectrogram.params.tapers = [2,3]; % [Time*bandWidth #taper]
 spectrogram.params.Fs = samplingfreq; % Hz
 spectrogram.params.fpass = [0.01,spectrogram.params.Fs/2]; % defalut
 [S5,F5] = mtspectrumc(detrended_ECoG,spectrogram.params);

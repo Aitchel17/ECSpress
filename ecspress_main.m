@@ -22,7 +22,7 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\01_igkltdt\hql086\250912_hql086_sleep\HQL086_sleep250912_009';
+base_path = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
@@ -41,7 +41,7 @@ twophoton_processed = twophoton_preprocess(session);
 
 %% 4.1 FWHM Analysis
 % 4.1.1 FWHM analysis - ROI Setupw
-session.roilist.addormodifyroi(twophoton_processed.ch1,'pax','line');
+session.roilist.addormodifyroi(twophoton_processed.ch2,'pax','line');
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 session.pax_fwhm.param.fs = twophoton_processed.outfps;
