@@ -1,18 +1,18 @@
 sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
-sleep_integrate = sleep_integration(sessiondir);
+sleep_integrate = state_integration(sessiondir);
 
 %% Paxfwhm 
 paxfwhm_state = state_linefwhm(sleep_integrate);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
-
+%%
 paxfwhm_state.get_summary('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('BV_thickness',session.pax_fwhm.thickness.bv) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs) % 0.04 Hz for 25 second window
-
+%%
 paxfwhm_state.get_powerdensity('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual)
 paxfwhm_state.get_powerdensity('BV_thickness',session.pax_fwhm.thickness.bv)
 paxfwhm_state.get_powerdensity('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs)
@@ -31,8 +31,7 @@ paxfwhm_state.get_pppt_decomposition('PVStotal_thickness')
 paxfwhm_state.get_pppt_decomposition('PVSdynamic_thickness')
 paxfwhm_state.get_pppt_decomposition('PVSstatic_thickness')
 %% 
-save(fullfile())
-
+paxfwhm_state.save2disk(paxfwhm_state,sleep_integrate)
 
 
 %%

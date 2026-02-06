@@ -346,6 +346,11 @@ classdef state_linefwhm < handle
             target_table = target_table(rows, :);
         end
 
+       function save2disk(obj,name,savepath)
+            state_linefwhm = obj;
+            save(fullfile(savepath,[name,'.mat']),'state_linefwhm')
+        end
+
 
     end
 
