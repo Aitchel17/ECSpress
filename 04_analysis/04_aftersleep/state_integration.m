@@ -1,4 +1,4 @@
-classdef sleep_integration
+classdef state_integration
     %UNTITLED Summary of this class goes here
     %   Detailed explanation goes here
     %   This class is designed tobe initialize time_table and hold indices
@@ -21,7 +21,7 @@ classdef sleep_integration
     end
 
     methods
-        function obj = sleep_integration(base_path)
+        function obj = state_integration(base_path)
             %UNTITLED Construct an instance of this class
             %   Detailed explanation goes here
             obj.dir_struct.sleep_score = fullfile(base_path,"peripheral","sleep_score.mat");

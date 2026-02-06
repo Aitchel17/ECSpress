@@ -1,4 +1,4 @@
-classdef StateAnalysis_1D < handle
+classdef state_linefwhm < handle
     %STATEANALYSIS_ABSTRACT Base class for sleep state analysis.
     %   Coordinated by sleep_integration object.
 
@@ -20,7 +20,7 @@ classdef StateAnalysis_1D < handle
     end
 
     methods
-        function obj = StateAnalysis_1D(sleep_obj)
+        function obj = state_linefwhm(sleep_obj)
             % Constructor
             obj.sleep_obj = sleep_obj;
         end
