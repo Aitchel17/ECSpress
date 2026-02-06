@@ -9,13 +9,30 @@ classdef sleep_integration
         binary_bin
         time_table
         param
-        info         
+        info
+        dir_struct
+    end
+
+    properties
+        paxfwhm_state
+        radon_state
+        roilist_state
+        polarcluster_state
     end
 
     methods
-        function obj = sleep_integration(sleep_score)
+        function obj = sleep_integration(base_path)
             %UNTITLED Construct an instance of this class
             %   Detailed explanation goes here
+            obj.dir_struct.sleep_score = fullfile(base_path,"peripheral","sleep_score.mat");
+            sleep_score = load(obj.dir_struct.sleep_score);
+            obj.dir_struct.stateanalysis = fullfile(base_path,"state_analysis");
+
+            if ~exist(obj.dir_struct.stateanalysis, 'dir')
+                mkdir(obj.dir_struct.stateanalysis);
+                disp(['Created directory: ', obj.dir_struct.stateanalysis]);
+            end
+
             obj.param.transition_window = 25;
             obj.param.bigchunk_windowsize = 300;
             obj.sleep_score = sleep_score;
@@ -63,6 +80,7 @@ classdef sleep_integration
                 state_idx.(ttable_name) = timetable2frame(t_axis,obj.time_table.(ttable_name));
             end
         end
+
     end
 end
 
