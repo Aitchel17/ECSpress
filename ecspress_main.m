@@ -79,6 +79,13 @@ session.roilist.save2disk();
 % 5.5 save polar cluster
 polarcluster = session.polarcluster;
 save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcluster");
+%%
+
+
+
+
+
+
 
 
 %% 6. Dynamic time warping based analysis

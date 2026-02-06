@@ -1,30 +1,111 @@
 sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
+sleep_integrate = sleep_integration(sessiondir);
 
-sleep_score = load(fullfile(sessiondir,"peripheral","sleep_score.mat"));
-sleep_integrate = sleep_integration(sleep_score);
-paxfwhm_state = StateAnalysis_1D(sleep_integrate);
+%% Paxfwhm 
+paxfwhm_state = state_linefwhm(sleep_integrate);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
-%%
+
 paxfwhm_state.get_summary('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('BV_thickness',session.pax_fwhm.thickness.bv) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs) % 0.04 Hz for 25 second window
 paxfwhm_state.get_summary('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs) % 0.04 Hz for 25 second window
 
+paxfwhm_state.get_powerdensity('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual)
+paxfwhm_state.get_powerdensity('BV_thickness',session.pax_fwhm.thickness.bv)
+paxfwhm_state.get_powerdensity('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs)
+paxfwhm_state.get_powerdensity('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs)
+paxfwhm_state.get_powerdensity('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs)
+
+paxfwhm_state.decompose_signal('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual)
+paxfwhm_state.decompose_signal('BV_thickness',session.pax_fwhm.thickness.bv)
+paxfwhm_state.decompose_signal('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs)
+paxfwhm_state.decompose_signal('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs)
+paxfwhm_state.decompose_signal('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs)
+
+paxfwhm_state.get_pppt_decomposition('Extraparenchyma_thickness')
+paxfwhm_state.get_pppt_decomposition('BV_thickness')
+paxfwhm_state.get_pppt_decomposition('PVStotal_thickness')
+paxfwhm_state.get_pppt_decomposition('PVSdynamic_thickness')
+paxfwhm_state.get_pppt_decomposition('PVSstatic_thickness')
+%% 
+save(fullfile())
+
+
+
+%%
+bv_nrem_table = paxfwhm_state.get_filtered_table('state_summary','BV_thickness',"nrem");
+bv_awake_table = paxfwhm_state.get_filtered_table('state_summary','BV_thickness',"awake");
+bv_rem_table = paxfwhm_state.get_filtered_table('state_summary','BV_thickness',"rem");
+
+% Define column to plot
+target_col = 'raw_median'; % Variable to compare
+% Extract data vectors
+data_nrem = bv_nrem_table.(target_col);
+data_awake = bv_awake_table.(target_col);
+data_rem = bv_rem_table.(target_col);
+
+% Plot
+plot_bar_points({ data_awake, data_nrem, data_rem}, { 'Awake', 'NREM', 'REM'}, ...
+    'YLabel', target_col, 'Title', ['Comparison: ' target_col], ...
+    'Colors', [0 0 1; 0 1 0; 1 0 0]); % Blue, Red
+%% Define column to plot
+target_col = 'raw_median'; % Variable to compare
+% Extract data vectors
+pvs_nrem_table = paxfwhm_state.get_filtered_table('state_summary','PVStotal_thickness',"nrem");
+pvs_awake_table = paxfwhm_state.get_filtered_table('state_summary','PVStotal_thickness',"awake");
+pvs_rem_table = paxfwhm_state.get_filtered_table('state_summary','PVStotal_thickness',"rem");
+
+
+
+data_pvsnrem = pvs_nrem_table.(target_col);
+data_pvsawake = pvs_awake_table.(target_col);
+data_pvsrem = pvs_rem_table.(target_col);
+
+% Plot
+plot_bar_points({ data_pvsawake, data_pvsnrem, data_pvsrem}, { 'Awake', 'NREM', 'REM'}, ...
+    'YLabel', target_col, 'Title', ['Comparison: ' target_col], ...
+    'Colors', [0 0 1; 0 1 0; 1 0 0]); % Blue, Red
+
+%%
+paxfwhm_state.band_decomposition
+
+
+
+
+
+
 %%
 % todo: 20260205
 % 0. Change the prpoerty name... maybe summaryanalysis -> state_summary,
 % poweranalysis powerdensitym, decomposition--> band_decomposition analysis
+% transition
+%  perhaps what happens is vessel dilation and ECS change is lagging
+%  therefore summary would not reflect what actually happened during this
+%  decomposition analysis is very necessary, the simple stat of arousal
+%  state is meaningless as sleep is very fragmented and often previous
+%  state is reflected to next state even for the long fluctuation
 
-% 1. Add start time, end time, and composition to the summary analysis
-% 2. Embed decomposition analysis(pp pt) to stateanalysis_1d
+% 2. decomposition
+%   butter filter artifact issue medianmovwindow?
+%   might be better to make decompose_signal func to get bandinput --> no
+%   its better not to use function to hide band parameter..
+
+% 1. Add start time, end time, and composition to the summary analysis (Done)
+% 2. Embed decomposition analysis(pp pt) to stateanalysis_1d (In progress)
+% 2.1 Decompse signal (Done)
+% 2.2 PP PT analysis (Done)
+
 % 3. Transition analysis need to be seperated from summary_analysis and
 % treated seperately
+
+
+
 % 4. Saving mechanism
 % 5. Integration (manually in script to show something tomorrow)
-% 6. Embed plot_sleep_patches(gca, sleep_score); to make_fig 
+% 6. Embed plot_sleep_patches(gca, sleep_score); to make_fig
 
 
 %%
@@ -45,8 +126,15 @@ plot(session.pax_fwhm.t_axis,tmp.decomposed_bv.continuous,'k');
 hold on
 plot(session.pax_fwhm.t_axis,tmp.decomposed_pvs.continuous ,'b');
 %%
+figure()
+
+plot(session.pax_fwhm.t_axis,tmp.decomposed_bv.isf,'k');
+hold on
+plot(session.pax_fwhm.t_axis,tmp.decomposed_pvs.isf ,'b');
 
 
+
+%%
 
 
 
@@ -54,8 +142,11 @@ tmp.data = tmp.decomposed_bv.vlf;
 plot(session.pax_fwhm.t_axis,tmp.data,'k');
 
 
-
-
+%%
+figure()
+plot(session.pax_fwhm.idx.lowerBVboundary - session.pax_fwhm.idx.upperBVboundary)
+hold on
+plot(session.pax_fwhm.thickness.bv)
 
 %%
 plot_sleep_patches(gca, sleep_score);
