@@ -3,34 +3,98 @@ session = ECSSession(sessiondir);
 session = session.load_primary_results();
 sleep_integrate = state_integration(sessiondir);
 
-%% Paxfwhm 
+%% Paxfwhm
 paxfwhm_state = state_linefwhm(sleep_integrate);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
-%%
-paxfwhm_state.get_summary('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual) % 0.04 Hz for 25 second window
-paxfwhm_state.get_summary('BV_thickness',session.pax_fwhm.thickness.bv) % 0.04 Hz for 25 second window
-paxfwhm_state.get_summary('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs) % 0.04 Hz for 25 second window
-paxfwhm_state.get_summary('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs) % 0.04 Hz for 25 second window
-paxfwhm_state.get_summary('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs) % 0.04 Hz for 25 second window
-%%
-paxfwhm_state.get_powerdensity('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual)
-paxfwhm_state.get_powerdensity('BV_thickness',session.pax_fwhm.thickness.bv)
-paxfwhm_state.get_powerdensity('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs)
-paxfwhm_state.get_powerdensity('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs)
-paxfwhm_state.get_powerdensity('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs)
 
-paxfwhm_state.decompose_signal('Extraparenchyma_thickness',session.pax_fwhm.thickness.ecschanges_residual)
-paxfwhm_state.decompose_signal('BV_thickness',session.pax_fwhm.thickness.bv)
-paxfwhm_state.decompose_signal('PVStotal_thickness',session.pax_fwhm.thickness.totalpvs)
-paxfwhm_state.decompose_signal('PVSdynamic_thickness',session.pax_fwhm.thickness.dynamic_pvs)
-paxfwhm_state.decompose_signal('PVSstatic_thickness',session.pax_fwhm.thickness.static_pvs)
+contents_types = {["thickness","eps","bv","totalpvs","dynamic_pvs","static_pvs"],...
+                ["displacement","dynamicpvs","staticpvs","dynamicbv","staticbv"]};
 
-paxfwhm_state.get_pppt_decomposition('Extraparenchyma_thickness')
-paxfwhm_state.get_pppt_decomposition('BV_thickness')
-paxfwhm_state.get_pppt_decomposition('PVStotal_thickness')
-paxfwhm_state.get_pppt_decomposition('PVSdynamic_thickness')
-paxfwhm_state.get_pppt_decomposition('PVSstatic_thickness')
-%% 
+for typeidx = 1:numel(contents_types)
+    contents_type = contents_types{typeidx};
+    d_type = contents_type(1);
+    fprintf('Processing %s...\n', name);
+    for contents_idx =  2:numel(contents_type)
+        content_name = contents_type(contents_idx);
+        name = strcat(d_type,'_',content_name);
+        data = session.pax_fwhm.(d_type).(content_name);
+        paxfwhm_state.get_summary(name, data);
+        paxfwhm_state.get_powerdensity(name, data);
+        paxfwhm_state.decompose_signal(name, data);
+        paxfwhm_state.get_pppt_decomposition(name);
+        paxfwhm_state.get_transitionsummary(name, data);
+    end
+end
+paxfwhm_state.save2disk('paxfwhm_sleep',sleep_integrate.dir_struct.stateanalysis)
+
+
+
+
+
+
+%% Plot transition analysis examples
+clee = color_lee;
+%%
+figure()
+hold on
+
+plot_state = "na_trans";
+plot_target = ["thickness_bv", "thickness_totalpvs","thickness_eps"];
+color_map = {clee.clist.red, clee.clist.green, clee.clist.orange};
+
+for target_idx = 1:numel(plot_target)
+    transition_table = paxfwhm_state.get_filtered_table('transition',plot_target(target_idx), plot_state);
+    plot(mean(cell2mat(transition_table.data),1)/median(cell2mat(transition_table.data),"all"),"Color",color_map{target_idx});
+end
+
+%%
+
+figure()
+hold on
+
+plot_state = "ra_trans";
+plot_target = ["thickness_bv", "thickness_totalpvs"];
+color_map = {clee.clist.red, clee.clist.coloredgreen};
+
+for target_idx = 1:numel(plot_target)
+    transition_table = paxfwhm_state.get_filtered_table('transition',plot_target(target_idx), plot_state);
+    mean(cell2mat(transition_table.data),1);
+    plot(mean(cell2mat(transition_table.data),1)/median(cell2mat(transition_table.data),"all"),"Color",color_map{target_idx});
+end
+
+
+
+
+%%
+figure()
+    transition_table1 = paxfwhm_state.get_filtered_table('transition',"thickness_ecschanges_residual", "nr_trans");
+    data1 = mean(cell2mat(transition_table1.data),1);
+    plot(data1, "Color",'r');
+
+
+
+
+
+%%
+figure()
+    transition_table1 = paxfwhm_state.get_filtered_table('transition',"thickness_bv", "nr_trans");
+    data1 = mean(cell2mat(transition_table1.data),1);
+
+    transition_table2 = paxfwhm_state.get_filtered_table('transition',"thickness_totalpvs", "nr_trans");
+    data2 = mean(cell2mat(transition_table2.data),1);
+    plot(data1-data2,"Color",'r');
+
+
+
+%%
+
+
+
+
+
+
+
+%%
 paxfwhm_state.save2disk(paxfwhm_state,sleep_integrate)
 
 
@@ -97,14 +161,18 @@ paxfwhm_state.band_decomposition
 % 2.1 Decompse signal (Done)
 % 2.2 PP PT analysis (Done)
 
-% 3. Transition analysis need to be seperated from summary_analysis and
+% 3. Transition analysis need to be seperated from summary_analysis and (Done)
 % treated seperately
 
 
 
-% 4. Saving mechanism
+% 4. Saving mechanism (Done)
 % 5. Integration (manually in script to show something tomorrow)
 % 6. Embed plot_sleep_patches(gca, sleep_score); to make_fig
+
+%% Todo: 20260207
+% 0. plot script
+% 1. integration script
 
 
 %%

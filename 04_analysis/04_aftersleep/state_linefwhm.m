@@ -6,7 +6,6 @@ classdef state_linefwhm < handle
         sleep_obj   % Handle to sleep_integration object (Temporal Source of Truth)
         t_axis      % Time axis for the specific data being analyzed
         state_idx
-        data_struct        % The raw data to analyze (Dimension varies by subclass)
         param        % Name of this analysis instance
     end
 
@@ -70,6 +69,8 @@ classdef state_linefwhm < handle
 
         function obj = get_summary(obj, name, data1d)
             sidx_fnames = fieldnames(obj.state_idx);
+            sidxfilt_logic = ~endsWith(sidx_fnames,'_trans');
+            sidx_fnames = sidx_fnames(sidxfilt_logic);
 
             % 1. Pre-calculate total rows needed to pre-allocate
             total_bouts = 0;
@@ -120,7 +121,6 @@ classdef state_linefwhm < handle
                     qs = quantile(crop_data, [0.25, 0.75]);
                     raw_q1(row_counter) = qs(1);
                     raw_q3(row_counter) = qs(2);
-
                     row_counter = row_counter + 1;
                 end
             end
@@ -129,6 +129,100 @@ classdef state_linefwhm < handle
             obj.state_summary.(name) = table(state_name, bout_idx, ...
                 bout_duration, total_bout, raw_data, ...
                 raw_mean, raw_median, raw_q1, raw_q3, raw_var);
+        end
+
+
+        function obj = get_transitionsummary(obj, name, data1d)
+            % GET_TRANSITIONSUMMARY Analyze transitions with center of bout as transition point
+            % Splits each bout in half: before and after the transition center
+
+            sidx_fnames = fieldnames(obj.state_idx);
+            sidxfilt_logic = endsWith(sidx_fnames,'_trans');
+            sidx_fnames = sidx_fnames(sidxfilt_logic);
+
+            % 1. Pre-calculate total rows needed (one row per transition bout)
+            total_bouts = 0;
+            for i = 1:length(sidx_fnames)
+                total_bouts = total_bouts + size(obj.state_idx.(sidx_fnames{i}), 1);
+            end
+
+            % 2. Pre-allocate arrays for metadata
+            state_name = strings(total_bouts, 1);
+            bout_idx = zeros(total_bouts, 1);
+            bout_duration = zeros(total_bouts, 1);
+            total_bout = zeros(total_bouts, 1);
+            transition_point = zeros(total_bouts, 1);  % Center index
+
+            % Pre-allocate for BEFORE transition period
+            data = cell(total_bouts, 1);
+            pre_mean = zeros(total_bouts, 1);
+            pre_median = zeros(total_bouts, 1);
+            pre_q1 = zeros(total_bouts, 1);
+            pre_q3 = zeros(total_bouts, 1);
+            pre_var = zeros(total_bouts, 1);
+
+            % Pre-allocate for AFTER transition period
+            post_mean = zeros(total_bouts, 1);
+            post_median = zeros(total_bouts, 1);
+            post_q1 = zeros(total_bouts, 1);
+            post_q3 = zeros(total_bouts, 1);
+            post_var = zeros(total_bouts, 1);
+
+            % 3. Fill Data
+            row_counter = 1;
+            for sidx = 1:length(sidx_fnames) % per state transition
+                fname = sidx_fnames{sidx};
+                indices = obj.state_idx.(fname); % Nx2 matrix
+                nbouts = size(indices, 1);
+                onset = round((indices(1, 2) - indices(1, 1))/2);
+
+                for b = 1:nbouts % per bout
+                    start_i = indices(b, 1);
+                    end_i   = indices(b, 2);
+
+                    % Calculate center point (transition point)
+                    center_i = round((start_i + end_i) / 2);
+                    duration = (end_i - start_i) / obj.param.fs;
+
+                    % Store Metadata
+                    state_name(row_counter) = fname;
+                    bout_idx(row_counter) = b;
+                    bout_duration(row_counter) = duration;
+                    total_bout(row_counter) = nbouts;
+                    transition_point(row_counter) = center_i;
+
+                    % Split data at center
+                    data(row_counter) = {data1d(center_i-onset:center_i+onset)};
+                    pre_seg = data1d(center_i-onset:center_i);
+                    post_seg = data1d(center_i:center_i+onset);
+
+                    % BEFORE transition statistics
+                    pre_mean(row_counter) = mean(pre_seg, 'omitnan');
+                    pre_median(row_counter) = median(pre_seg, 'omitnan');
+                    pre_var(row_counter) = var(pre_seg, 'omitnan');
+
+                    qs_before = quantile(pre_seg, [0.25, 0.75]);
+                    pre_q1(row_counter) = qs_before(1);
+                    pre_q3(row_counter) = qs_before(2);
+
+                    % AFTER transition statistics
+                    post_mean(row_counter) = mean(post_seg, 'omitnan');
+                    post_median(row_counter) = median(post_seg, 'omitnan');
+                    post_var(row_counter) = var(post_seg, 'omitnan');
+
+                    qs_after = quantile(post_seg, [0.25, 0.75]);
+                    post_q1(row_counter) = qs_after(1);
+                    post_q3(row_counter) = qs_after(2);
+
+                    row_counter = row_counter + 1;
+                end
+            end
+
+            % 4. Create Table with all columns
+            obj.transition.(name) = table(state_name, bout_idx, bout_duration, total_bout, transition_point, ...
+                data, pre_mean, pre_median, pre_q1, pre_q3, pre_var, ...
+                 post_mean, post_median, post_q1, post_q3, post_var);
+
         end
 
         function obj = decompose_signal(obj, name, data1d)
@@ -338,6 +432,8 @@ classdef state_linefwhm < handle
             obj.peak_trough.(name) = giant_table;
         end
 
+
+
         function target_table = get_filtered_table(obj, prop_name, field_name, target_state)
             %GET_FILTERED_TABLE Access a specific table and filter by State
             %   tbl = obj.get_filtered_table('state_summary', 'bv_thickness', 'NREM')
@@ -346,7 +442,7 @@ classdef state_linefwhm < handle
             target_table = target_table(rows, :);
         end
 
-       function save2disk(obj,name,savepath)
+        function save2disk(obj,name,savepath)
             state_linefwhm = obj;
             save(fullfile(savepath,[name,'.mat']),'state_linefwhm')
         end

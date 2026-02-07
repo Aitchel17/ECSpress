@@ -118,6 +118,7 @@ classdef line_fwhm < handle
             uppvs_thickness = obj.idx.clean_upperBVboundary - obj.idx.clean_pvsupedge_idx;
             downpvs_thickness = obj.idx.clean_pvsdownedge_idx - obj.idx.clean_lowerBVboundary;
             obj.thickness.totalpvs = uppvs_thickness + downpvs_thickness;
+            obj.thickness.eps = obj.thickness.totalpvs + obj.thickness.bv;
             difference_pvs = uppvs_thickness - downpvs_thickness;
             difference_pvs = medfilt1(difference_pvs,11); % smoothing the pvs thickness difference
             % caclulate area under the curve of difference_pvs
@@ -145,7 +146,7 @@ classdef line_fwhm < handle
             obj.thickness.pvschanges_dynamic = obj.thickness.dynamic_pvs - obj.thickness.median_dynamicpvs;
             obj.thickness.pvschanges_static = obj.thickness.static_pvs - obj.thickness.median_staticpvs;
             %%
-            obj.thickness.ecschanges_residual = obj.thickness.bvchanges + obj.thickness.pvschanges_total;
+            obj.thickness.epschanges = obj.thickness.bvchanges + obj.thickness.pvschanges_total;
             %%
         end
 
