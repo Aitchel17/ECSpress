@@ -22,13 +22,14 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\00_igkl\hql088\250927_hql088_sleep\HQL088_sleep250927_009';
+base_path = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(base_path);
 session = session.load_primary_results();
+%%
 session.stackch1 = session.loadstack('ch1');
 session.stackch2 = session.loadstack('ch2');
 % 2. Twophoton data FPS matching & preprocessing
@@ -43,14 +44,17 @@ twophoton_processed = twophoton_preprocess(session);
 session.roilist.addormodifyroi(twophoton_processed.ch2,'pax','line');
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
+session.pax_fwhm.param.fs = twophoton_processed.outfps;
+session.pax_fwhm.t_axis = twophoton_processed.t_axis;
 % Lumen (vessel) processing
-session.pax_fwhm.addkymograph("lumen", twophoton_processed.ch1,"max")
+session.pax_fwhm.addkymograph("lumen", twophoton_processed.ch1,"mean")
 session.pax_fwhm.kymograph_afterprocess('lumen',[1 3])
 session.pax_fwhm.fwhm("lumen");
+
 %% 4.1.3 PVS Analysis
 % PVS processing (using channel 2)
-session.pax_fwhm.addkymograph("pvs", twophoton_processed.ch2,"median")
-session.pax_fwhm.kymograph_afterprocess('pvs',[1 3])
+session.pax_fwhm.addkymograph("pvs", twophoton_processed.ch2,"mean")
+session.pax_fwhm.kymograph_afterprocess('pvs',[1 5])
 session.pax_fwhm.pvsanalysis();
 %%
 session.pax_fwhm.clean_outlier(true)
@@ -75,6 +79,13 @@ session.roilist.save2disk();
 % 5.5 save polar cluster
 polarcluster = session.polarcluster;
 save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcluster");
+%%
+
+
+
+
+
+
 
 
 %% 6. Dynamic time warping based analysis

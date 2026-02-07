@@ -11,7 +11,10 @@ classdef line_fwhm < handle
         mask
         idx
         t_axis
-        param = struct('input_size',[-1,-1,-1], 'line_info',[-1,-1;-1,-1;-1,-999]); % 3x2 double, {x1,y1; x2,y2; linewidth,-999}
+        param = struct('input_size',[-1,-1,-1],...
+            'line_info',[-1,-1;-1,-1;-1,-999],...
+            'idxclean_noisethr', 8, ...
+            'idxclean_refmedian', 9); % 3x2 double, {x1,y1; x2,y2; linewidth,-999}
     end
 
 
@@ -46,6 +49,7 @@ classdef line_fwhm < handle
             elseif strcmp(mode,'median')
                 rawkymograph = squeeze(median(rotatecroped_stack, 1));
             end
+            obj.param.(strcat('kymograph_mode_',stack_name)) = mode; 
             obj.rotatecrop.(name_rotatecrop) = rotatecroped_stack;
             obj.kymograph.(name_kymograph) = rawkymograph;
             obj.kymograph.(name_normkymograph) = (rawkymograph-min(rawkymograph,[],1))./max(rawkymograph,[],1); % just for reference to see intermediate step, no offset
@@ -57,16 +61,23 @@ classdef line_fwhm < handle
                 stack_name (1,1) string {mustBeMember(stack_name,{'lumen','wall', 'pvs', 'outside'})}
                 window_size   (1,2) double = [1 3] % default halfmax
             end
+            % parameter:
+            low_cutoff = 10;
+            high_cutoff = 95;
+            medfilt_window = window_size;
+            %
             name_kymograph = strcat("kgph_",stack_name);
             name_processed_kymograph = strcat(name_kymograph,'_processed');
             processed_kymograph = medfilt2(obj.kymograph.(name_kymograph),window_size);
-            prctile5 = prctile(processed_kymograph,5,1);
-            prctile95 = prctile(processed_kymograph,95,1);
-            processed_kymograph = min(processed_kymograph, prctile95);
-            processed_kymograph = max(processed_kymograph, prctile5);
+            prctile_low = prctile(processed_kymograph,low_cutoff,1);
+            prctile_high = prctile(processed_kymograph,high_cutoff,1);
+            processed_kymograph = min(processed_kymograph, prctile_high);
+            processed_kymograph = max(processed_kymograph, prctile_low);
             processed_kymograph = processed_kymograph - min(processed_kymograph,[],1);
             processed_kymograph = processed_kymograph./max(processed_kymograph,[],1);
             obj.kymograph.(name_processed_kymograph) = processed_kymograph;
+            obj.param.(strcat('kymograph_cutoff',stack_name)) = [low_cutoff , high_cutoff];
+            obj.param.(strcat('kymograph_medfiltwindow',stack_name)) = medfilt_window;
         end
 
 
@@ -98,7 +109,7 @@ classdef line_fwhm < handle
                 obj
                 overwrite = false
             end
-            obj.idx = clean_outlier(obj.idx, overwrite);
+            obj.idx = clean_idxoutlier(obj.idx, overwrite,obj.param.idxclean_refmedian,obj.param.idxclean_noisethr);
         end
 
         function getdiameter(obj)
@@ -107,6 +118,7 @@ classdef line_fwhm < handle
             uppvs_thickness = obj.idx.clean_upperBVboundary - obj.idx.clean_pvsupedge_idx;
             downpvs_thickness = obj.idx.clean_pvsdownedge_idx - obj.idx.clean_lowerBVboundary;
             obj.thickness.totalpvs = uppvs_thickness + downpvs_thickness;
+            obj.thickness.eps = obj.thickness.totalpvs + obj.thickness.bv;
             difference_pvs = uppvs_thickness - downpvs_thickness;
             difference_pvs = medfilt1(difference_pvs,11); % smoothing the pvs thickness difference
             % caclulate area under the curve of difference_pvs
@@ -134,7 +146,7 @@ classdef line_fwhm < handle
             obj.thickness.pvschanges_dynamic = obj.thickness.dynamic_pvs - obj.thickness.median_dynamicpvs;
             obj.thickness.pvschanges_static = obj.thickness.static_pvs - obj.thickness.median_staticpvs;
             %%
-            obj.thickness.ecschanges_residual = obj.thickness.bvchanges + obj.thickness.pvschanges_total;
+            obj.thickness.epschanges = obj.thickness.bvchanges + obj.thickness.pvschanges_total;
             %%
         end
 
