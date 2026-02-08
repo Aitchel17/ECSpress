@@ -21,6 +21,7 @@ classdef state_integration
     end
 
     methods
+        
         function obj = state_integration(base_path)
             %UNTITLED Construct an instance of this class
             %   Detailed explanation goes here

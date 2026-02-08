@@ -1,0 +1,146 @@
+%%
+polarstruct_temporary_dir = 'G:\tmp';
+
+%%
+
+manual_polar_primary_struct = primary_integration(polarstruct_temporary_dir,'manual_polarstruct.mat');
+%%
+
+%% radius array 5 x 361
+
+
+num_manual_polar = length(manual_polar_primary_struct);
+manualpolar_radiusarray = zeros([num_manual_polar, 361]);
+%%
+manualpolar_pvsarray = zeros([num_manual_polar, 361]);
+%%
+for idx = 1:num_manual_polar
+    manualpolar = manual_polar_primary_struct(idx).manualpolar;
+    manualpolar.diameter_changes = manualpolar.interp_dbv_thetaradi - manualpolar.interp_cbv_thetaradi;
+
+    manualpolar.dpvs = manualpolar.interp_dpvs_thetaradi - manualpolar.interp_dbv_thetaradi;
+    manualpolar.cpvs = manualpolar.interp_cpvs_thetaradi - manualpolar.interp_cbv_thetaradi;
+    manualpolar.pvs_changes = manualpolar.cpvs - manualpolar.dpvs;
+
+    manualpolar.diameter_changes(1,:) = manualpolar.interp_dbv_thetaradi(1,:);
+    manualpolar.pvs_changes(1,:) = manualpolar.interp_dbv_thetaradi(1,:);
+
+    pixel2um = char(manual_polar_primary_struct(idx).infodict("objpix"));
+    pixel2um = str2double(pixel2um(1:end-2));
+    if manualpolar.diameter_changes(2,1) < manualpolar.diameter_changes(2,181)
+        disp(idx)
+        disp('angle 0 changes is smaller than 180, so flip')
+        manualpolar.diameter_changes(2,:) = flip_angleradius(manualpolar.diameter_changes(2,:));
+        manualpolar.pvs_changes(2,:) = flip_angleradius(manualpolar.pvs_changes(2,:));
+    end
+    manualpolar_radiusarray(idx,:) = manualpolar.diameter_changes(2,:)*pixel2um;
+    manualpolar_pvsarray(idx,:) = manualpolar.pvs_changes(2,:)*pixel2um;
+end
+
+
+%% 뒤집기
+
+
+manualpolar.mean_diameterchange = mean(manualpolar_radiusarray,1);
+manualpolar.mean_pvschange = mean(manualpolar_pvsarray,1);
+%% Calculate confidence interval
+ci95_pvs = get_ci95(manualpolar_pvsarray);
+ci95_bv = get_ci95(manualpolar_radiusarray);
+%%
+
+
+%%
+theta_ax = deg2rad(manualpolar.diameter_changes(1,:));
+%%
+[xup_ci, yup_ci] = pol2cart(theta_ax,up95);
+[xlow_ci, ylow_ci] = pol2cart(theta_ax,bot95);
+hold(fig.polar_boundary.ax,"on")
+%%
+cla(ci_ax)
+%%
+ci_ax = axes(fig.polar_boundary.fig,'Position', fig.polar_boundary.ax.Position, 'Color','none');
+%%
+ci_ax.Visible = 'off';
+%%
+ciFace = [0.90 0.98 0.85];                  % tweak as desired
+patch(ci_ax, [xup_ci fliplr(xlow_ci)], [yup_ci fliplr(ylow_ci)], ciFace, ...
+      'EdgeColor', 'none', 'FaceAlpha', 0.35);
+
+%%
+fig.polar_boundary = make_fig('polar_boundary_all','polar');
+%%
+fig.polar_boundary.bring_fig
+fig.polar_boundary.reset_axis
+fig.polar_boundary.update_figsize([6,6])
+%%
+fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)),manualpolar_radiusarray(1,:),[0.92 0.76 0.92],'none')
+        hold(fig.polar_boundary.ax,"on")
+
+for idx = 3:num_manual_polar
+    fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)),manualpolar_radiusarray(idx,:),[0.92 0.76 0.92],'none')
+    pause(0.5)
+end
+%
+fig.polar_boundary.bring_fig
+
+for idx = 3:num_manual_polar
+    fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)),manualpolar_pvsarray(idx,:),[0.6 0.8 0.6],'none')
+    pause(0.5)
+end
+
+%%
+fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)),manualpolar.mean_diameterchange,clee.clist.magenta,'none')
+fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)), up95,[0.92 0.76 0.92],'none')
+fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)), bot95,[0.92 0.76 0.92],'none')
+%%
+
+%%
+fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)),manualpolar.mean_pvschange,clee.clist.green,'none')
+
+
+%%
+fig.polar_boundary = make_fig('polar_boundary_all','polar');
+%%
+fig.polar_boundary.bring_fig
+fig.polar_boundary.reset_axis
+fig.polar_boundary.update_figsize([6,6])
+fig.polar_boundary.plot_polar(deg2rad(manualpolar.diameter_changes(1,:)), reversed(end,:),clee.clist.magenta,'none')
+%%
+
+
+
+%%
+
+hold(fig.polar_boundary.ax,"on")
+fig.polar_boundary.plot_polar(deg2rad(manual_polarstruct.interp_cbv_thetaradi(1,:)),manual_polarstruct.interp_cbv_thetaradi(end,:),clee.clist.red,'none')
+fig.polar_boundary.plot_polar(deg2rad(manual_polarstruct.interp_dpvs_thetaradi(1,:)),manual_polarstruct.interp_dpvs_thetaradi(end,:),clee.clist.green,'none')
+fig.polar_boundary.plot_polar(deg2rad(manual_polarstruct.interp_cpvs_thetaradi(1,:)),manual_polarstruct.interp_cpvs_thetaradi(end,:),clee.clist.darkgreen,'none')
+fig.polar_boundary.save2svg(directories.save_dir);
+
+
+%%
+
+function reversed = flip_angleradius(radius_array)
+        reversed = zeros(size(radius_array));
+        %
+        fliped_firsthalf = radius_array(1:181);
+        fliped_firsthalf = flip(fliped_firsthalf);
+        %
+        fliped_secondhalf = radius_array(182:360);
+        fliped_secondhalf = flip(fliped_secondhalf);
+        %
+        reversed(1:181) = fliped_firsthalf;
+        reversed(182:360) = fliped_secondhalf;
+        reversed(361) = reversed(1);
+end
+
+function ci = get_ci95(row_array)
+    mean_sample = mean(row_array,1);
+    n_sample   = sum(~isnan(row_array), 1);
+    std_sample = std(row_array, 0, 1);
+    sem_sample = std_sample ./ sqrt(n_sample);
+    t95 = tinv(0.975, n_sample);
+    ci95 = t95 .* sem_sample;
+    ci.up95 = mean_sample + ci95;
+    ci.bot95 = mean_sample - ci95;
+end
