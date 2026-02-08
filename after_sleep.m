@@ -6,17 +6,18 @@ sleep_integrate = state_integration(sessiondir);
 %% Paxfwhm
 paxfwhm_state = state_linefwhm(sleep_integrate);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
-
 contents_types = {["thickness","eps","bv","totalpvs","dynamic_pvs","static_pvs"],...
                 ["displacement","dynamicpvs","staticpvs","dynamicbv","staticbv"]};
 
 for typeidx = 1:numel(contents_types)
     contents_type = contents_types{typeidx};
     d_type = contents_type(1);
-    fprintf('Processing %s...\n', name);
     for contents_idx =  2:numel(contents_type)
+
         content_name = contents_type(contents_idx);
         name = strcat(d_type,'_',content_name);
+        fprintf('Processing %s...\n', name);
+
         data = session.pax_fwhm.(d_type).(content_name);
         paxfwhm_state.get_summary(name, data);
         paxfwhm_state.get_powerdensity(name, data);
@@ -25,7 +26,7 @@ for typeidx = 1:numel(contents_types)
         paxfwhm_state.get_transitionsummary(name, data);
     end
 end
-paxfwhm_state.save2disk('paxfwhm_sleep',sleep_integrate.dir_struct.stateanalysis)
+paxfwhm_state.save2disk('paxfwhm_state',sleep_integrate.dir_struct.stateanalysis)
 
 
 
