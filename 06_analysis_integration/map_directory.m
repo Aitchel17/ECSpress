@@ -1,6 +1,6 @@
 %% map all the subdirectories in mouse folder
 clc,clear,clean_editor
-save_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\01_primary_analysis';
+save_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis';
 experiment_folder = 'G:\tmp\00_igkl';
 
 %% create primary analysis folder in primary analysis save folder
