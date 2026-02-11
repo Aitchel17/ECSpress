@@ -1,4 +1,5 @@
-sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
+sessiondir = 'G:\tmp\00_igkl\hql088\250927_hql088_sleep\HQL088_sleep250927_010';
+%%
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
 sleep_integrate = state_integration(sessiondir);

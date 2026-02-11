@@ -161,11 +161,11 @@ fig_totalpvs_changes.loc.x = t_axis;
 hold(fig_totalpvs_changes.ax)
 
 fig_totalpvs_changes.plot_line(pax_fwhm.thickness.bvchanges,clee.clist.magenta);
-fig_totalpvs_changes.plot_line(pax_fwhm.thickness.ecschanges_residual,clee.clist.coloredorange)
+fig_totalpvs_changes.plot_line(pax_fwhm.thickness.epschanges,clee.clist.coloredorange)
 fig_totalpvs_changes.plot_line(pax_fwhm.thickness.pvschanges_total,clee.clist.darkgreen);
 
-maxyrange = max([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.ecschanges_residual,pax_fwhm.thickness.pvschanges_total])*pixel2um;
-minyrange = min([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.ecschanges_residual,pax_fwhm.thickness.pvschanges_total])*pixel2um;
+maxyrange = max([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.epschanges,pax_fwhm.thickness.pvschanges_total])*pixel2um;
+minyrange = min([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.epschanges,pax_fwhm.thickness.pvschanges_total])*pixel2um;
 ylim(fig_totalpvs_changes.ax,[minyrange,maxyrange])
 fig_totalpvs_changes.put_yaxistitle('Length (\mum)');
 fig_totalpvs_changes.put_xaxistitle('Time (sec)');

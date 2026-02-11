@@ -219,9 +219,9 @@ classdef roi_handle < handle
             labels = string({obj.ROIs.Label});
         end
 
-        function save2disk(obj)
+        function save2disk(obj,savepath)
             roilist = obj;
-            save(obj.savepath,'roilist')
+            save(fullfile(savepath,'roilist.mat'),'roilist')
         end
 
     end

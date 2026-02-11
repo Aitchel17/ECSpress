@@ -22,12 +22,12 @@
 addpath(genpath(pwd));
 
 % Directory setup
-base_path = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
+sessiondir = 'G:\tmp\00_igkl\hql090\251012_hql090_sleep\HQL090_sleep251012_003';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
-session = ECSSession(base_path);
+session = ECSSession(sessiondir);
 session = session.load_primary_results();
 %%
 session.stackch1 = session.loadstack('ch1');
@@ -61,7 +61,7 @@ session.pax_fwhm.clean_outlier(true)
 session.pax_fwhm.getdiameter;
 session.pax_fwhm.getdisplacement;
 session.pax_fwhm.save2disk('paxfwhm',session.dir_struct.primary_analysis);
-session.roilist.save2disk
+session.roilist.save2disk(session.dir_struct.primary_analysis)
 %% 4.1.4 FWHM analysis figure generation
 analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
 
@@ -75,7 +75,7 @@ analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax
 session.polarcluster = analysis_clusterpolar_contour(session.polarcluster, session.roilist);
 %% 5.4 Polar Plot of Contours
 analysis_clusterpolar_polarplot(session.polarcluster, session.roilist, session.dir_struct.figures_polarcluster);
-session.roilist.save2disk();
+session.roilist.save2disk(session.dir_struct.primary_analysis);
 % 5.5 save polar cluster
 polarcluster = session.polarcluster;
 save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcluster");
@@ -104,6 +104,6 @@ session.roilist.save2disk
 util_checkstack(session.radon_analysis.radon_result.events(4).irtd)
 
 %% 7. ROI Setup
-setup_rois(session.roilist, twophoton_processed);
+setup_rois(session.roilist, twophoton_processed,session.dir_struct.primary_analysis);
 %% 7.1 ROI Setup verification figures (Manual ROIs)
 setup_rois_makefig(session.roilist, twophoton_processed.ch1, twophoton_processed.ch2, session.dir_struct.figures_roi);

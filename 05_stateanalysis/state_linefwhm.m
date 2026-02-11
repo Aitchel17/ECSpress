@@ -174,47 +174,49 @@ classdef state_linefwhm < handle
                 fname = sidx_fnames{sidx};
                 indices = obj.state_idx.(fname); % Nx2 matrix
                 nbouts = size(indices, 1);
-                onset = round((indices(1, 2) - indices(1, 1))/2);
+                if ~isempty(indices)
+                    onset = round((indices(1, 2) - indices(1, 1))/2);
 
-                for b = 1:nbouts % per bout
-                    start_i = indices(b, 1);
-                    end_i   = indices(b, 2);
-
-                    % Calculate center point (transition point)
-                    center_i = round((start_i + end_i) / 2);
-                    duration = (end_i - start_i) / obj.param.fs;
-
-                    % Store Metadata
-                    state_name(row_counter) = fname;
-                    bout_idx(row_counter) = b;
-                    bout_duration(row_counter) = duration;
-                    total_bout(row_counter) = nbouts;
-                    transition_point(row_counter) = center_i;
-
-                    % Split data at center
-                    data(row_counter) = {data1d(center_i-onset:center_i+onset)};
-                    pre_seg = data1d(center_i-onset:center_i);
-                    post_seg = data1d(center_i:center_i+onset);
-
-                    % BEFORE transition statistics
-                    pre_mean(row_counter) = mean(pre_seg, 'omitnan');
-                    pre_median(row_counter) = median(pre_seg, 'omitnan');
-                    pre_var(row_counter) = var(pre_seg, 'omitnan');
-
-                    qs_before = quantile(pre_seg, [0.25, 0.75]);
-                    pre_q1(row_counter) = qs_before(1);
-                    pre_q3(row_counter) = qs_before(2);
-
-                    % AFTER transition statistics
-                    post_mean(row_counter) = mean(post_seg, 'omitnan');
-                    post_median(row_counter) = median(post_seg, 'omitnan');
-                    post_var(row_counter) = var(post_seg, 'omitnan');
-
-                    qs_after = quantile(post_seg, [0.25, 0.75]);
-                    post_q1(row_counter) = qs_after(1);
-                    post_q3(row_counter) = qs_after(2);
-
-                    row_counter = row_counter + 1;
+                    for b = 1:nbouts % per bout
+                        start_i = indices(b, 1);
+                        end_i   = indices(b, 2);
+    
+                        % Calculate center point (transition point)
+                        center_i = round((start_i + end_i) / 2);
+                        duration = (end_i - start_i) / obj.param.fs;
+    
+                        % Store Metadata
+                        state_name(row_counter) = fname;
+                        bout_idx(row_counter) = b;
+                        bout_duration(row_counter) = duration;
+                        total_bout(row_counter) = nbouts;
+                        transition_point(row_counter) = center_i;
+    
+                        % Split data at center
+                        data(row_counter) = {data1d(center_i-onset:center_i+onset)};
+                        pre_seg = data1d(center_i-onset:center_i);
+                        post_seg = data1d(center_i:center_i+onset);
+    
+                        % BEFORE transition statistics
+                        pre_mean(row_counter) = mean(pre_seg, 'omitnan');
+                        pre_median(row_counter) = median(pre_seg, 'omitnan');
+                        pre_var(row_counter) = var(pre_seg, 'omitnan');
+    
+                        qs_before = quantile(pre_seg, [0.25, 0.75]);
+                        pre_q1(row_counter) = qs_before(1);
+                        pre_q3(row_counter) = qs_before(2);
+    
+                        % AFTER transition statistics
+                        post_mean(row_counter) = mean(post_seg, 'omitnan');
+                        post_median(row_counter) = median(post_seg, 'omitnan');
+                        post_var(row_counter) = var(post_seg, 'omitnan');
+    
+                        qs_after = quantile(post_seg, [0.25, 0.75]);
+                        post_q1(row_counter) = qs_after(1);
+                        post_q3(row_counter) = qs_after(2);
+    
+                        row_counter = row_counter + 1;
+                    end
                 end
             end
 

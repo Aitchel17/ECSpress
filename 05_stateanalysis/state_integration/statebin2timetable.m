@@ -10,15 +10,19 @@ function time_table = statebin2timetable(varargin)
 
     nbin = length(sorted_bintable);
     nbin_col = 1;
-    time_table = sorted_bintable(1,:);
-
-    for nidx = 2:nbin
-        if time_table(nbin_col,2) == sorted_bintable(nidx,1)
-            time_table(nbin_col,2) = sorted_bintable(nidx,2);
-        else
-            nbin_col = nbin_col+1;
-            time_table(nbin_col,:) = sorted_bintable(nidx,:);
+    if ~isempty(sorted_bintable)
+        time_table = sorted_bintable(1,:);
+    
+        for nidx = 2:nbin
+            if time_table(nbin_col,2) == sorted_bintable(nidx,1)
+                time_table(nbin_col,2) = sorted_bintable(nidx,2);
+            else
+                nbin_col = nbin_col+1;
+                time_table(nbin_col,:) = sorted_bintable(nidx,:);
+            end
         end
+    else
+        time_table = [];
     end
 end
 

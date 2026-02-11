@@ -1,4 +1,4 @@
-function setup_rois(roilist, twophoton_processed)
+function setup_rois(roilist, twophoton_processed,primary_path)
 % SETUP_ROIS Defines the standard set of manual ROIs for the experiment.
 %   Establishes a hierarchy of manual ROIs with copy/modify logic.
 %   Prompts user for channel selection when modifying.
@@ -23,7 +23,7 @@ process_roi_step(roilist, twophoton_processed, 'manual_dipin', '', 'line', 1);
 process_roi_step(roilist, twophoton_processed, 'manual_dipout', '', 'line', 2);
 
 % Save
-roilist.save2disk();
+roilist.save2disk(primary_path);
 
 end
 

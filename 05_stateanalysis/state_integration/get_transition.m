@@ -1,6 +1,13 @@
 function transition_table = get_transition(transition_window,pre_timetable,post_timetable)
 
 % 1. Filter bouts by duration
+
+if isempty(pre_timetable) || isempty(post_timetable)
+    transition_table = [];
+    return
+end
+
+
 pre_valid = pre_timetable( (pre_timetable(:,2) - pre_timetable(:,1)) >= transition_window, :);
 post_valid = post_timetable( (post_timetable(:,2) - post_timetable(:,1)) >= transition_window, :);
 
