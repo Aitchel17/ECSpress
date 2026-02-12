@@ -16,28 +16,24 @@ function fwhm_table = aggregate_fwhm(ref_table)
         
         % 1. Get Session Info
         session_dir = ref_table.Directory{i};
-        mouse_id = ref_table.MouseID(i); 
-        date = ref_table.Date(i);
-        session_id = ref_table.SessionID(i);
+        mouse_id = ref_table.MouseID{i}; 
+        date = ref_table.Date{i};
+        session_id = ref_table.SessionID{i};
         
         % Metadata (Handle potential missing values/types)
-        vessel_id = string(ref_table.VesselID(i));
-        depth = ref_table.Depth(i);
-        if iscell(depth), depth = str2double(depth); end 
-        
+        vessel_id = ref_table.VesselID{i};
+        depth = ref_table.Depth{i};
+
         % File Names from Table
-        p_file_name = ref_table.LineFWHM(i);     % e.g., 'paxfwhm.mat'
-        s_file_name = ref_table.PaxFWHM_state(i); % e.g., 'paxfwhm_state.mat'
+        p_file_name = ref_table.LineFWHM{i};     % e.g., 'paxfwhm.mat'
+        s_file_name = ref_table.PaxFWHM_state{i}; % e.g., 'paxfwhm_state.mat'
         
         % Construct Full Paths (handle string/cell)
-        if iscell(p_file_name), p_file_name = p_file_name{1}; end
-        if iscell(s_file_name), s_file_name = s_file_name{1}; end
-        if iscell(session_dir), session_dir = session_dir{1}; end
         
         p_path = fullfile(session_dir, "primary_analysis",p_file_name);
         s_path = fullfile(session_dir,"state_analysis" ,s_file_name);
         
-        if ~isfile(p_path)
+        if ~isfile(p_path) 
             continue; 
         end
 
@@ -47,49 +43,44 @@ function fwhm_table = aggregate_fwhm(ref_table)
         data_struct(row_cnt).MouseID = string(mouse_id);
         data_struct(row_cnt).Date = string(date);
         data_struct(row_cnt).SessionID = string(session_id);
-        data_struct(row_cnt).VesselID = vessel_id;
-        data_struct(row_cnt).Depth = depth;
+        data_struct(row_cnt).VesselID = string(vessel_id);
+        data_struct(row_cnt).Depth = string(depth);
         data_struct(row_cnt).Directory = string(session_dir);
         
         % --- 3. Load Primary Analysis (Time Series) ---
-        try
-            loaded_p = load(p_path, 'line_fwhm');
-            if isfield(loaded_p, 'line_fwhm')
-                obj_p = loaded_p.line_fwhm; 
-                
-                % Extract Time Series (Always present)
-                data_struct(row_cnt).Time = {obj_p.t_axis};
-                
-                % Primary Thickness
-                if isfield(obj_p, 'thickness') && ~isempty(obj_p.thickness)
-                    data_struct(row_cnt).Primary_Thickness = obj_p.thickness;
-                else
-                    data_struct(row_cnt).Primary_Thickness = struct();
-                end
-                
-                % Primary Displacement
-                if isfield(obj_p, 'displacement') && ~isempty(obj_p.displacement)
-                    data_struct(row_cnt).Primary_Displacement = obj_p.displacement;
-                else
-                    data_struct(row_cnt).Primary_Displacement = struct();
-                end
-                
-                % Primary Index (Boundaries)
-                if isfield(obj_p, 'idx') && ~isempty(obj_p.idx)
-                    data_struct(row_cnt).Primary_Idx = obj_p.idx;
-                else
-                    data_struct(row_cnt).Primary_Idx = struct();
-                end
-
+        loaded_p = load(p_path, 'line_fwhm');
+        if isfield(loaded_p, 'line_fwhm')
+            obj_p = loaded_p.line_fwhm; 
+            
+            % Extract Time Series (Always present)
+            data_struct(row_cnt).Time = obj_p.t_axis;
+            
+            % Primary Thickness
+            if isprop(obj_p, 'thickness') && ~isempty(obj_p.thickness)
+                data_struct(row_cnt).Primary_Thickness = obj_p.thickness;
             else
-                 warning('Variable line_fwhm not found in %s', p_path);
-                 data_struct(row_cnt).Time = {[]};
+                data_struct(row_cnt).Primary_Thickness = struct();
             end
-             
-        catch ME
-            warning('Failed to load primary analysis for %s: %s', session_dir, ME.message);
-            data_struct(row_cnt).Time = {[]};
+            
+            % Primary Displacement
+            if isprop(obj_p, 'displacement') && ~isempty(obj_p.displacement)
+                data_struct(row_cnt).Primary_Displacement = obj_p.displacement;
+            else
+                data_struct(row_cnt).Primary_Displacement = struct();
+            end
+            
+            % Primary Index (Boundaries)
+            if isprop(obj_p, 'idx') && ~isempty(obj_p.idx)
+                data_struct(row_cnt).Primary_Idx = obj_p.idx;
+            else
+                data_struct(row_cnt).Primary_Idx = struct();
+            end
+
+        else
+             warning('Variable line_fwhm not found in %s', p_path);
+             data_struct(row_cnt).Time = {[]};
         end
+
         
         % --- 4. Load State Analysis (Subdivided Info) ---
         % Extract EVERYTHING from State Analysis as requested
