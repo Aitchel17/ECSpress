@@ -39,18 +39,18 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
     cols.StateAnalysis = {};
     
     % Primary Analysis Files
-    cols.RadonResult = {};
-    cols.RoiList = {};
-    cols.PolarCluster = {};
-    cols.LineFWHM = {};
+    cols.Primary_RadonResult = {};
+    cols.Primary_RoiList = {};
+    cols.Primary_PolarCluster = {};
+    cols.Primary_paxFWHM = {};
     
     % Peripheral Files
-    cols.AnalogAnalysis = {};
-    cols.BehaviorAnalysis = {};
-    cols.SleepScore = {};
+    cols.Peripheral_AnalogAnalysis = {};
+    cols.Peripheral_BehaviorAnalysis = {};
+    cols.Peripheral_SleepScore = {};
     
     % State Analysis Files
-    cols.PaxFWHM_state = {};
+    cols.State_PaxFWHM = {};
     
     for mouse_idx = 1:numel(exp_dir)
         current.mouseid = exp_dir(mouse_idx).name;
@@ -143,18 +143,18 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
                 end
     
                 % Primary Analysis Files
-                cols.RadonResult{end+1,1} = found_primary.RadonResult;
-                cols.RoiList{end+1,1} = found_primary.RoiList;
-                cols.PolarCluster{end+1,1} = found_primary.PolarCluster;
-                cols.LineFWHM{end+1,1} = found_primary.PaxFWHM; % Maps 'PaxFWHM' to 'LineFWHM' column
+                cols.Primary_RadonResult{end+1,1} = found_primary.RadonResult;
+                cols.Primary_RoiList{end+1,1} = found_primary.RoiList;
+                cols.Primary_PolarCluster{end+1,1} = found_primary.PolarCluster;
+                cols.Primary_paxFWHM{end+1,1} = found_primary.PaxFWHM; % Maps 'PaxFWHM' to 'LineFWHM' column
     
                 % Peripheral Files
-                cols.AnalogAnalysis{end+1,1} = found_peri.AnalogAnalysis;
-                cols.BehaviorAnalysis{end+1,1} = found_peri.BehaviorAnalysis;
-                cols.SleepScore{end+1,1} = found_peri.SleepScore;
+                cols.Peripheral_AnalogAnalysis{end+1,1} = found_peri.AnalogAnalysis;
+                cols.Peripheral_BehaviorAnalysis{end+1,1} = found_peri.BehaviorAnalysis;
+                cols.Peripheral_SleepScore{end+1,1} = found_peri.SleepScore;
     
                 % State Analysis Files
-                cols.PaxFWHM_state{end+1,1} = found_state.paxfwhm_state;
+                cols.State_PaxFWHM{end+1,1} = found_state.paxfwhm_state;
             end
         end
     end

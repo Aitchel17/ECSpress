@@ -1,124 +1,116 @@
 clc, clear
-analysis_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis';
+secondary_analysis_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis';
 experiment_folder = 'G:\tmp\00_igkl';
 
-% metadata table filtering
-% load table
-[~, tmp.exp_name] = fileparts(experiment_folder);
-save_exppath = fullfile(analysis_path,tmp.exp_name);
-tmp.dirtable_dir = fullfile(save_exppath,strcat(tmp.exp_name,'_dirtable.xlsx'));
-tmp.opts = detectImportOptions(tmp.dirtable_dir, 'Sheet', 'reference');
-ref_table = readtable(tmp.dirtable_dir, tmp.opts);
+% 1. Initialize TableManager
+% Initialize Manager (Loads Excel automatically)
+mtable_FWHM = tableManager(experiment_folder, secondary_analysis_path);
+%% Table filtering
+mtable_FWHM.filter_refTable("Primary_paxFWHM","paxfwhm");
+%%
+mtable_FWHM.filter_refTable("State_PaxFWHM","paxfwhm");
+%%
+mtable_FWHM.parseDepths();
+%%
+mtable_FWHM.filter_refTable("DepthLayer","L1");
+%%
+mtable_FWHM.filter_refTable("VesselID","PA");
+%% 2. Aggregate Data to Vessels
+% Loads FWHM data from .mat files and populates Vessel objects
+mtable_FWHM.primaryTable = mtable_FWHM.aggregateData("Primary_paxFWHM");
+mtable_FWHM.stateTable = mtable_FWHM.aggregateData("State_PaxFWHM");
 
-% Filter for Sleep Sessions
-tmp.rows = ref_table.LineFWHM == "paxfwhm.mat";
-fwhm_table = ref_table(tmp.rows, :);
-tmp.rows = fwhm_table.SessionType == "sleep";
-sleep_fwhm_table = fwhm_table(tmp.rows,:);
+%% Create Vessel Objects
+Vessels = mtable_FWHM.aggregateVessels();
+%%
+v = Vessels(:,6)
+%%
+session_state = v.StateData(1);
+transition_table = session_state.transition.thickness_bv;
+%%
+% Use the averaging function
+averaged_transitions = average_transition_table(transition_table);
+disp(averaged_transitions)
 
-% 1. Aggregate FWHM Data
-% Helper function located in 00_mapdirectorystruct
-disp('Aggregating FWHM Data...');
-master_fwhm_table = aggregate_fwhm(sleep_fwhm_table);
-% Amend table for depth logic
-% 1. Parse Depth Logic securely
-raw_depth = master_fwhm_table.Depth;
-numeric_depth = zeros(height(master_fwhm_table), 1);
-for i = 1:height(master_fwhm_table)
-    d_val = raw_depth(i);
-    tmp_str = strsplit(d_val,'um');
-    tmp_str = tmp_str(1);
-    numeric_depth(i) = str2double(tmp_str);  
+
+%% 3. Run Analysis
+fprintf('Running average analysis on %d vessels...\n', numel(Vessels));
+for v = 1:numel(Vessels)
+    Vessels(v).computeAverage();
 end
-depth_logic = numeric_depth > 70;
-depth_name = ["L1", "L2"];
-depthn_array = depth_name(depth_logic+1);
-master_fwhm_table.Depthstate = depthn_array';
-
-save(fullfile(save_exppath,"sleep_paxfwhm_table.mat"),"master_fwhm_table")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-%% 2. Split into L1 and L2 Tables
-% L1: <= 70um (Shallow)
-% L2: > 70um (Deep)
-L1_logic = master_fwhm_table.NumericDepth <= 70;
-L2_logic = master_fwhm_table.NumericDepth > 70;
-
-L1_data = master_fwhm_table(L1_logic, :);
-L2_data = master_fwhm_table(L2_logic, :);
-
-disp(['L1 Sets: ', num2str(height(L1_data))]);
-disp(['L2 Sets: ', num2str(height(L2_data))]);
-
-%% 3. Group and Aggregate (Average Multi-Session Vessels)
-disp('Grouping L1 Vessels...');
-L1_Vessels_Struct = group_vessels(L1_data);
-
-disp('Grouping L2 Vessels...');
-L2_Vessels_Struct = group_vessels(L2_data);
-
-
-%% Combine the same vessel
-target_table = L1_Vessels_Struct(2).RawTable;
-trans_logic = target_table.State_Transition(2).thickness_bv.state_name == "ra_trans";
-data = target_table.State_Transition(2).thickness_bv(trans_logic,:);
 %%
+% Select which transition state to plot (1 = first state, 2 = second state, etc.)
+row_idx = 1;
 
+figure()
 
+% Collect mean_data(row_idx,:) from all vessels
+all_vessel_traces_bv = [];
+all_vessel_traces_pvs = [];
+all_vessel_traces_eps = [];
 
+for v_idx = 1:numel(Vessels)
+    if ~isempty(Vessels(v_idx).AverageData) && isfield(Vessels(v_idx).AverageData, 'thickness_bv')
+        avg_table_pvs = Vessels(v_idx).AverageData.thickness_totalpvs;
+        avg_table_bv = Vessels(v_idx).AverageData.thickness_bv;
+        avg_table_eps = Vessels(v_idx).AverageData.thickness_eps;
+        % Check if row_idx exists in this vessel's table
+        if height(avg_table_pvs) >= row_idx
+            trace_bv = avg_table_bv.mean_data(row_idx,:);
+            trace_pvs = avg_table_pvs.mean_data(row_idx,:);
+            trace_eps = avg_table_eps.mean_data(row_idx,:);
 
-%%
-function vessel_struct = group_vessels(input_table)
-    unique_mice = unique(lower(input_table.MouseID));
-    vessel_struct = struct([]);
-    count = 0;
-    
-    for m = 1:numel(unique_mice)
-        mid = unique_mice(m);
-        m_rows = input_table(lower(input_table.MouseID) == mid, :);
-        
-        unique_vids = unique(m_rows.VesselID);
-        for v = 1:numel(unique_vids)
-            vid = unique_vids(v);
-            v_rows = m_rows(m_rows.VesselID == vid, :);
-            
-            count = count + 1;
-            vessel_struct(count).MouseID = mid;
-            vessel_struct(count).VesselID = vid;
-            vessel_struct(count).AvgDepth = mean(v_rows.NumericDepth);
-            vessel_struct(count).SessionCount = height(v_rows);
-            vessel_struct(count).RawTable = v_rows; % Store all sessions for this vessel
-            
-            % Setup for Averaging (Placeholder for now)
-            % Here you would average time series or transition metrics
-            % e.g. vessel_struct(count).AvgTransition = ...
+            all_vessel_traces_bv = [all_vessel_traces_bv; trace_bv];
+            all_vessel_traces_pvs = [all_vessel_traces_pvs; trace_pvs];
+            all_vessel_traces_eps = [all_vessel_traces_eps; trace_eps];
+
         end
     end
+end
+
+% Get the state name from first vessel for title
+state_name = Vessels(1).AverageData.thickness_totalpvs.state_name(row_idx);
+
+% Compute grand average
+grand_average_bv = mean(all_vessel_traces_bv, 1, 'omitnan');
+grand_average_pvs = mean(all_vessel_traces_pvs, 1, 'omitnan');
+grand_average_eps = mean(all_vessel_traces_eps, 1, 'omitnan');
+
+% Plot
+%plot(grand_average_bv, 'LineWidth', 2, Color = 'r')
+hold on
+%plot(grand_average_pvs, 'LineWidth', 2, Color = 'g')
+ plot(grand_average_eps, 'LineWidth', 2)
+
+
+% Optionally plot individual vessels in gray
+for i = 1:size(all_vessel_traces_bv, 1)
+    %plot(all_vessel_traces_bv(i,:), 'Color', [0.9 0.7 0.7])
+    %plot(all_vessel_traces_pvs(i,:), 'Color', [0.7 0.9 0.7])
+    plot(all_vessel_traces_eps(i,:), 'Color', [0.7 0.7 0.9])
+end
+
+xline(76, '--r', 'LineWidth', 1.5)
+xlim([0 150])
+xlabel('Data point')
+ylabel('Thickness (pixel)')
+title(sprintf('Average across %d Vessels - %s', size(all_vessel_traces_bv, 1), state_name))
+% legend({'Grand Average', 'Individual Vessels'}, 'Location', 'best')
+hold off
+%%
+
+
+
+
+
+
+%%
+Vessels(1).AverageData.thickness_bv.mean_data(2,:)
+
+
+%%
+% Inspect results
+if ~isempty(Vessels)
+    disp('First Vessel Average Data:');
+    disp(Vessels(1).AverageData);
 end
