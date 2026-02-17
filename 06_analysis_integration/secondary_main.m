@@ -13,7 +13,7 @@ mtable_FWHMsleep.parseParams();
 mtable_FWHMsleep.aggregateData("State_PaxFWHM");
 nestname_arr = ["state_summary","transition","band_decomposition","powerdensity","peak_trough"];
 mtable_FWHMsleep.addnest2subtable(nestname_arr)
-%% save (except subtables, auto reconstruct)
+% save (except subtables, auto reconstruct)
 mtable_FWHMsleep.save2disk("mtable_FWHMsleep.mat")
 
 

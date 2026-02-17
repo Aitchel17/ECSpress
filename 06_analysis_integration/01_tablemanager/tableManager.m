@@ -17,7 +17,7 @@ classdef tableManager < handle
             % Constructor: Initializes paths and loads the Excel reference table         
             obj.masterdirtable_path = masterdirtable_path;
             obj.refTable = obj.loadExcel();
-            obj.action_log.key_names = ["MouseID","Date","VesselID","Depth"];
+            obj.action_log.key_names = ["MouseID","Date","VesselID","NumericDepth","NumericResolution"];
         end
         
         function refTable = loadExcel(obj)
@@ -97,11 +97,11 @@ classdef tableManager < handle
             % 3. Loop through sessions
             for i = 1:n_sessions
                 % -- Key Metadata --
-                data_struct(i).MouseID = string(refTable.MouseID{i});
-                data_struct(i).Date = string(refTable.Date{i});
-                data_struct(i).VesselID = string(refTable.VesselID{i});
-                data_struct(i).Depth = refTable.NumericDepth(i);
-                
+                key_names = obj.action_log.key_names;
+                for key_idx = 1:numel(key_names)
+                    target_col = refTable.(key_names{key_idx});
+                    data_struct(i).(key_names{key_idx}) = target_col(i);
+                end
                 % -- File Loading --
                 target_file = refTable.(column_name){i};
                 % Check if parent folder column exists and get folder name
