@@ -25,8 +25,8 @@ function fwhm_table = aggregate_fwhm(ref_table)
         depth = ref_table.Depth{i};
 
         % File Names from Table
-        p_file_name = ref_table.LineFWHM{i};     % e.g., 'paxfwhm.mat'
-        s_file_name = ref_table.PaxFWHM_state{i}; % e.g., 'paxfwhm_state.mat'
+        p_file_name = ref_table.Primary_paxFWHM{i};     % e.g., 'paxfwhm.mat'
+        s_file_name = ref_table.State_PaxFWHM{i}; % e.g., 'paxfwhm_state.mat'
         
         % Construct Full Paths (handle string/cell)
         

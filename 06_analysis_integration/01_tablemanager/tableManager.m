@@ -4,42 +4,37 @@ classdef tableManager < handle
     % and organizing data by vessel/depth groups.
     
     properties
-        secondary_analysisPath        % Base path for analysis results
-        experimentFolder    % Path to the experiment folder
+        masterdirtable_path        % Base path for analysis results
         refTable            % The raw reference table loaded from Excel
-        primaryTable         % The aggregated data table (with loaded .mat data)
-        stateTable
+        aggregatedTable
         subTables
         depth_thr = 70 % 70 um as boundary between L1 and L2/3
-        key_names = {'MouseID', 'Date', 'VesselID', 'Depth'};
+        action_log
     end
     
     methods
-        function obj = tableManager(experiment_folder, analysis_base_path)
+        function obj = tableManager(masterdirtable_path)
             % Constructor: Initializes paths and loads the Excel reference table         
-            obj.experimentFolder = experiment_folder;
-            obj.secondary_analysisPath = analysis_base_path;
+            obj.masterdirtable_path = masterdirtable_path;
             obj.refTable = obj.loadExcel();
+            obj.action_log.key_names = ["MouseID","Date","VesselID","Depth"];
         end
         
         function refTable = loadExcel(obj)
             % Loads the reference table from the standard directory structure
-            [~, exp_name] = fileparts(obj.experimentFolder);
-            save_exppath = fullfile(obj.secondary_analysisPath, exp_name);
-            dirtable_path = fullfile(save_exppath, strcat(exp_name, '_dirtable.xlsx'));
             
-            if ~isfile(dirtable_path)
+            if ~isfile(obj.masterdirtable_path)
                 error('Directory table not found: %s', dirtable_path);
             end
             
-            opts = detectImportOptions(dirtable_path, 'Sheet', 'reference');
-            refTable = readtable(dirtable_path, opts);
+            opts = detectImportOptions(obj.masterdirtable_path, 'Sheet', 'reference');
+            refTable = readtable(obj.masterdirtable_path, opts);
             fprintf('Loaded reference table with %d rows.\n', height(obj.refTable));
         end
 
         function withkey_table = addkey(obj,data_table)
             % Merge with key metadata columns
-            key_cols = obj.stateTable(:, obj.key_names);
+            key_cols = obj.stateTable(:, obj.action_log.key_names);
             withkey_table = [key_cols, data_table];
         end
         
@@ -51,15 +46,26 @@ classdef tableManager < handle
             rows = contains(target_data, pattern, 'IgnoreCase', true);
             obj.refTable = obj.refTable(rows, :);
             fprintf('Filtered reference table with %d rows.\n', height(obj.refTable));
+            obj.action_log.(column) = pattern; 
+        end
+
+
+        function addnest2subtable(obj, nestname_arr)
+            key_columns = obj.aggregatedTable(:, obj.action_log.key_names);
+            nesttable = obj.aggregatedTable;
+            for name_idx = 1:numel(nestname_arr)
+                obj.subTables.(nestname_arr(name_idx)) = explode_nest(nesttable.(nestname_arr(name_idx)),key_columns);
+            end
+            obj.action_log.nestname_arr = nestname_arr;
         end
         
-        function data_table = aggregateData(obj, column_name)
+        function aggregateData(obj, column_name)
             % Aggregates data from individual session files based on a target column
             % column_name: The column in refTable containing filenames (e.g., 'Primary_LineFWHM')
             % returns: A table with key metadata and the loaded data
             
             refTable = obj.refTable;
-            if isempty(refTable)
+            if isempty(obj.refTable)
                 warning('RefTable is empty. Cannot aggregate.');
                 data_table = table();
                 return;
@@ -122,6 +128,8 @@ classdef tableManager < handle
             
             % 4. Convert to Table
             data_table = struct2table(data_struct, 'AsArray', true);
+            obj.aggregatedTable = data_table;
+            obj.action_log.aggregatedTable = column_name;
             fprintf('Aggregation complete. Returned table with %d rows.\n', height(data_table));
         end
         
@@ -193,6 +201,25 @@ classdef tableManager < handle
                 
                 vessels(key_order) = newVessel;
             end
+        end
+
+        function save2disk(obj,savename)
+            tableManager = obj;
+            tableManager.subTables = [];
+            savedir = fileparts(obj.masterdirtable_path);
+            savepath = fullfile(savedir, savename);
+            save(savepath,"tableManager")
+        end
+        
+    end
+    methods (Static)
+        function loaded_table = load_recon(masterDirTable_path,mtable_name)
+            load_folderdir = fileparts(masterDirTable_path);
+            load_filedir = fullfile(load_folderdir, mtable_name);
+            load_str = load(load_filedir);
+            nestname_arr = load_str.tableManager.action_log.nestname_arr;
+            load_str.tableManager.addnest2subtable(nestname_arr)
+            loaded_table = load_str.tableManager; 
         end
     end
 end

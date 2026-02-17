@@ -1,4 +1,4 @@
-function blown_table = explode_structarray(struct_array, key_table)
+function blown_table = explode_nest(struct_array, key_table)
     % Explode nested struct array and bring things into table
     %
     % Inputs:
@@ -29,9 +29,9 @@ function blown_table = explode_structarray(struct_array, key_table)
             % Convert to table if struct
             if isstruct(target_cell)
                 fragment_table = struct2table(target_cell);
-            else istable(target_cell)
-                fragment_table = target_cell;
+            else istable(target_cell);
                 
+                fragment_table = target_cell;
             end
             
             % Add metadata columns to each row
