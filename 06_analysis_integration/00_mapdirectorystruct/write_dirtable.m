@@ -47,7 +47,7 @@ function load_and_update_tables(dirstruct_table, dirtable_dir)
         end
         
         % Define Columns
-        meta_cols = {'VesselID', 'Power', 'Depth', 'Notes', 'Wavelength', 'xlocation', 'ylocation', 'zlocation', 'PercentPower'};
+        meta_cols = {'VesselID', 'Power', 'Depth', 'Notes', 'Wavelength', 'xlocation', 'ylocation', 'zlocation', 'PercentPower', 'Zoom', 'Resolution'};
         all_cols = dirstruct_table.Properties.VariableNames;
         file_cols = setdiff(all_cols, meta_cols);
 

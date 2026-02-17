@@ -36,6 +36,7 @@ parsed_struct.zoom = [];
 parsed_struct.objx = [];
 parsed_struct.objy = [];
 parsed_struct.objz = [];
+parsed_struct.resolution = [];
 
 if isempty(comment_str)
     return;
@@ -99,10 +100,8 @@ if ~isempty(v_match)
 end
 %% Zoom
 parsed_struct.zoom = mdf.info.zoom;
-%% Zoom
-parsed_struct.zoom = mdf.info.zoom;
-%% Zoom
-parsed_struct.zoom = mdf.info.zoom;
+%% resolution
+parsed_struct.resolution = mdf.info.objpix;
 %% Objective lens position
 parsed_struct.objx = mdf.info.objx;
 parsed_struct.objy = mdf.info.objy;

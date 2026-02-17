@@ -133,20 +133,28 @@ classdef tableManager < handle
             fprintf('Aggregation complete. Returned table with %d rows.\n', height(data_table));
         end
         
-        function parseDepths(obj)
+        function parseParams(obj)
             % Parses 'Depth' column to numeric 'NumericDepth'
             refTable = obj.refTable;
+            n_session = height(refTable);
+            % depth init
             raw_depth = refTable.Depth;
-            numeric_depth = zeros(height(refTable), 1);
+            numeric_depth = zeros(n_session, 1);
+            % resolution init
+            raw_resolution = refTable.Resolution;
+            numeric_resolution = zeros(n_session,1);
             
-            for i = 1:height(refTable)
-                d_val = raw_depth{i};
+            for sidx = 1:n_session
+                d_val = raw_depth{sidx};
                 tmp_str = strsplit(d_val, "um");
-                numeric_depth(i) = str2double(tmp_str(1));                
+                numeric_depth(sidx) = str2double(tmp_str(1));   
+                r_val = raw_resolution{sidx};
+                tmp_str = strsplit(r_val, "µm");
+                numeric_resolution(sidx) = str2double(tmp_str(1));
             end
             
             refTable.NumericDepth = numeric_depth;
-            
+            refTable.NumericResolution = numeric_resolution;
             % Assign DepthState label
             depth_logic = numeric_depth > obj.depth_thr;
             depth_name = ["L1", "L2"];
@@ -154,6 +162,8 @@ classdef tableManager < handle
             refTable.DepthLayer = depth_name(depth_logic + 1)';
             obj.refTable = refTable;
             fprintf('Depths parsed. Threshold used: %d um.\n', obj.depth_thr);
+            fprintf('Resolution parsed. \n');
+
         end
 
         

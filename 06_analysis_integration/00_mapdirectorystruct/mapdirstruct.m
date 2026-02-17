@@ -17,6 +17,8 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
     
     % Metadata
     cols.VesselID = {};
+    cols.Zoom = {};
+    cols.Resolution = {};
     cols.Power = {};
     cols.Depth = {};
     cols.Notes = {};
@@ -136,6 +138,8 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
                 cols.Whisker{end+1,1} = session_data.Whisker;
                 cols.Peripheral{end+1,1} = session_data.Peripheral;
                 cols.PrimaryAnalysis{end+1,1} = session_data.PrimaryAnalysis;
+                cols.Zoom{end+1,1} = session_data.zoom;
+                cols.Resolution{end+1,1} = session_data.resolution; 
                 if isfield(session_data, 'State_analysis')
                     cols.StateAnalysis{end+1,1} = session_data.State_analysis;
                 else

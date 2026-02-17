@@ -30,7 +30,7 @@ stateanalysis_map = {'paxfwhm_state', 'paxfwhm_state.mat'};
 % Go down to exp_dir which contains mouse folder, ex.hql071 ...
 dirstruct_table = mapdirstruct(experiment_folder, primary_map,peripheral_map,stateanalysis_map);
 write_dirtable(dirstruct_table, dirtable_dir);
-%% Read reference sheet
+%% Read reference sheet (Example)
 opts = detectImportOptions(dirtable_dir, 'Sheet', 'reference');
 ref_table = readtable(dirtable_dir, opts);
 % Read state analysis
