@@ -2,43 +2,49 @@
 clc, clear
 masterDirTable_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis\00_igkl\00_igkl_dirtable.xlsx';
 mtable_FWHMsleep = tableManager.load_recon(masterDirTable_path, "mtable_FWHMsleep.mat");
-summary_table = mtable_FWHMsleep.subTables.state_summary; % load state summary
-% Filter table
-% logic generation
-tmp.vessellogic = contains(summary_table.VesselID, "PA", 'IgnoreCase', true); % Artery filter
-tmp.depthlogic = summary_table.NumericDepth <70; % L1 filter
-tmp.lengthlogic = summary_table.bout_duration > 30; % 30 seconds sleep filter
-% tmp.dtypelogic = summary_table.DataType == "thickness_bv";
-combinedlogic = all(table2array(struct2table(tmp)), 2); % Dynamically Combine all logic fields in tmp struct 
-L1pa_summarytable = summary_table(combinedlogic,:); % apply logic
+mtable_FWHMsleep.analysis_table = mtable_FWHMsleep.subTables.state_summary; % State summary to be target table
+%%
+mtable_FWHMsleep.filtLogics = [];
+mtable_FWHMsleep.filtLogics.vType = contains(mtable_FWHMsleep.analysis_table.VesselID, "PA", 'IgnoreCase', true); % Artery filter
+mtable_FWHMsleep.filtLogics.depth = mtable_FWHMsleep.analysis_table.NumericDepth <70; % L1 filter
+mtable_FWHMsleep.filtLogics.bout_dur = mtable_FWHMsleep.analysis_table.bout_duration > 30; % 30 seconds sleep filter
+mtable_FWHMsleep.filtLogics.state = ismember(mtable_FWHMsleep.analysis_table.state_name,["awake","drowsy","nrem","rem"] );
+%mtable_FWHMsleep.filtLogics.dtype = mtable_FWHMsleep.analysis_table.DataType == "thickness_bv"; % target analysis: thickness_bv
+mtable_FWHMsleep.apply_filter
+%%
+data_colnames = {"raw_data"};
+numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var'};
+mtable_FWHMsleep.apply_resolution("NumericResolution",data_colnames,numeric_colnames);
+%%
+mtable_FWHMsleep.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
+mtable_FWHMsleep.addPrctilecol("raw_data","prctile_95", 95);
+mtable_FWHMsleep.addPrctilecol("raw_data","prctile_5",5);
+%%
+mtable_FWHMsleep.get_numericsummary
+%%
+ttable = mtable_FWHMsleep.numeric_tables.mean(mtable_FWHMsleep.numeric_tables.mean.DataType =="thickness_bv",:);
 
-% Need to calculate each raw_data last 50% and add column
-raw_last50_mean = zeros(height(L1pa_summarytable), 1);
-for i = 1:height(L1pa_summarytable)
-    trace = L1pa_summarytable.raw_data{i};
-    num_points = length(trace);
-    start_idx = floor(num_points * 0.25) + 1;
-    end_idx = floor(num_points * 0.75);
-    raw_last50_mean(i) = mean(trace(start_idx:end_idx), 'omitnan');
-end
-L1pa_summarytable.raw_last50_mean = raw_last50_mean;
 
 %%
 
-%% Match the unit
-numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var', 'raw_last50_mean'};
-for i = 1:length(numeric_colnames)
-L1pa_summarytable.(numeric_colnames{i}) = L1pa_summarytable.(numeric_colnames{i}) .* L1pa_summarytable.NumericResolution;
-end
-% Find numeric columns (excluding 'data' which needs special handling)
 
-sessAve_summaryTable = groupsummary(L1pa_summarytable, ["VesselID", "MouseID", "state_name"], "mean", numeric_colnames);
+%% Find numeric columns (excluding 'data' which needs special handling)
+sessAve_summaryTable = groupsummary(L1pa_summarytable, ["VesselID", "MouseID", "state_name","DataType"], "mean", numeric_colnames);
 
-% Reshape to wide format with states as columns
+%% Reshape to wide format with states as columns
 % Unstack the table to have states as columns for 'mean_raw_last50_mean'
+summary_struct = struct();
+dtype_names =  unique(sessAve_summaryTable.DataType);
+
+for dtype_idx = 1:numel(dtype_names)
+    target_table = sessAve_summaryTable(sessAve_summaryTable.DataType == dtype_names(dtype_idx),:);
+    summary_struct.(dtype_names(dtype_idx)) = unstack(target_table(:, {'VesselID', 'MouseID', 'state_name', 'mean_raw_last50_mean'}), 'mean_raw_last50_mean', 'state_name');
+end
+
+%%
 wide_summary = unstack(sessAve_summaryTable(:, {'VesselID', 'MouseID', 'state_name', 'mean_raw_last50_mean'}), 'mean_raw_last50_mean', 'state_name');
 
-% Calculate normalized values (relative to 'awake')
+%% Calculate normalized values (relative to 'awake')
 % Normalize by awake baseline
 if ismember('awake', wide_summary.Properties.VariableNames)
     norm_drowsy = wide_summary.drowsy   %./ wide_summary.awake;

@@ -10,9 +10,13 @@ classdef tableManager < handle
         subTables
         depth_thr = 70 % 70 um as boundary between L1 and L2/3
         action_log
+        analysis_table
+        filtered_table
+        filtLogics
+        numeric_tables
     end
     
-    methods
+    methods % Methods for generating First Normal form of analysis
         function obj = tableManager(masterdirtable_path)
             % Constructor: Initializes paths and loads the Excel reference table         
             obj.masterdirtable_path = masterdirtable_path;
@@ -220,9 +224,133 @@ classdef tableManager < handle
             savepath = fullfile(savedir, savename);
             save(savepath,"tableManager")
         end
-        
     end
-    methods (Static)
+    
+    methods % Methods for query and additional data column generation
+        function apply_filter(obj)
+           combinedlogic = all(table2array(struct2table(obj.filtLogics)), 2);
+           fprintf('Filtered %d from % d rows.\n', sum(combinedlogic), height(obj.analysis_table));
+           obj.filtered_table = obj.analysis_table(combinedlogic,:);
+           obj.action_log.resolution_applied = false;
+        end
+
+        function meanFrom2(obj,datacolName,NewcolName,start_fraction,end_fraction)
+            dlength = height(obj.filtered_table);
+            numeric_arrs = obj.filtered_table.(datacolName);
+            result_col = zeros(dlength,1);
+            for arr_idx = 1:dlength
+                numeric_arr = numeric_arrs{arr_idx};
+                arrlength = length(numeric_arr);
+                start_idx = floor(arrlength * start_fraction);
+                end_idx = floor(arrlength * end_fraction);
+                result_col(arr_idx) = mean(numeric_arr(start_idx:end_idx));
+            end
+
+            obj.filtered_table.(NewcolName) = result_col;
+
+            current_cols = string(obj.action_log.numeric_colnames);
+            chk_duplication = ismember(current_cols, string(NewcolName));
+            if ~any(chk_duplication)
+                obj.action_log.numeric_colnames = [current_cols, string(NewcolName)];
+            end
+        end
+ 
+        function addPrctilecol(obj,datacolName,NewcolName,percentile)
+            dlength = height(obj.filtered_table);
+            numeric_arrs = obj.filtered_table.(datacolName);
+            result_col = zeros(dlength,1);
+            for arr_idx = 1:dlength
+                numeric_arr = numeric_arrs{arr_idx};
+                result_col(arr_idx) = prctile(numeric_arr,percentile);  
+            end
+            obj.filtered_table.(NewcolName) = result_col;
+            
+            current_cols = string(obj.action_log.numeric_colnames);
+            chk_duplication = ismember(current_cols, string(NewcolName));
+            if ~any(chk_duplication)
+                obj.action_log.numeric_colnames = [current_cols, string(NewcolName)];
+            end        
+        end
+
+
+        function apply_resolution(obj,scale_colname,data_colnames,numeric_colnames)
+            % Applies resolution scaling (multiplication) to specified columns
+            if obj.action_log.resolution_applied
+                fprintf("Resolution already applied")
+            else
+                resolution_vec = obj.filtered_table.(scale_colname);
+                numeric_data = obj.filtered_table{:, numeric_colnames};
+                obj.filtered_table{:, numeric_colnames} = numeric_data .* resolution_vec;
+                % 2. Scale Data Columns (Cell arrays of vectors)
+                % Explicit loop over rows as requested
+                
+                for i = 1:numel(data_colnames)
+                    col_name = data_colnames{i};
+                    % Loop over rows
+                    current_col = obj.filtered_table.(col_name);
+                    for j = 1:height(obj.filtered_table)
+                        % Multiply content
+                        if ~isempty(current_col{j})
+                            current_col{j} = current_col{j} * resolution_vec(j);
+                        end
+                    end
+                    obj.filtered_table.(col_name) = current_col;                
+                end
+                obj.action_log.resolution_applied = true;
+                obj.action_log.numeric_colnames = numeric_colnames;
+                obj.action_log.data_colnames = data_colnames;
+            end
+        end
+
+        function get_numericsummary(obj)
+            key_names = ["MouseID","VesselID", "DataType", "state_name"];
+            var_names = string(obj.action_log.numeric_colnames);
+            
+            % Calculate Mean, Std, and Count (N)
+            % 'numel' is not a valid method string for groupsummary. Use GroupCount provided by default.
+            stats = groupsummary(obj.filtered_table, key_names, ...
+                {'mean', 'std'}, var_names);
+                
+            % Store Mean Table
+            % Select columns starting with mean_ and keys
+            obj.numeric_tables.mean = stats(:, [key_names, "mean_" + var_names]);
+            
+            % Calculate 95% CI Table (Margin of Error)
+            ci_table = stats(:, key_names);
+            
+            for i = 1:length(var_names)
+                vname = var_names(i);
+                m_col = "mean_" + vname;
+                s_col = "std_" + vname;
+                
+                % Standard Error
+                % Use GroupCount for N
+                n = stats.GroupCount;
+                sem = stats.(s_col) ./ sqrt(n);
+                
+                % T-value for 95% CI (two-tailed)
+                % df = n - 1
+                df = n - 1;
+                t_val = tinv(0.975, df);
+                
+                % Margin of Error
+                moe = t_val .* sem;
+                
+                % Store in table using original variable name (e.g., raw_mean)
+                ci_table.(vname) = moe;
+            end
+            
+            obj.numeric_tables.ci95 = ci_table;
+        end
+
+    end
+    
+    
+    
+    
+    
+    
+    methods (Static) % Methods for load and reconstruct tables
         function loaded_table = load_recon(masterDirTable_path,mtable_name)
             load_folderdir = fileparts(masterDirTable_path);
             load_filedir = fullfile(load_folderdir, mtable_name);

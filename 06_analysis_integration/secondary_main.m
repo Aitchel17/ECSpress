@@ -12,7 +12,7 @@ mtable_FWHMsleep.parseParams();
 % Loads FWHM data from .mat files and populates Vessel objects
 mtable_FWHMsleep.aggregateData("State_PaxFWHM");
 nestname_arr = ["state_summary","transition","band_decomposition","powerdensity","peak_trough"];
-mtable_FWHMsleep.addnest2subtable(nestname_arr)
+mtable_FWHMsleep.addnest2subtable(nestname_arr) % try to achieve First normal form
 % save (except subtables, auto reconstruct)
 mtable_FWHMsleep.save2disk("mtable_FWHMsleep.mat")
 
