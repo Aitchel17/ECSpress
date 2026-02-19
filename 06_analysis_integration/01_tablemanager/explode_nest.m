@@ -45,6 +45,10 @@ function blown_table = explode_nest(struct_array, key_table)
                 fragment_table.(var_name) = repmat(session_keyrow.(var_name), n_rows, 1);
             end
             
+            % Reorder: move key columns to the beginning
+            n_keys = length(session_keyrow.Properties.VariableNames);
+            fragment_table = fragment_table(:, circshift(fragment_table.Properties.VariableNames, n_keys, 2));
+
             % Collect this table
             aftermath_rows{end+1} = fragment_table;
         end
