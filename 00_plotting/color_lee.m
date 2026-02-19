@@ -62,5 +62,74 @@ classdef color_lee
             obj.gradient.inferno = max(0, min(1, obj.gradient.inferno));
         end
     end
-end
+    
+    methods (Static)
+        function rgb = lch(L, C, H)
+            % lch Generates RGB color from Lightness, Chroma, Hue using LCH(uv) space
+            % Inputs:
+            %   L: Lightness (0-100)
+            %   C: Chroma
+            %   H: Hue (0-360)
+            % vectors must be same length or scalar
+            
+            % 1. Create Nx1x3 image matrix for lch2rgb
+            % Ensure column vectors
+            if ~isscalar(L), L = L(:); end
+            if ~isscalar(C), C = C(:); end
+            if ~isscalar(H), H = H(:); end
+            
+            % Expand scalars if necessary (simple expansion)
+            n_max = max([numel(L), numel(C), numel(H)]);
+            if isscalar(L), L = repmat(L, n_max, 1); end
+            if isscalar(C), C = repmat(C, n_max, 1); end
+            if isscalar(H), H = repmat(H, n_max, 1); end
+            
+            lch_img = cat(3, L, C, H);
+            
+            % 2. Convert using lch2rgb (default mode 'luv')
+            rgb_img = lch2rgb(lch_img, 'luv');
+            
+            % 3. Reshape back to Nx3 matrix
+            rgb = squeeze(rgb_img);
+            if n_max == 1
+                rgb = rgb'; % Ensure row vector for single color
+            end
+        end
+
+        function rgb = oklab(L, C, H)
+            % oklab Generates RGB color from Lightness, Chroma, Hue using OKLAB space
+             % Inputs:
+            %   L: Lightness (0-1 approx, but typically scaled 0-100 in lch2rgb processing?)
+            %      Ref: lch2rgb documentation says "LCH inputs ... L in [0 100]". 
+            %      However, OKLAB usually uses L in [0,1]. Let's check lch2rgb implementation.
+            %      lch2rgb.m line 186 defines Aok matrix. Line 191 does "imappmat(inpict,Aok/100)".
+            %      This implies it expects L to be 0-100 to scale it down? 
+            %      Wait, typical OKLAB L is 0-1. If user inputs 0-100, and code divides by 100, that works for 0-1 range.
+            %      Let's stick to 0-100 for consistency with LCH input of lch2rgb.
+            
+            %   C: Chroma
+            %   H: Hue (0-360)
+            
+             % 1. Create Nx1x3 image matrix for lch2rgb
+            if ~isscalar(L), L = L(:); end
+            if ~isscalar(C), C = C(:); end
+            if ~isscalar(H), H = H(:); end
+            
+            n_max = max([numel(L), numel(C), numel(H)]);
+            if isscalar(L), L = repmat(L, n_max, 1); end
+            if isscalar(C), C = repmat(C, n_max, 1); end
+            if isscalar(H), H = repmat(H, n_max, 1); end
+            
+            lch_img = cat(3, L, C, H);
+            
+            % 2. Convert using lch2rgb
+            rgb_img = lch2rgb(lch_img, 'oklab');
+            
+             % 3. Reshape back to Nx3 matrix
+            rgb = squeeze(rgb_img);
+             if n_max == 1
+                rgb = rgb'; 
+            end
+        end
+    end
 
