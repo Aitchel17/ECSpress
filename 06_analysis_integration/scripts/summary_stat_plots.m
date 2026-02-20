@@ -20,7 +20,35 @@ mtable_FWHMsleep.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
 mtable_FWHMsleep.addPrctilecol("raw_data","prctile_95", 95);
 mtable_FWHMsleep.addPrctilecol("raw_data","prctile_5",5);
 %%
-mtable_FWHMsleep.get_numericsummary
+mtable_FWHMsleep.get_numericsummary("Date","filtered_table")
+%%
+mtable_FWHMsleep.get_numericsummary("VesselID","Date_ave")
+mtable_FWHMsleep.get_numericsummary("MouseID","VesselID_ave")
+%%
+
+mtable = mtable_FWHMsleep.numeric_tables.MouseID_ave;
+%%
+
+
+bv_table = ;
+%%
+figure("Name","")
+%%
+cla
+plot(mtable(mtable.DataType == "thickness_bv",:),"Q2Q3_mean",color = 'r',Marker='x')
+hold on
+plot(mtable(mtable.DataType == "thickness_totalpvs",:),"Q2Q3_mean",color = 'g',Marker='x')
+ylabel("Absolute thickness (\mum)")
+%%
+figure("Name","")
+
+plot(mtable(mtable.DataType == "thickness_eps",:),"Q2Q3_mean",color = 'k',Marker='x')
+
+
+
+
+
+
 %%
 ttable = mtable_FWHMsleep.numeric_tables.mean(mtable_FWHMsleep.numeric_tables.mean.DataType =="thickness_bv",:);
 

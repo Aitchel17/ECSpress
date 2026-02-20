@@ -167,7 +167,6 @@ classdef tableManager < handle
             obj.refTable = refTable;
             fprintf('Depths parsed. Threshold used: %d um.\n', obj.depth_thr);
             fprintf('Resolution parsed. \n');
-
         end
 
         
@@ -253,6 +252,7 @@ classdef tableManager < handle
             if ~any(chk_duplication)
                 obj.action_log.numeric_colnames = [current_cols, string(NewcolName)];
             end
+            fprintf("mean from %s to %s calculated and added as %s column\n", start_fraction,end_fraction, NewcolName)
         end
  
         function addPrctilecol(obj,datacolName,NewcolName,percentile)
@@ -269,7 +269,8 @@ classdef tableManager < handle
             chk_duplication = ismember(current_cols, string(NewcolName));
             if ~any(chk_duplication)
                 obj.action_log.numeric_colnames = [current_cols, string(NewcolName)];
-            end        
+            end
+            fprintf("%d Percentile calculated and added as %s column\n", percentile, NewcolName)
         end
 
 
@@ -299,24 +300,56 @@ classdef tableManager < handle
                 obj.action_log.resolution_applied = true;
                 obj.action_log.numeric_colnames = numeric_colnames;
                 obj.action_log.data_colnames = data_colnames;
+
+                obj.action_log.key_names = ["DataType","state_name","MouseID","VesselID","Date"];
+                fprintf("Units are scaled to resolution column\n")
             end
         end
 
-        function get_numericsummary(obj)
-            key_names = ["MouseID","VesselID", "DataType", "state_name"];
+        function get_numericsummary(obj, target_keyname, target_tablename)
             var_names = string(obj.action_log.numeric_colnames);
             
-            % Calculate Mean, Std, and Count (N)
-            % 'numel' is not a valid method string for groupsummary. Use GroupCount provided by default.
-            stats = groupsummary(obj.filtered_table, key_names, ...
-                {'mean', 'std'}, var_names);
+            aveTable_name = strcat(target_keyname,"_ave");
+            ci95Table_name = strcat(target_keyname,"_ci95");
+            newkey_name = strcat(target_keyname, "_key");
+            % Key name array retrieval
+            if strcmp(target_tablename, 'filtered_table')
+                target_table = obj.filtered_table;
+                key_names = obj.action_log.key_names;
+            else
+                target_table = obj.numeric_tables.(target_tablename);
+                actionLog_keyfield = strsplit(target_tablename,"_");
+                actionLog_keyfield = actionLog_keyfield(1);
+                actionLog_keyfield = strcat(actionLog_keyfield,"_key");
+                key_names = obj.action_log.(actionLog_keyfield);
+            end
+            % exclude
+            logic_key = ismember(key_names,target_keyname);
+
+            
+
+            if  any(logic_key)
+                summary_key = key_names(~logic_key);
+                obj.action_log.(newkey_name) = summary_key;
+            else
+                fprintf("target_keyname is not in key_names at actionlog")
+            end
+            stats = groupsummary(target_table, summary_key, {'mean', 'std'}, var_names);  % Calculate Mean, Std
+
                 
-            % Store Mean Table
-            % Select columns starting with mean_ and keys
-            obj.numeric_tables.mean = stats(:, [key_names, "mean_" + var_names]);
+            temp_table = stats(:, [summary_key, "mean_" + var_names]);  %             % Select columns starting with mean_ and keys and store as Mean Table
+            
+            % Rename 'mean_' columns back to original variable names
+            for i = 1:numel(var_names)
+                current_name = "mean_" + var_names(i);
+                if ismember(current_name, temp_table.Properties.VariableNames)
+                    temp_table.Properties.VariableNames(current_name) = var_names(i);
+                end
+            end
+            obj.numeric_tables.(aveTable_name) = temp_table;
             
             % Calculate 95% CI Table (Margin of Error)
-            ci_table = stats(:, key_names);
+            ci_table = stats(:, summary_key);
             
             for i = 1:length(var_names)
                 vname = var_names(i);
@@ -340,7 +373,8 @@ classdef tableManager < handle
                 ci_table.(vname) = moe;
             end
             
-            obj.numeric_tables.ci95 = ci_table;
+            obj.numeric_tables.(ci95Table_name) = ci_table;
+            fprintf("numeric %s summarytable added\n", target_keyname)
         end
 
     end
