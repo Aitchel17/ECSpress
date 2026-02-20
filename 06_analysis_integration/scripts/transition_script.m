@@ -1,13 +1,25 @@
 clc, clear
-analysis_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis';
-experiment_folder = 'G:\tmp\00_igkl';
-target_transition = 'sleep_paxfwhm_table.mat';
-[~, tmp.exp_name] = fileparts(experiment_folder);
-save_exppath = fullfile(analysis_path,tmp.exp_name);
-load(fullfile(save_exppath,target_transition))
-%% L1 Table
-depth_logic = master_fwhm_table.Depthstate == "L1";
-l1_table = master_fwhm_table(depth_logic,:);
+masterDirTable_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis\00_igkl\00_igkl_dirtable.xlsx';
+mtable_FWHMsleep = tableManager.load_recon(masterDirTable_path, "mtable_FWHMsleep.mat");
+mtable_FWHMsleep.analysis_table = mtable_FWHMsleep.subTables.transition; % State summary to be target table
+%%
+mtable_FWHMsleep.filtLogics = [];
+mtable_FWHMsleep.filtLogics.vType = contains(mtable_FWHMsleep.analysis_table.VesselID, "PA", 'IgnoreCase', true); % Artery filter
+mtable_FWHMsleep.filtLogics.depth = mtable_FWHMsleep.analysis_table.NumericDepth <70; % L1 filter
+mtable_FWHMsleep.apply_filter
+
+%%
+data_colnames = {"data"};
+numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
+                'post_mean','post_median','post_q1','post_q3', 'post_var'};
+
+mtable_FWHMsleep.apply_resolution("NumericResolution",data_colnames,numeric_colnames);
+
+%%
+
+
+mtable_FWHMsleep.get_numericsummary("Date","filtered_table")
+
 
 %% Mouse table
 ra_transitions = [];
