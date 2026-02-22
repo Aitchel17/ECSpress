@@ -14,6 +14,7 @@ classdef tableManager < handle
         filtered_table
         filtLogics
         numeric_tables
+        data_tables
     end
     
     methods % Methods for generating First Normal form of analysis
@@ -301,39 +302,16 @@ classdef tableManager < handle
                 obj.action_log.numeric_colnames = numeric_colnames;
                 obj.action_log.data_colnames = data_colnames;
 
-                obj.action_log.key_names = ["DataType","state_name","MouseID","VesselID","Date"];
+                obj.action_log.key_names = ["DataType","state_name","MouseID","VesselID","Date","bout_idx"];
                 fprintf("Units are scaled to resolution column\n")
             end
         end
 
-        function get_numericsummary(obj, target_keyname, target_tablename)
+        function get_numericsummary(obj, new_keyname, target_tablename)
             var_names = string(obj.action_log.numeric_colnames);
             
-            aveTable_name = strcat(target_keyname,"_ave");
-            ci95Table_name = strcat(target_keyname,"_ci95");
-            newkey_name = strcat(target_keyname, "_key");
-            % Key name array retrieval
-            if strcmp(target_tablename, 'filtered_table')
-                target_table = obj.filtered_table;
-                key_names = obj.action_log.key_names;
-            else
-                target_table = obj.numeric_tables.(target_tablename);
-                actionLog_keyfield = strsplit(target_tablename,"_");
-                actionLog_keyfield = actionLog_keyfield(1);
-                actionLog_keyfield = strcat(actionLog_keyfield,"_key");
-                key_names = obj.action_log.(actionLog_keyfield);
-            end
-            % exclude
-            logic_key = ismember(key_names,target_keyname);
-
-            
-
-            if  any(logic_key)
-                summary_key = key_names(~logic_key);
-                obj.action_log.(newkey_name) = summary_key;
-            else
-                fprintf("target_keyname is not in key_names at actionlog")
-            end
+            [target_table, summary_key, aveTable_name, ci95Table_name] = obj.prepare_summary("numeric_tables", target_tablename, new_keyname);
+           
             stats = groupsummary(target_table, summary_key, {'mean', 'std'}, var_names);  % Calculate Mean, Std
 
                 
@@ -356,34 +334,108 @@ classdef tableManager < handle
                 m_col = "mean_" + vname;
                 s_col = "std_" + vname;
                 
-                % Standard Error
-                % Use GroupCount for N
+                % Standard Error and Margin of Error
                 n = stats.GroupCount;
-                sem = stats.(s_col) ./ sqrt(n);
-                
-                % T-value for 95% CI (two-tailed)
-                % df = n - 1
-                df = n - 1;
-                t_val = tinv(0.975, df);
-                
-                % Margin of Error
-                moe = t_val .* sem;
+                ci95 = obj.calculate_ci95(stats.(s_col), n);
                 
                 % Store in table using original variable name (e.g., raw_mean)
-                ci_table.(vname) = moe;
+                ci_table.(vname) = ci95;
             end
             
-            obj.numeric_tables.(ci95Table_name) = ci_table;
-            fprintf("numeric %s summarytable added\n", target_keyname)
+            obj.save_summary("numeric_tables", aveTable_name, temp_table, ci95Table_name, ci_table, new_keyname);
         end
 
+        function get_datasummary(obj, new_keyname, target_tablename)
+            % Summarizes cell-array columns containing 1D data arrays,
+            % computing element-wise mean (and CI) across groups.
+            % Analogous to get_numericsummary but for data_colnames.
+            var_name = obj.action_log.data_colnames{1};
+
+            [target_table, summary_key, aveTable_name, ci95Table_name] = obj.prepare_summary("data_tables", target_tablename, new_keyname);
+
+            % Find unique group combinations
+            group_table = target_table(:, summary_key);
+            [unique_groups, ~, group_idx] = unique(group_table, 'rows', 'stable');
+            n_groups = height(unique_groups);
+
+            % Preallocate output tables
+            ave_table = unique_groups;
+            ci_table  = unique_groups;
+            ave_table.(var_name) = cell(n_groups, 1);
+            ci_table.(var_name)  = cell(n_groups, 1);
+            col_data = target_table.(var_name);   % cell array of 1D arrays
+            % Loop over groups and compute element-wise mean / CI
+            for g = 1:n_groups
+                row_idx = find(group_idx == g);
+                n = numel(row_idx);
+                
+                if n == 1                     % Only one observation – bypass mean, copy directly
+                    ave_table.(var_name){g} = col_data{row_idx};
+                    ci_table.(var_name){g}  = zeros(size(col_data{row_idx}));
+                    continue;
+                end
+
+                % Stack: ensure result is [n x len]
+                mat = cell2mat(col_data(row_idx));
+                mu  = mean(mat, 1, 'omitnan');
+                sig = std(mat,  0, 1, 'omitnan');
+                ci95 = obj.calculate_ci95(sig, n);
+
+                ave_table.(var_name){g} = mu;
+                ci_table.(var_name){g}  = ci95;
+                
+            end
+
+            obj.save_summary("data_tables", aveTable_name, ave_table, ci95Table_name, ci_table, new_keyname);
+        end
+
+    end 
+
+    methods (Access = private)
+        function ci95 = calculate_ci95(obj, std_val, n)
+            sem = std_val ./ sqrt(n);
+            df = max(n - 1, 1); % Ensure df is at least 1 for tinv to avoid NaN if n=1
+            t_val = tinv(0.975, df);
+            ci95 = t_val .* sem;
+        end
+
+        function [target_table, summary_key, aveTable_name, ci95Table_name] = prepare_summary(obj, table_typename, target_tablename, new_keyname)
+            aveTable_name = strcat(new_keyname, "_ave");
+            ci95Table_name = strcat(new_keyname, "_ci95");
+            [target_table, summary_key] = obj.retrieve_keytable(table_typename, target_tablename, new_keyname);
+        end
+
+        function save_summary(obj, table_typename, aveTable_name, ave_table, ci95Table_name, ci_table, new_keyname)
+            obj.(table_typename).(aveTable_name) = ave_table;
+            obj.(table_typename).(ci95Table_name) = ci_table;
+            name_parts = strsplit(table_typename, "_");
+            fprintf("%s %s summarytable added\n", name_parts{1}, new_keyname);
+        end
+
+        function [target_table,summary_key] = retrieve_keytable(obj,table_typename,target_tablename,new_keyname)
+                        % Key name array retrieval
+            newkey_name = strcat(new_keyname, "_key");
+            if strcmp(target_tablename, 'filtered_table')
+                target_table = obj.filtered_table;
+                key_names = obj.action_log.key_names;
+            else
+                target_table = obj.(table_typename).(target_tablename);
+                actionLog_keyfield = strsplit(target_tablename,"_");
+                actionLog_keyfield = strjoin(actionLog_keyfield(1:end-1),"_");
+                actionLog_keyfield = strcat(actionLog_keyfield,"_key");
+                key_names = obj.action_log.(actionLog_keyfield);
+            end
+             % exclude
+            logic_key = ismember(key_names,new_keyname);
+            if  any(logic_key)
+                summary_key = key_names(~logic_key);
+                obj.action_log.(newkey_name) = summary_key;
+            else
+                fprintf("target_keyname is not in key_names at actionlog")
+            end
+        end
     end
-    
-    
-    
-    
-    
-    
+
     methods (Static) % Methods for load and reconstruct tables
         function loaded_table = load_recon(masterDirTable_path,mtable_name)
             load_folderdir = fileparts(masterDirTable_path);
@@ -394,4 +446,7 @@ classdef tableManager < handle
             loaded_table = load_str.tableManager; 
         end
     end
+
+
+
 end
