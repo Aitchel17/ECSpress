@@ -231,7 +231,9 @@ classdef tableManager < handle
            combinedlogic = all(table2array(struct2table(obj.filtLogics)), 2);
            fprintf('Filtered %d from % d rows.\n', sum(combinedlogic), height(obj.analysis_table));
            obj.filtered_table = obj.analysis_table(combinedlogic,:);
-           obj.action_log.resolution_applied = false;
+           fnames = fieldnames(obj.action_log);
+           fnamelogic = endsWith(string(fnames),"_applied");
+           obj.action_log = rmfield(obj.action_log,fnames(fnamelogic));
         end
 
         function meanFrom2(obj,datacolName,NewcolName,start_fraction,end_fraction)
@@ -275,14 +277,15 @@ classdef tableManager < handle
         end
 
 
-        function apply_resolution(obj,scale_colname,data_colnames,numeric_colnames)
+        function scale_table(obj,scale_colname,data_colnames,numeric_colnames)
             % Applies resolution scaling (multiplication) to specified columns
-            if obj.action_log.resolution_applied
-                fprintf("Resolution already applied")
+            scale_logname = strcat(scale_colname, "_applied");
+            if isfield(obj.action_log,scale_logname)
+                    fprintf("%s already applied\n", scale_colname)
             else
-                resolution_vec = obj.filtered_table.(scale_colname);
+                scale_vec = obj.filtered_table.(scale_colname);
                 numeric_data = obj.filtered_table{:, numeric_colnames};
-                obj.filtered_table{:, numeric_colnames} = numeric_data .* resolution_vec;
+                obj.filtered_table{:, numeric_colnames} = numeric_data .* scale_vec;
                 % 2. Scale Data Columns (Cell arrays of vectors)
                 % Explicit loop over rows as requested
                 
@@ -293,12 +296,12 @@ classdef tableManager < handle
                     for j = 1:height(obj.filtered_table)
                         % Multiply content
                         if ~isempty(current_col{j})
-                            current_col{j} = current_col{j} * resolution_vec(j);
+                            current_col{j} = current_col{j} * scale_vec(j);
                         end
                     end
                     obj.filtered_table.(col_name) = current_col;                
                 end
-                obj.action_log.resolution_applied = true;
+                obj.action_log.(scale_logname) = true;
                 obj.action_log.numeric_colnames = numeric_colnames;
                 obj.action_log.data_colnames = data_colnames;
 
