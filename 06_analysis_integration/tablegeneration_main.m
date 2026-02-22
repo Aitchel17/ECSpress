@@ -12,17 +12,18 @@ mtable_FWHMsleep.apply_filter
 %%
 data_colnames = {"raw_data"};
 numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var'};
-mtable_FWHMsleep.scale_table("NumericResolution",data_colnames,numeric_colnames);
-mtable_FWHMsleep.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
-mtable_FWHMsleep.addPrctilecol("raw_data","prctile_95", 95);
-mtable_FWHMsleep.addPrctilecol("raw_data","prctile_5",5);
-mtable_FWHMsleep.numeric_tables.filtered_table = mtable_FWHMsleep.filtered_table;
-mtable_FWHMsleep.get_numericsummary("bout_idx","filtered_table") % intra session
-mtable_FWHMsleep.get_numericsummary("Date","bout_idx_ave") % inter session
-mtable_FWHMsleep.get_numericsummary("VesselID","Date_ave") % Vessel
-mtable_FWHMsleep.get_numericsummary("MouseID","VesselID_ave") % mouse
+myAnalyzer = TableAnalyzer(mtable_FWHMsleep.filtered_table, mtable_FWHMsleep.action_log);
+myAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames);
+myAnalyzer.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
+myAnalyzer.addPrctilecol("raw_data","prctile_95", 95);
+myAnalyzer.addPrctilecol("raw_data","prctile_5",5);
+myAnalyzer.numeric_tables.filtered_table = myAnalyzer.filtered_table;
+myAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session
+myAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session
+myAnalyzer.get_numericsummary("VesselID","Date_ave") % Vessel
+myAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse
 
-result.state_summary.abs_numeric = mtable_FWHMsleep.numeric_tables;
+result.state_summary.abs_numeric = myAnalyzer.numeric_tables;
 
 
 %%
@@ -32,24 +33,23 @@ tmp.awakenumtable = result.state_summary.abs_numeric.bout_idx_ave(result.state_s
 tmp.key_cols = ["MouseID","Date","VesselID","DataType"];
 tmp.awake_baseline = tmp.awakenumtable(:, [tmp.key_cols,"Q2Q3_mean"]);
 tmp.awake_baseline.Properties.VariableNames("Q2Q3_mean") = "awake_boutq2q3mean";
-tmp.awake_baseline.awake_scale = 1./tmp.awake_baseline.Q2Q3_mean;
+tmp.awake_baseline.awake_scale = 1./tmp.awake_baseline.awake_boutq2q3mean;
 
-%%
 summarystat_awakenorm = outerjoin(result.state_summary.abs_numeric.filtered_table, tmp.awake_baseline, ...
     'MergeKeys', true, ...
     'LeftKeys', tmp.key_cols, ...
     'RightKeys', tmp.key_cols);
-mtable_FWHMsleep.filtered_table = summarystat_awakenorm;
-%%
-mtable_FWHMsleep.scale_table("awake_scale",data_colnames,numeric_colnames);
-mtable_FWHMsleep.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
-mtable_FWHMsleep.addPrctilecol("raw_data","prctile_95", 95);
-mtable_FWHMsleep.addPrctilecol("raw_data","prctile_5",5);
-mtable_FWHMsleep.numeric_tables.filtered_table = mtable_FWHMsleep.filtered_table;
-mtable_FWHMsleep.get_numericsummary("bout_idx","filtered_table") % intra session
-mtable_FWHMsleep.get_numericsummary("Date","bout_idx_ave") % inter session
-mtable_FWHMsleep.get_numericsummary("VesselID","Date_ave") % Vessel
-mtable_FWHMsleep.get_numericsummary("MouseID","VesselID_ave") % mouse
+
+myAnalyzer2 = TableAnalyzer(summarystat_awakenorm, mtable_FWHMsleep.action_log);
+myAnalyzer2.scale_table("awake_scale",data_colnames,numeric_colnames);
+myAnalyzer2.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
+myAnalyzer2.addPrctilecol("raw_data","prctile_95", 95);
+myAnalyzer2.addPrctilecol("raw_data","prctile_5",5);
+myAnalyzer2.numeric_tables.filtered_table = myAnalyzer2.filtered_table;
+myAnalyzer2.get_numericsummary("bout_idx","filtered_table") % intra session
+myAnalyzer2.get_numericsummary("Date","bout_idx_ave") % inter session
+myAnalyzer2.get_numericsummary("VesselID","Date_ave") % Vessel
+myAnalyzer2.get_numericsummary("MouseID","VesselID_ave") % mouse
 
 
 
@@ -63,18 +63,19 @@ mtable_FWHMsleep.apply_filter
 data_colnames = {"data"};
 numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
                 'post_mean','post_median','post_q1','post_q3', 'post_var'};
-mtable_FWHMsleep.scale_table("NumericResolution",data_colnames,numeric_colnames);
-mtable_FWHMsleep.numeric_tables.filtered_table = mtable_FWHMsleep.filtered_table;
-mtable_FWHMsleep.get_numericsummary("bout_idx","filtered_table") % intra session bout average
-mtable_FWHMsleep.get_numericsummary("Date","bout_idx_ave") % inter session average
-mtable_FWHMsleep.get_numericsummary("VesselID","Date_ave") % within mouse vessel average
-mtable_FWHMsleep.get_numericsummary("MouseID","VesselID_ave") % mouse average
-mtable_FWHMsleep.get_datasummary("bout_idx","filtered_table")
-mtable_FWHMsleep.get_datasummary("Date","bout_idx_ave")
-mtable_FWHMsleep.get_datasummary("VesselID","Date_ave")
-mtable_FWHMsleep.get_datasummary("MouseID","VesselID_ave")
-result.transition.abs_numeric = mtable_FWHMsleep.numeric_tables;
-result.transition.abs_data = mtable_FWHMsleep.data_tables;
+myTransAnalyzer = TableAnalyzer(mtable_FWHMsleep.filtered_table, mtable_FWHMsleep.action_log);
+myTransAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames);
+myTransAnalyzer.numeric_tables.filtered_table = myTransAnalyzer.filtered_table;
+myTransAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session bout average
+myTransAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session average
+myTransAnalyzer.get_numericsummary("VesselID","Date_ave") % within mouse vessel average
+myTransAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse average
+myTransAnalyzer.get_datasummary("bout_idx","filtered_table")
+myTransAnalyzer.get_datasummary("Date","bout_idx_ave")
+myTransAnalyzer.get_datasummary("VesselID","Date_ave")
+myTransAnalyzer.get_datasummary("MouseID","VesselID_ave")
+result.transition.abs_numeric = myTransAnalyzer.numeric_tables;
+result.transition.abs_data = myTransAnalyzer.data_tables;
 %%
 
 %% Normalize transition data by awake Q2Q3_mean
@@ -84,22 +85,22 @@ transition_awakenorm = outerjoin(result.transition.abs_numeric.filtered_table, t
     'LeftKeys', tmp.key_cols, ...
     'RightKeys', tmp.key_cols);
 
-mtable_FWHMsleep.filtered_table = transition_awakenorm;
 
 %% Apply normalization using awake_scale
-mtable_FWHMsleep.scale_table("awake_scale", data_colnames, numeric_colnames);
+myTransAnalyzer2 = TableAnalyzer(transition_awakenorm, mtable_FWHMsleep.action_log);
+myTransAnalyzer2.scale_table("awake_scale", data_colnames, numeric_colnames);
 
 % Re-calculate numeric and data summaries
-mtable_FWHMsleep.numeric_tables.filtered_table = mtable_FWHMsleep.filtered_table;
-mtable_FWHMsleep.get_numericsummary("bout_idx", "filtered_table") % intra session bout average
-mtable_FWHMsleep.get_numericsummary("Date", "bout_idx_ave") % inter session average
-mtable_FWHMsleep.get_numericsummary("VesselID", "Date_ave") % within mouse vessel average
-mtable_FWHMsleep.get_numericsummary("MouseID", "VesselID_ave") % mouse average
+myTransAnalyzer2.numeric_tables.filtered_table = myTransAnalyzer2.filtered_table;
+myTransAnalyzer2.get_numericsummary("bout_idx", "filtered_table") % intra session bout average
+myTransAnalyzer2.get_numericsummary("Date", "bout_idx_ave") % inter session average
+myTransAnalyzer2.get_numericsummary("VesselID", "Date_ave") % within mouse vessel average
+myTransAnalyzer2.get_numericsummary("MouseID", "VesselID_ave") % mouse average
 
-mtable_FWHMsleep.get_datasummary("bout_idx", "filtered_table")
-mtable_FWHMsleep.get_datasummary("Date", "bout_idx_ave")
-mtable_FWHMsleep.get_datasummary("VesselID", "Date_ave")
-mtable_FWHMsleep.get_datasummary("MouseID", "VesselID_ave")
+myTransAnalyzer2.get_datasummary("bout_idx", "filtered_table")
+myTransAnalyzer2.get_datasummary("Date", "bout_idx_ave")
+myTransAnalyzer2.get_datasummary("VesselID", "Date_ave")
+myTransAnalyzer2.get_datasummary("MouseID", "VesselID_ave")
 
-result.transition_norm.abs_numeric = mtable_FWHMsleep.numeric_tables;
-result.transition_norm.abs_data = mtable_FWHMsleep.data_tables;
+result.transition_norm.abs_numeric = myTransAnalyzer2.numeric_tables;
+result.transition_norm.abs_data = myTransAnalyzer2.data_tables;

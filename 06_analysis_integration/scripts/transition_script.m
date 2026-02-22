@@ -13,12 +13,14 @@ data_colnames = {"data"};
 numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
                 'post_mean','post_median','post_q1','post_q3', 'post_var'};
 
-mtable_FWHMsleep.apply_resolution("NumericResolution",data_colnames,numeric_colnames);
+myTransAnalyzer = TableAnalyzer(mtable_FWHMsleep.filtered_table, mtable_FWHMsleep.action_log);
+
+myTransAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames);
 
 %%
 
 
-mtable_FWHMsleep.get_numericsummary("Date","filtered_table")
+myTransAnalyzer.get_numericsummary("Date","filtered_table")
 
 
 %% Mouse table

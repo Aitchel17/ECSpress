@@ -14,19 +14,21 @@ mtable_FWHMsleep.apply_filter
 %%
 data_colnames = {"raw_data"};
 numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var'};
-mtable_FWHMsleep.apply_resolution("NumericResolution",data_colnames,numeric_colnames);
+myAnalyzer = TableAnalyzer(mtable_FWHMsleep.filtered_table, mtable_FWHMsleep.action_log);
+
+myAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames);
 %%
-mtable_FWHMsleep.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
-mtable_FWHMsleep.addPrctilecol("raw_data","prctile_95", 95);
-mtable_FWHMsleep.addPrctilecol("raw_data","prctile_5",5);
+myAnalyzer.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
+myAnalyzer.addPrctilecol("raw_data","prctile_95", 95);
+myAnalyzer.addPrctilecol("raw_data","prctile_5",5);
 %%
-mtable_FWHMsleep.get_numericsummary("Date","filtered_table")
+myAnalyzer.get_numericsummary("Date","filtered_table")
 %%
-mtable_FWHMsleep.get_numericsummary("VesselID","Date_ave")
-mtable_FWHMsleep.get_numericsummary("MouseID","VesselID_ave")
+myAnalyzer.get_numericsummary("VesselID","Date_ave")
+myAnalyzer.get_numericsummary("MouseID","VesselID_ave")
 %%
 
-mtable = mtable_FWHMsleep.numeric_tables.MouseID_ave;
+mtable = myAnalyzer.numeric_tables.MouseID_ave;
 %%
 
 
