@@ -1,6 +1,6 @@
-classdef TableAnalyzer < handle
+classdef tableAnalyzer < handle
     % TABLEANALYZER Specialized class for calculating summaries and applying mathematical logic to data tables.
-    % Receives the managed tables from a TableManager.
+    % Receives the managed tables from a tableManager.
     properties
         filtered_table
         action_log
@@ -9,8 +9,8 @@ classdef TableAnalyzer < handle
     end
     
     methods
-        function obj = TableAnalyzer(input_table, input_log)
-            % Initializes TableAnalyzer with data loaded/organized by TableManager
+        function obj = tableAnalyzer(input_table, input_log)
+            % Initializes TableAnalyzer with data loaded/organized by tableManager
             obj.filtered_table = input_table;
             if nargin > 1
                 obj.action_log = input_log;
