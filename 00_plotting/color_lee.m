@@ -65,71 +65,183 @@ classdef color_lee
     
     methods (Static)
         function rgb = lch(L, C, H)
-            % lch Generates RGB color from Lightness, Chroma, Hue using LCH(uv) space
-            % Inputs:
-            %   L: Lightness (0-100)
-            %   C: Chroma
-            %   H: Hue (0-360)
-            % vectors must be same length or scalar
+            % lch Converts LCH(uv) color to sRGB.
+            % L: Lightness 0-100, C: Chroma, H: Hue 0-360 degrees
+            % Returns Nx3 matrix of clamped sRGB values [0,1]
             
-            % 1. Create Nx1x3 image matrix for lch2rgb
             % Ensure column vectors
             if ~isscalar(L), L = L(:); end
             if ~isscalar(C), C = C(:); end
             if ~isscalar(H), H = H(:); end
-            
-            % Expand scalars if necessary (simple expansion)
-            n_max = max([numel(L), numel(C), numel(H)]);
-            if isscalar(L), L = repmat(L, n_max, 1); end
-            if isscalar(C), C = repmat(C, n_max, 1); end
-            if isscalar(H), H = repmat(H, n_max, 1); end
-            
-            lch_img = cat(3, L, C, H);
-            
-            % 2. Convert using lch2rgb (default mode 'luv')
-            rgb_img = lch2rgb(lch_img, 'luv');
-            
-            % 3. Reshape back to Nx3 matrix
-            rgb = squeeze(rgb_img);
-            if n_max == 1
-                rgb = rgb'; % Ensure row vector for single color
+            n = max([numel(L), numel(C), numel(H)]);
+            if isscalar(L), L = repmat(L, n, 1); end
+            if isscalar(C), C = repmat(C, n, 1); end
+            if isscalar(H), H = repmat(H, n, 1); end
+
+            % LCH(uv) -> LUV
+            Hrad = H * pi / 180;
+            U = C .* cos(Hrad);
+            V = C .* sin(Hrad);
+
+            % LUV -> XYZ  (D65 white point)
+            WP = [0.95047, 1.0, 1.08883];
+            refd = WP(1) + 15*WP(2) + 3*WP(3);
+            refU = 4*WP(1) / refd;
+            refV = 9*WP(2) / refd;
+
+            fY = (L + 16) / 116;
+            ep = 216/24389; kp = 24389/27;
+            Ylin = fY.^3;
+            mask = Ylin < ep;
+            Ylin(mask) = (116*fY(mask) - 16) / kp;
+
+            mk = (L == 0);
+            Un = U ./ (13*L + 1e-10*mk) + refU;
+            Vn = V ./ (13*L + 1e-10*mk) + refV;
+
+            Xn = -(9 * Ylin .* Un) ./ ((Un - 4) .* Vn - Un .* Vn);
+            Zn = (9*Ylin - 15*Vn.*Ylin - Vn.*Xn) ./ (3*Vn);
+
+            % XYZ -> linear sRGB  (D65 sRGB matrix)
+            M = [3.2404542, -1.5371385, -0.4985314;
+                -0.9692660,  1.8760108,  0.0415560;
+                 0.0556434, -0.2040259,  1.0572252];
+            XYZ = [Xn, Ylin, Zn];   % Nx3
+            linRGB = (M * XYZ')';   % Nx3
+
+            % Gamma correction (sRGB)
+            rgb = color_lee.gamma_srgb(linRGB);
+
+            % Clamp to [0,1]
+            rgb = max(0, min(1, rgb));
+
+            if n == 1
+                rgb = rgb(:)'; % ensure 1x3 row vector
             end
         end
 
         function rgb = oklab(L, C, H)
-            % oklab Generates RGB color from Lightness, Chroma, Hue using OKLAB space
-             % Inputs:
-            %   L: Lightness (0-1 approx, but typically scaled 0-100 in lch2rgb processing?)
-            %      Ref: lch2rgb documentation says "LCH inputs ... L in [0 100]". 
-            %      However, OKLAB usually uses L in [0,1]. Let's check lch2rgb implementation.
-            %      lch2rgb.m line 186 defines Aok matrix. Line 191 does "imappmat(inpict,Aok/100)".
-            %      This implies it expects L to be 0-100 to scale it down? 
-            %      Wait, typical OKLAB L is 0-1. If user inputs 0-100, and code divides by 100, that works for 0-1 range.
-            %      Let's stick to 0-100 for consistency with LCH input of lch2rgb.
-            
-            %   C: Chroma
-            %   H: Hue (0-360)
-            
-             % 1. Create Nx1x3 image matrix for lch2rgb
+            % oklab Converts OKLab LCH color to sRGB.
+            % L: 0-1, C: chroma (~0-0.4), H: Hue 0-360 degrees
+            % Returns Nx3 clamped sRGB values [0,1]
+
             if ~isscalar(L), L = L(:); end
             if ~isscalar(C), C = C(:); end
             if ~isscalar(H), H = H(:); end
-            
-            n_max = max([numel(L), numel(C), numel(H)]);
-            if isscalar(L), L = repmat(L, n_max, 1); end
-            if isscalar(C), C = repmat(C, n_max, 1); end
-            if isscalar(H), H = repmat(H, n_max, 1); end
-            
-            lch_img = cat(3, L, C, H);
-            
-            % 2. Convert using lch2rgb
-            rgb_img = lch2rgb(lch_img, 'oklab');
-            
-             % 3. Reshape back to Nx3 matrix
-            rgb = squeeze(rgb_img);
-             if n_max == 1
-                rgb = rgb'; 
+            n = max([numel(L), numel(C), numel(H)]);
+            if isscalar(L), L = repmat(L, n, 1); end
+            if isscalar(C), C = repmat(C, n, 1); end
+            if isscalar(H), H = repmat(H, n, 1); end
+
+            % LCH -> OKLab (a,b)
+            Hrad = H * pi / 180;
+            a = C .* cos(Hrad);
+            b = C .* sin(Hrad);
+
+            % OKLab -> LMS (cube root space)
+            M1 = [1,  0.3963377774,  0.2158037573;
+                  1, -0.1055613458, -0.0638541728;
+                  1, -0.0894841775, -1.2914855480];
+            lab = [L, a, b]; % Nx3
+            lms_ = (M1 * lab')'; % Nx3
+            lms = lms_.^3;       % cube
+
+            % LMS -> linear sRGB
+            M2 = [ 4.0767416621, -3.3077115913,  0.2309699292;
+                  -1.2684380046,  2.6097574011, -0.3413193965;
+                  -0.0041960863, -0.7034186147,  1.7076147010];
+            linRGB = (M2 * lms')'; % Nx3
+
+            % Gamma + clamp
+            rgb = color_lee.gamma_srgb(linRGB);
+            rgb = max(0, min(1, rgb));
+
+            if n == 1
+                rgb = rgb(:)';
             end
+        end
+
+        function C_max = max_chroma(L, H)
+            % max_chroma  Binary-search for the highest in-gamut chroma at given L, H.
+            % L: 0-100, H: 0-360. Returns scalar or column vector.
+            %
+            % Example:
+            %   C = color_lee.max_chroma(60, 140);
+            %   rgb = color_lee.lch(60, C, 140);   % max-saturation green
+            if ~isscalar(L), L = L(:); end
+            if ~isscalar(H), H = H(:); end
+            n = max(numel(L), numel(H));
+            if isscalar(L), L = repmat(L, n, 1); end
+            if isscalar(H), H = repmat(H, n, 1); end
+
+            C_max = zeros(n, 1);
+            for i = 1:n
+                lo = 0; hi = 400;
+                for iter = 1:40
+                    mid = (lo + hi) / 2;
+                    rgb = color_lee.lch_raw(L(i), mid, H(i));
+                    if all(rgb >= -1e-6) && all(rgb <= 1 + 1e-6)
+                        lo = mid;
+                    else
+                        hi = mid;
+                    end
+                end
+                C_max(i) = lo;
+            end
+            if n == 1, C_max = C_max(1); end
+        end
+
+        function rgb = lch_maxchroma(L, H, fraction)
+            % lch_maxchroma  Generate sRGB color at the gamut boundary.
+            % L: 0-100, H: 0-360, fraction: 0-1 (default 1 = full boundary)
+            %
+            % Equal-lightness tricolor example:
+            %   cred   = color_lee.lch_maxchroma(60,  10);
+            %   cgreen = color_lee.lch_maxchroma(60, 140);
+            %   cblue  = color_lee.lch_maxchroma(60, 260);
+            if nargin < 3, fraction = 1.0; end
+            C = color_lee.max_chroma(L, H) .* fraction;
+            if isscalar(L) && ~isscalar(H)
+                L = repmat(L, numel(H), 1);
+            end
+            rgb = color_lee.lch(L, C, H);
         end
     end
 
+    methods (Static, Access = private)
+        function out = gamma_srgb(linRGB)
+            % sRGB gamma correction (linear -> gamma)
+            mk = linRGB <= 0.0031308;
+            out = 12.92 * linRGB .* mk + ...
+                  (1.055 * max(linRGB, 0).^(1/2.4) - 0.055) .* (1 - mk);
+        end
+
+        function rgb = lch_raw(L, C, H)
+            % lch_raw  Same as lch() but returns UNCLAMPED linear values.
+            % Used internally by max_chroma binary search.
+            Hrad = H * pi / 180;
+            U = C * cos(Hrad);
+            V = C * sin(Hrad);
+            WP = [0.95047, 1.0, 1.08883];
+            refd = WP(1) + 15*WP(2) + 3*WP(3);
+            refU = 4*WP(1) / refd;
+            refV = 9*WP(2) / refd;
+            fY = (L + 16) / 116;
+            ep = 216/24389; kp = 24389/27;
+            Ylin = fY^3;
+            if Ylin < ep, Ylin = (116*fY - 16) / kp; end
+            if L == 0
+                Un = refU; Vn = refV;
+            else
+                Un = U / (13*L) + refU;
+                Vn = V / (13*L) + refV;
+            end
+            Xn = -(9 * Ylin * Un) / ((Un - 4) * Vn - Un * Vn);
+            Zn = (9*Ylin - 15*Vn*Ylin - Vn*Xn) / (3*Vn);
+            M = [3.2404542, -1.5371385, -0.4985314;
+                -0.9692660,  1.8760108,  0.0415560;
+                 0.0556434, -0.2040259,  1.0572252];
+            rgb = (M * [Xn; Ylin; Zn])';
+        end
+    end
+end
