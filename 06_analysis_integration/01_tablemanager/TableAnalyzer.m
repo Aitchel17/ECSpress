@@ -60,7 +60,7 @@ classdef tableAnalyzer < handle
         end
 
 
-        function scale_table(obj, scale_colname, data_colnames, numeric_colnames)
+        function scale_table(obj, scale_colname, data_colnames, numeric_colnames, scale_mode)
             % Applies resolution scaling (multiplication) to specified columns
             scale_logname = strcat(scale_colname, "_applied");
             if isfield(obj.action_log, scale_logname)
@@ -68,8 +68,13 @@ classdef tableAnalyzer < handle
             else
                 scale_vec = obj.filtered_table.(scale_colname);
                 numeric_data = obj.filtered_table{:, numeric_colnames};
-                obj.filtered_table{:, numeric_colnames} = numeric_data .* scale_vec;
-                % 2. Scale Data Columns (Cell arrays of vectors)
+                switch scale_mode
+                    case "division" 
+                        obj.filtered_table{:, numeric_colnames} = numeric_data .* scale_vec;
+                    case "subtraction"
+                        obj.filtered_table{:, numeric_colnames} = numeric_data - scale_vec;
+                end
+                        % 2. Scale Data Columns (Cell arrays of vectors)
                 
                 for i = 1:numel(data_colnames)
                     col_name = data_colnames{i};
@@ -78,7 +83,12 @@ classdef tableAnalyzer < handle
                     for j = 1:height(obj.filtered_table)
                         % Multiply content
                         if ~isempty(current_col{j})
-                            current_col{j} = current_col{j} * scale_vec(j);
+                            switch scale_mode
+                                case "division" 
+                                    current_col{j} = current_col{j} * scale_vec(j);
+                                case "subtraction"
+                                    current_col{j} = current_col{j} - scale_vec(j);
+                            end
                         end
                     end
                     obj.filtered_table.(col_name) = current_col;                
