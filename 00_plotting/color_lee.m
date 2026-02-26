@@ -67,17 +67,8 @@ classdef color_lee
         function rgb = lch(L, C, H)
             % lch Converts LCH(uv) color to sRGB.
             % L: Lightness 0-100, C: Chroma, H: Hue 0-360 degrees
-            % Returns Nx3 matrix of clamped sRGB values [0,1]
-            
-            % Ensure column vectors
-            if ~isscalar(L), L = L(:); end
-            if ~isscalar(C), C = C(:); end
-            if ~isscalar(H), H = H(:); end
-            n = max([numel(L), numel(C), numel(H)]);
-            if isscalar(L), L = repmat(L, n, 1); end
-            if isscalar(C), C = repmat(C, n, 1); end
-            if isscalar(H), H = repmat(H, n, 1); end
-
+            % Returns Nx3 matrix of clamped sRGB values [0,1]            
+           
             % LCH(uv) -> LUV
             Hrad = H * pi / 180;
             U = C .* cos(Hrad);
@@ -115,9 +106,6 @@ classdef color_lee
             % Clamp to [0,1]
             rgb = max(0, min(1, rgb));
 
-            if n == 1
-                rgb = rgb(:)'; % ensure 1x3 row vector
-            end
         end
 
         function rgb = oklab(L, C, H)
