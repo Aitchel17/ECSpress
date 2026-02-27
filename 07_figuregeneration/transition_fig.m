@@ -9,7 +9,8 @@ transition_table = load_struct.save_content;
 t_axis.duration = transition_table.abs_numeric.filtered_table.bout_duration(1);
 t_axis.dpoints = size(transition_table.abs_numeric.filtered_table.data{1});
 t_axis.tpoints = linspace(-t_axis.duration/2,t_axis.duration/2, t_axis.dpoints(2));
-%% Color config
+
+% Color config
 figconfig = struct();
 
 figconfig.bv.faint  = clee.lch(80, 130,  10);
@@ -23,7 +24,7 @@ figconfig.eps.bold  = clee.lch(45, 120,  75);
 
 %% Shared definitions
 transitions  = ["an_trans", "na_trans", "nr_trans", "ra_trans"];
-vessel_types = ["thickness_bv", "thickness_totalpvs", "thickness_eps"];
+data_types = ["thickness_bv", "thickness_totalpvs", "thickness_eps"];
 vessel_names = ["BV", "PVS", "EPS"];
 vessel_colors = {figconfig.bv, figconfig.pvs, figconfig.eps};
 
@@ -38,24 +39,24 @@ label_map = struct( ...
 
 norm_fields = ["abs_data", "awakenorm_data", "awakesubtract_data"];
 norm_labels = ["absolute", "awake-normalized", "awake-subtracted"];
+ni = 1;
 
-for ni = 1:numel(norm_fields)
-    sess_ave  = transition_table.(norm_fields(ni)).Date_ave;
-    mouse_ave = transition_table.(norm_fields(ni)).MouseID_ave;
-    plotdata  = build_plotdata(sess_ave, mouse_ave, transitions, vessel_types);
+sess_ave  = transition_table.(norm_fields(ni)).Date_ave;
+mouse_ave = transition_table.(norm_fields(ni)).MouseID_ave;
+plotdata  = build_plotdata(sess_ave, mouse_ave, transitions, data_types);
 
-    % ── Per-vessel figures (4 transition tiles each) ───────────────────
-    for vi = 1:numel(vessel_types)
-        spec = struct();
-        spec.title = vessel_names(vi) + " – " + norm_labels(ni);
-        spec.tile_layout = [1 4];
-        for ti = 1:numel(transitions)
-            spec.tiles(ti).transition = transitions(ti);
-            spec.tiles(ti).datatype   = vessel_types(vi);
-            spec.tiles(ti).color      = vessel_colors{vi};
-        end
-        render_figure(spec, plotdata, t_axis.tpoints, label_map);
+%% ── Per-vessel figures (4 transition tiles each) ───────────────────
+spec = struct();
+spec.tile_layout = [1 4];
+
+for vi = 1:numel(data_types)
+    spec.title = vessel_names(vi) + " – " + norm_labels(ni);
+    for ti = 1:numel(transitions)
+        spec.tiles(ti).transition = transitions(ti);
+        spec.tiles(ti).datatype   = data_types(vi);
+        spec.tiles(ti).color      = vessel_colors{vi};
     end
+    render_figure(spec, plotdata, t_axis.tpoints, label_map);
 end
 
 
@@ -108,8 +109,8 @@ function render_figure(spec, plotdata, taxis, label_map)
     set(fig, 'Units','inches', ...
         "Position",[monitor_xyinch(1) monitor_xyinch(2) xy_sizeinch(1) xy_sizeinch(2)])
 
-    tl = tiledlayout(fig, spec.tile_layout(1), spec.tile_layout(2), ...
-        "TileSpacing", "compact");
+    tl = tiledlayout(fig, 1, 1, "TileSpacing", "compact");
+    tl.GridSize = spec.tile_layout;
 
     an_axes = [];
     na_axes = [];
@@ -117,7 +118,8 @@ function render_figure(spec, plotdata, taxis, label_map)
     ra_axes = [];
 
     for i = 1:numel(spec.tiles)
-        ax = nexttile(tl);
+        ax = axes(Parent=tl);
+        ax.Layout.Tile = i;
         tile = spec.tiles(i);
 
         % Resolve datatype field name (strip "thickness_" prefix)
