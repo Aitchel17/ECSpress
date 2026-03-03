@@ -37,10 +37,25 @@ parsed_struct.objx = [];
 parsed_struct.objy = [];
 parsed_struct.objz = [];
 parsed_struct.resolution = [];
+%% Zoom
+try
+    parsed_struct.zoom = mdf.info.zoom;
+catch
+    keyboard()
+end
+%% resolution
+parsed_struct.resolution = mdf.info.objpix;
+%% Objective lens position
+parsed_struct.objx = mdf.info.objx;
+parsed_struct.objy = mdf.info.objy;
+parsed_struct.objz = mdf.info.objz;
+
+parsed_struct.power_percent = mdf.info.laserpower;
+parsed_struct.wavelength = mdf.info.excitation;
 
 if isempty(comment_str)
     return;
-end
+else
 
 %% PMT Gain (Red/Green)
 % Patterns: "rcv .53", "rcv.53", "rcv 0.53" -> 0.53V
@@ -98,17 +113,7 @@ if ~isempty(v_match)
     % Take the first match and standardize to uppercase
     parsed_struct.vesselID = upper(v_match{1});
 end
-%% Zoom
-parsed_struct.zoom = mdf.info.zoom;
-%% resolution
-parsed_struct.resolution = mdf.info.objpix;
-%% Objective lens position
-parsed_struct.objx = mdf.info.objx;
-parsed_struct.objy = mdf.info.objy;
-parsed_struct.objz = mdf.info.objz;
-
-parsed_struct.power_percent = mdf.info.laserpower;
-parsed_struct.wavelength = mdf.info.excitation;
+end
 
 
 end

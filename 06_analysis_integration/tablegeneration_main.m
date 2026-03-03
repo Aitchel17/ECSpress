@@ -43,7 +43,7 @@ result.state_summary.awakenorm_numeric = awakescaled_summarystatAnalyzer.numeric
 awakesubtract_summarystatAnalyzer = tableAnalyzer(summarystat_awakenorm, mtable_FWHMsleep.action_log);
 awakesubtract_summarystatAnalyzer.scale_table("awake_boutq2q3mean",data_colnames,numeric_colnames,"subtraction");
 awakesubtract_summarystatAnalyzer = common_summarystat_analysis(awakesubtract_summarystatAnalyzer);
-result.state_summary.awakesubtract_numeric = awakescaled_summarystatAnalyzer.numeric_tables;
+result.state_summary.awakesubtract_numeric = awakesubtract_summarystatAnalyzer.numeric_tables;
 
 
 
