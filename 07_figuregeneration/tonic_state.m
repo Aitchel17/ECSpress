@@ -8,8 +8,8 @@ statsummary_table = load_struct.save_content;
 
 
 %% Shared definitions
-states  = ["awake", "drowsy", "nrem", "rem"];
-states_labels = ["Awake", "Drowsy", "NREM", "REM"];
+states  = [ "drowsy", "nrem", "rem"];
+states_labels = ["Drowsy", "NREM", "REM"];
 data_types = ["thickness_bv", "thickness_totalpvs", "thickness_eps"];
 vessel_names = ["BV", "PVS", "EPS"];
 
@@ -22,18 +22,18 @@ figconfig.eps.faint = clee.lch(80, 130,  70);
 figconfig.eps.bold  = clee.lch(45, 120,  75);
 vessel_colors = {figconfig.bv, figconfig.pvs, figconfig.eps};
 
-%% Define labels explicitly
+% Define labels explicitly
 norm_fields = ["abs_numeric", "awakenorm_numeric", "awakesubtract_numeric"];
 
-%%
-sess_ave  = statsummary_table.(norm_fields(3)).Date_ave;
-mouse_ave = statsummary_table.(norm_fields(3)).MouseID_ave;
+%
+sess_ave  = statsummary_table.(norm_fields(2)).Date_ave;
+mouse_ave = statsummary_table.(norm_fields(2)).MouseID_ave;
 plotdata  = build_plotdata(sess_ave, mouse_ave, states, data_types);
-%% ── Tiled Figure 1: Grouped by Transition (1 figure, 4 tiles) ─────────────
+% ── Tiled Figure 1: Grouped by Transition (1 figure, 4 tiles) ─────────────
 spec_states = struct();
 spec_states.title = "Q2Q3 mean Grouped by states";
-spec_states.tile_layout = [1 4];
-%%
+spec_states.tile_layout = [1 3];
+%
 for ti = 1:numel(states)
     spec_states.tiles(ti).title = states_labels(ti);
     for vi = 1:numel(data_types)
@@ -68,7 +68,7 @@ end
 function render_scatter_figure(spec, plotdata)
     fig = figure("Name", spec.title);
     monitor_xyinch = [10 2];
-    xy_sizeinch = [2.5*spec.tile_layout(2) 3];
+    xy_sizeinch = [2*spec.tile_layout(2) 4];
     set(fig, 'Units','inches', ...
         "Position",[monitor_xyinch(1) monitor_xyinch(2) xy_sizeinch(1) xy_sizeinch(2)])
 
@@ -124,7 +124,7 @@ function plot_scatter_tile(ax, tile, plotdata)
         
         % Plot Error bar & Mean dot
         errorbar(ax, x_positions(i), c_mean, c_err, ...
-                 'Color', item.color.bold, 'LineWidth', 2, 'CapSize', 6);
+                 'Color', item.color.bold, 'LineWidth', 1, 'CapSize', 3);
         scatter(ax, x_positions(i), c_mean, 60, item.color.bold, 'filled', ...
                  'MarkerEdgeColor', 'w', 'LineWidth', 1);
 
@@ -132,7 +132,7 @@ function plot_scatter_tile(ax, tile, plotdata)
     end
     
     % Draw 0-line
-    yline(ax, 0, '--k', 'Alpha', 0.3, 'LineWidth', 1);
+    yline(ax, 1, '--k', 'Alpha', 0.3, 'LineWidth', 1);
 
     % Configure Limits & Appearance
     title(ax, tile.title, 'FontWeight', 'normal');
