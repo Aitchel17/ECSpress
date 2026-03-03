@@ -103,7 +103,13 @@ classdef line_fwhm < handle
             obj.idx = obj.mergestruct(obj.idx, tmp.idx);
             obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
         end
-
+        function pvsanalysis_inverted(obj)
+            %METHOD1 Summary of this method goes here
+            %   Detailed explanation goes here
+            [tmp.idx, tmp.kgph_mask] = get_invertedpvsoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperBVboundary, obj.idx.lowerBVboundary);
+            obj.idx = obj.mergestruct(obj.idx, tmp.idx);
+            obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
+        end
         function clean_outlier(obj,overwrite)
             arguments
                 obj
@@ -176,8 +182,10 @@ classdef line_fwhm < handle
         end
 
         function maskstack = reconstruction(obj,kymomask)
-            tmp.v_thr = repmat(kymomask,[1,1,size(obj.rotatecrop.rc_bv,1)]);
-            tmp.v_thr = permute(tmp.v_thr,[3,1,2]);
+            %%
+            tmp.v_thr = repmat(kymomask,[1,1,obj.param.line_info(3,1)]);
+            tmp.v_thr = permute(tmp.v_thr,[1,3,2]);
+            %%
             maskstack = analyze_affine_reverse(tmp.v_thr,obj.param.input_size,obj.param.line_info(1:2,:));
         end
 
