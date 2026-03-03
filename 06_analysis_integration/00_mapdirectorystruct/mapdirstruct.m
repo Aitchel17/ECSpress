@@ -78,6 +78,9 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
     
             for session_idx = 1:numel(datefolder.dirs)
                 session.name = datefolder.dirs(session_idx).name;
+                % if strcmp(session.name, "HQL086_sleep250912_009")
+                %     keyboard();
+                % end
                 s_split = strsplit(session.name, '_');
                 current_session_id = s_split{3};
     
