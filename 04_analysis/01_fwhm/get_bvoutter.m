@@ -35,8 +35,11 @@ while true
 end
 %% 0. result: cropped kymograph
 
-cropkymograph = kymograph(upcropval:lowcropval,:); % 0.4
-sz = size(cropkymograph); % 1.1 initialize parameters % 0.4
+cropkymograph = kymograph; % 0.4
+cropkymograph(1:upcropval-1, :) = NaN;
+cropkymograph(lowcropval+1:end, :) = NaN;
+
+sz = size(kymograph); % 1.1 initialize parameters % 0.4
 [row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 0.4
 max_value = max(cropkymograph,[],1);
 %% 1. Estimate center of vessel
@@ -164,11 +167,11 @@ parameter.upoffset = upoffset;
 parameter.lowoffset = lowoffset;
 
 idx =struct();
-idx.max_idx = filtered_max_idx + upcropval;
-idx.upoffsetloc = upoffsetloc + upcropval;
-idx.downoffsetloc = downoffsetloc + upcropval;
-idx.upperBVboundary = upperboundary_idx + upcropval;
-idx.lowerBVboundary = lowerboundary_idx + upcropval;
+idx.max_idx = filtered_max_idx;
+idx.upoffsetloc = upoffsetloc;
+idx.downoffsetloc = downoffsetloc;
+idx.upperBVboundary = upperboundary_idx;
+idx.lowerBVboundary = lowerboundary_idx;
 cla(ax,'reset')
 imagesc(ax,kymograph)
 hold on
@@ -178,11 +181,8 @@ plot(idx.lowerBVboundary, 'r')
 ori_size = size(kymograph); % 1.1 initialize parameters % 0.4
 [ori_row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 0.4
 
-ori_upkymograph = NaN(ori_size);
-ori_upkymograph(upcropval:lowcropval,:) = upkymograph;
-ori_downkymograph = NaN(ori_size);
-ori_downkymograph(upcropval:lowcropval,:) = downkymograph;
-
+ori_upkymograph = upkymograph;
+ori_downkymograph = downkymograph;
 
 uplocarray2d = repmat(idx.upperBVboundary, [sz(1), 1]); % 8.2
 upline = false(sz);
