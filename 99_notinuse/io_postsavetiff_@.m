@@ -1,20 +1,17 @@
-function io_postsavetiff(zstack, save_folder, info, img_ch)
+function io_postsavetiff(zstack, save_path, resolution)
     % Save a 3D array (zstack) as a multi-page TIFF file with ImageJ-compatible metadata.
     %
     % Input:
     %   - zstack: 3D matrix of the image stack to save
     %   - info: Struct containing metadata such as resolution and file paths.
 
-    % Construct full file path
-    save_path = fullfile(save_folder, [info.mdfName(1:end-4),sprintf('_ch%d.tif',img_ch)]);
-
     % Extract resolutions
-    x_res = str2double(info.objpix(1:end-2)); % Pixel size in X-direction
-    y_res = x_res; % Pixel size in Y-direction
-    z_res = 1 / info.savefps; % Z-slice spacing
+    x_res = resolution(1);
+    y_res = resolution(2);
+    z_res = resolution(3);
 
     % Initialize the TIFF file
-    t = Tiff(save_path, 'w');
+    t = tiffwriter(save_path, 'w');
 
     % Metadata string for ImageJ
     ImgJ_ver = sprintf('ImageJ=1.54f\n');
@@ -28,10 +25,7 @@ function io_postsavetiff(zstack, save_folder, info, img_ch)
    ImageDescription = [ImgJ_ver,num_img,num_ch,...
         num_frames,unit,zunit,spacing];
    disp(ImageDescription)
-    % rescale
-    min_val = min(zstack,[],'all');
-    max_val = max(zstack,[],'all');
-    zstack = (zstack - min_val) / (max_val - min_val) * 65535;
+    zstack = (zstack - 32) / 2048 * 65535;
     zstack = uint16(zstack);
 
         
