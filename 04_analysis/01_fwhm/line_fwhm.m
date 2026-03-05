@@ -184,7 +184,7 @@ classdef line_fwhm < handle
         function maskstack = reconstruction(obj,kymomask)
             %%
             tmp.v_thr = repmat(kymomask,[1,1,obj.param.line_info(3,1)]);
-            tmp.v_thr = permute(tmp.v_thr,[1,3,2]);
+            tmp.v_thr = permute(tmp.v_thr, [3, 1, 2]); % Re-orient to [thickness, length, time]
             %%
             maskstack = analyze_affine_reverse(tmp.v_thr,obj.param.input_size,obj.param.line_info(1:2,:));
         end
