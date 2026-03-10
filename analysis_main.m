@@ -22,7 +22,7 @@
 addpath(genpath(pwd));
 
 % Directory setup
-sessiondir = 'G:\tmp\00_igkl\hql090\251012_hql090_sleep\HQL090_sleep251012_003';
+sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_005';
 % directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
@@ -41,7 +41,7 @@ twophoton_processed = twophoton_preprocess(session);
 
 %% 4.1 FWHM Analysis
 % 4.1.1 FWHM analysis - ROI Setupw
-session.roilist.addormodifyroi(twophoton_processed.ch2,'pax','line');
+session.roilist.addormodifyroi(twophoton_processed.ch1,'pax','line');
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 session.pax_fwhm.param.fs = twophoton_processed.outfps;
@@ -93,7 +93,63 @@ save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcl
 
 %% 8. Radon Analysis (Only capable for clear images without debris around artery)
 session.roilist.addormodifyroi(twophoton_processed.ch1,'radon','rectangle');
+%%
 session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, 'ch1');
+%%
+session.ra
+
+%%
+clc
+tmp =struct();
+tmp.centeridx = session.radon_analysis.radon_result.idx_uploc+session.radon_analysis.radon_result.idx_downloc;
+
+tmp.excenteridx = zeros([360,size(tmp.centeridx,2)]);
+tmp.excenteridx(1:181,:) = tmp.centeridx;
+tmp.excenteridx(182:end,:) = tmp.centeridx(end,:)+tmp.centeridx(1,:)-tmp.centeridx(2:end-1,:);
+tmp.angle = [0:1:359]*2*pi/360;
+tmp.basis = [cos(tmp.angle); sin(tmp.angle)]'; % [angle x predictor]
+tmp.centershift = NaN([size(tmp.excenteridx,2),5]);
+
+%%
+for tidx = 1:size(tmp.centershift,1)
+    tmp.coeffs = robustfit(tmp.basis, tmp.excenteridx(:,tidx));  % cos(x1+x2)+c = cosx1cosx2-sinx1sinx2+c  coeffs = [c,cosx2,sinx2]
+    tmp.amp = sqrt(tmp.coeffs(2)^2+tmp.coeffs(3)^2);
+    tmp.phase = atan2(tmp.coeffs(3), tmp.coeffs(2));
+    tmp.centershift(tidx,1) = tmp.amp;
+    tmp.centershift(tidx,2) = tmp.phase;
+    tmp.centershift(tidx,3:5) = tmp.coeffs;
+end
+%%
+
+
+%%
+figure()
+%%
+tidx= 3000;
+tidx2 = 2000;
+center_2pi = tmp.centershift(tidx,1) * cos(tmp.angle -  tmp.centershift(tidx,2)) + tmp.centershift(tidx,3);
+center_2pi2 = tmp.centershift(tidx2,1) * cos(tmp.angle -  tmp.centershift(tidx2,2)) + tmp.centershift(tidx2,3);
+
+cla
+plot([0:1:359],tmp.excenteridx(:,tidx))
+hold on
+plot([0:1:359],center_2pi)
+plot([0:1:359],tmp.excenteridx(:,tidx2))
+plot([0:1:359],center_2pi2)
+
+
+%%
+plot(tmp.centershift(:,1))
+plot(tmp.centershift(:,2))
+
+
+
+figure(); clf
+plot(rad2deg(theta), center_idx, 'k.', 'MarkerSize', 4); hold on
+plot(rad2deg(theta), center_2pi, 'r-', 'LineWidth', 2);
+xlabel('Angle (deg)'); ylabel('Center index (px)');
+legend('raw center_idx', 'robust 2\pi fit');
+title(sprintf('Amp=%.1f px, Phase=%.1f°', amplitude, rad2deg(phase)));
 
 %% 8.2 Radon figures
 analysis_radon_makefig(session.radon_analysis.radon_result, twophoton_processed.t_axis, session.dir_struct.figures_radon, twophoton_processed.pixel2um);
