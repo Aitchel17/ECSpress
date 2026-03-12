@@ -1,10 +1,7 @@
-function radon_result = analyze_radon(hold_stack)
+function radon_result = analyze_radon(hold_stack,the_angles,rtd_threshold)
 
-% 1. Set parameter
-the_angles=1:1:180;
-rtd_threshold = 0.5;
 
-% 2. Put stack to memory of gpu
+% 0. Put stack to memory of gpu
 hold_stack = gpuArray(hold_stack);
 
 % 3. Normalize stack
@@ -56,6 +53,7 @@ radon_result.idx_maxloc = maxlocarray;
 radon_result.idx_uploc = upperboundary_idx;
 radon_result.idx_downloc = bottomboundary_idx;
 radon_result.diameter = bottomboundary_idx-upperboundary_idx;
+radon_result.center_loc = bottomboundary_idx+upperboundary_idx;
 radon_result.median_diameter = median(radon_result.diameter,2);
 radon_result.normalized_diameterchange = radon_result.diameter./radon_result.median_diameter;
 radon_result.normalized_diameterchange = radon_result.normalized_diameterchange-1;

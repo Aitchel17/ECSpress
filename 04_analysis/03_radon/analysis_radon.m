@@ -7,7 +7,7 @@ classdef analysis_radon < handle
         radon_result
         roi_image
         channel
-
+        param
     end
 
     methods
@@ -34,8 +34,13 @@ classdef analysis_radon < handle
 
             % Run the analysis function (Stats only)
             disp('Running Radon Analysis (Stats)...');
-            obj.radon_result = analyze_radon(obj.roi_image);
-
+            obj.param.radon_angle = 0:1:180; % 1:1:180
+            obj.param.threshold = 0.5; % half max
+            obj.radon_result = analyze_radon(obj.roi_image,obj.param.radon_angle,obj.param.threshold);
+            
+            % Get_massshift table
+            disp('Get massshift table...');
+            obj.get_massshift;
 
             % Perform Event Selection
             disp('Selecting Events...');
@@ -47,6 +52,7 @@ classdef analysis_radon < handle
 
             % Generate Median Projections
             obj.make_median_projection(twophoton_processed, roilist);
+            
         end
 
         function idx_struct = select_events(obj)
@@ -94,7 +100,7 @@ classdef analysis_radon < handle
             maxlocarray = obj.radon_result.idx_maxloc;
             upperboundary_idx = obj.radon_result.idx_uploc;
             bottomboundary_idx = obj.radon_result.idx_downloc;
-            the_angles = 1:1:180; % Fixed angles
+            the_angles = obj.param.radon_angle; % Fixed angles
 
             % Initialize Output Struct Array
             event_types = {'dilate', 'constrict', 'median', 'maxevent'};
@@ -154,7 +160,36 @@ classdef analysis_radon < handle
             end
 
             obj.radon_result.events = events;
+
         end
+
+
+        function get_massshift(obj)
+            centeridx = (obj.radon_result.idx_uploc+obj.radon_result.idx_downloc)/2;
+            excenteridx = zeros([360,size(centeridx,2)]);
+            excenteridx(1:181,:) = centeridx;
+            excenteridx(182:end,:) = centeridx(end,:)+centeridx(1,:)-centeridx(2:end-1,:);
+            angle = (0:1:359)*2*pi/360;
+            basis = [cos(angle); sin(angle)]'; % [angle x predictor]
+            centershift = NaN([size(excenteridx,2),5]);
+            centerfit_array = zeros(size(excenteridx));
+            %%
+            for tidx = 1:size(centershift,1)
+                coeffs = robustfit(basis, excenteridx(:,tidx));  % cos(x1+x2)+c = cosx1cosx2-sinx1sinx2+c  coeffs = [c,cosx2,sinx2]
+                amp = sqrt(coeffs(2)^2+coeffs(3)^2);
+                phase = atan2(coeffs(3), coeffs(2));
+                centershift(tidx,1) = amp;
+                centershift(tidx,2) = phase;
+                centershift(tidx,3:5) = coeffs;
+                center_2pi = centershift(tidx,1) * cos(angle -  centershift(tidx,2)) + centershift(tidx,3);
+                centerfit_array(:,tidx) = center_2pi;
+            end
+            centershift_table = array2table(centershift,'VariableNames',["Amplitude","Phase","Coeff_const","Coeff_cos","Coeff_sin"]);
+            obj.radon_result.centershift_table = centershift_table;
+            obj.radon_result.centerfit_loc = centerfit_array;
+        end
+
+
 
         function make_median_projection(obj, twophoton_processed, roilist)
             % MAKE_MEDIAN_PROJECTION Computes median projections for events
