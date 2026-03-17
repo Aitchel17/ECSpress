@@ -189,7 +189,14 @@ classdef analysis_radon < handle
             obj.radon_result.centerfit_loc = centerfit_array;
         end
 
-
+        function get_elipsoid(obj)
+            diameter = obj.radon_result.diameter;
+            diameter2pi = zeros([360,size(diameter,2)]);
+            diameter2pi(1:181,:) = diameter;
+            diameter2pi(182:end,:) = diameter(end,:)+diameter(1,:)-diameter(2:end-1,:);
+            angle = (0:1:359)*2*pi/360; % deg2rad
+            result =  diameter2elipsoid(diameter2pi,angle);
+        end
 
         function make_median_projection(obj, twophoton_processed, roilist)
             % MAKE_MEDIAN_PROJECTION Computes median projections for events
