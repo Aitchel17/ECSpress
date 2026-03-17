@@ -56,35 +56,29 @@ function result = diameter2elipsoid(Dmat,theta)
         [~, idxMax] = max(diameter1d);
         phi0 = theta(idxMax);
 
-        % enforce a >= b
-        if b0 > a0
-            tmp = a0; 
-            a0 = b0; 
-            b0 = tmp;
-        end
-
         % ellipse orientation is pi-periodic
         phi0 = mod(phi0, pi);
-        if phi0 >= pi/2
-            phi0 = phi0 - pi;
-        end
         p0 = [a0, b0, phi0];
         % bounds
-        lb = [0,   0,   -pi/2];
-        ub = [Inf, Inf,  pi/2];
+        lb = [0,   0,   0];
+        ub = [Inf, Inf,  pi];
 
         % robust scale based on MAD
-        sigma = 1.4826 * mad(diameter1d, 1);
-        if sigma <= 0 || ~isfinite(sigma)
+        mad_scale = 1 / norminv(0.75); % median absolute deviation scaling factor to standard deviation
+        sigma = mad_scale * mad(diameter1d, 1); % median absolute deviation
+        if sigma <= 0
             sigma = max(std(diameter1d), 1e-6);
         end
-        robust_const = 2.5 * sigma;   % robust tuning constant
+        
+        % Tukey's bisquare tuning constant
+        tune = norminv(0.995); % 99.5% two-tailed cutoff for rejection
+        robust_const = tune * sigma;   % robust tuning constant
 
         % objective = robust-weighted residual
-        objfun = @(p) robust_residual(p, theta, diameter1d, robust_const);
-        % bounds
-        lb = [eps, eps, -pi/2];
-        ub = [Inf, Inf,  pi/2];
+        objfun = @(p) robust_residual(ellipse_diameter_model(p, theta), diameter1d, robust_const);
+        % bounds assuming that the vessel major and minor must within this range
+        lb = [0.5 * dmin0, 0.5 * dmin0, 0]; 
+        ub = [3 * dmax0, 3 * dmax0,  pi];
         try
             [pfit, ~, residual, ef] = lsqnonlin(objfun, p0, lb, ub, opts);
 
@@ -101,9 +95,6 @@ function result = diameter2elipsoid(Dmat,theta)
             end
 
             pp = mod(pp, pi);
-            if pp >= pi/2
-                pp = pp - pi;
-            end
             yhat = ellipse_diameter_model([aa bb pp], theta);
 
             a(t) = aa;
@@ -136,7 +127,16 @@ function result = diameter2elipsoid(Dmat,theta)
 end
 
 
-function r = robust_residual(p, theta, actual, c)
+function r_out = robust_residual(predict, actual, c)
+    error_term = actual - predict;
+    r = error_term ./ c;
+    w = (abs(r) < 1) .* (1 - r.^2).^2; % https://www.mathworks.com/help/stats/robustfit.html, bisquare
+    r_out = sqrt(w) .* error_term;
+end
+
+
+
+function D = ellipse_diameter_model(p, theta)
     a = p(1);
     b = p(2);
     phi = p(3);
@@ -145,15 +145,5 @@ function r = robust_residual(p, theta, actual, c)
     y = sin(theta - phi);
 
     D = 2 * a * b ./ sqrt((b^2) .* x.^2 + (a^2) .* y.^2);
-    error_term = actual - D;
-
-    % pseudo-Huber-like weighting through residual transformation
-    % lsqnonlin minimizes sum(r.^2), so use sqrt(weight).*e
-    w = 1 ./ sqrt(1 + (error_term ./ c).^2);
-    r = sqrt(w) .* error_term;
 end
-
-
-
-
 

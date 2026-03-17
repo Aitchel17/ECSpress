@@ -88,8 +88,14 @@ session.roilist.addormodifyroi(twophoton_processed.ch2,'radon','rectangle');
 %%
 session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, 'ch1');
 
+
+
 %% 8.2 Radon figures
 analysis_radon_makefig(session.radon_analysis.radon_result, twophoton_processed.t_axis, session.dir_struct.figures_radon, twophoton_processed.pixel2um);
+%%
+session.radon_analysis.get_elipsoid
+
+
 %%
 session.radon_analysis.save2disk(session.dir_struct.primary_analysis);
 session.roilist.save2disk
