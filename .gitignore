@@ -8,3 +8,6 @@
 # Archive of legacy/unused files
 # 99_notinuse/
 ecspress_main.asv
+
+# Third-party dependencies
+04_analysis/04_piv/pivlab_thirdparty/
