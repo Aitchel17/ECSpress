@@ -45,8 +45,9 @@ for k = 1:n_frames
         opt.prctile_low, opt.prctile_high);
 
     imgstack_out(:,:,k) = frame_proc;
-
-    fprintf('  frame %d / %d  (%.0f%%)\n', k, n_frames, 100*k/n_frames);
+    if mod(k,10)==1
+        fprintf('  frame %d / %d  (%.0f%%)\n', k, n_frames, 100*k/n_frames);
+    end
 end
 
 end
