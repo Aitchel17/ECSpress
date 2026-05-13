@@ -58,7 +58,7 @@ end
 
 %% Spatial block averaging
 %   Divides the field into block_size x block_size tiles and averages u,v
-%   within each tile. The displayed arrow is placed at the tile center.
+%   within each tile (NaN-safe). The displayed arrow is placed at the tile center.
 s = round(opt.block_size);
 if s > 1
     % Trim to integer multiple of block size
@@ -67,13 +67,11 @@ if s > 1
     u  = u(1:Hr, 1:Wr);
     v  = v(1:Hr, 1:Wr);
 
-    % Block-average rows then columns
-    %   reshape to (s, nrow, Wr) → mean over dim1 → (nrow, Wr)
-    u = squeeze(mean(reshape(u, s, Hr/s, Wr), 1));
-    v = squeeze(mean(reshape(v, s, Hr/s, Wr), 1));
-    %   reshape to (s, ncol, nrow) → mean over dim1 → (ncol, nrow) → transpose
-    u = squeeze(mean(reshape(u', s, Wr/s, Hr/s), 1))';
-    v = squeeze(mean(reshape(v', s, Wr/s, Hr/s), 1))';
+    % Block-average rows then columns (omitnan for sparse PIV grids)
+    u = squeeze(mean(reshape(u, s, Hr/s, Wr), 1, 'omitnan'));
+    v = squeeze(mean(reshape(v, s, Hr/s, Wr), 1, 'omitnan'));
+    u = squeeze(mean(reshape(u', s, Wr/s, Hr/s), 1, 'omitnan'))';
+    v = squeeze(mean(reshape(v', s, Wr/s, Hr/s), 1, 'omitnan'))';
 
     % Coordinates: centre of each block
     xc = (0.5:Wr/s) * s;
