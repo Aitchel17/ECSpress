@@ -64,7 +64,7 @@ bv_mididx = round((bv_upidx+bv_downidx)/2);
 % upper vessel edge side kymograph
 edgebv_upkymograph = cropkymograph;
 edgebv_upkymograph(row_idx_grid > bv_upidx) = NaN; % upper vessel edge kymograph
-up_maxidx = findmax(edgebv_upkymograph); %
+up_maxidx = findmax(edgebv_upkymograph, true); % upmod=true: pick innermost (highest row idx) peak to avoid outer bright artefacts
 edgebv_upmaxkymograph = edgebv_upkymograph;
 edgebv_upmaxkymograph(row_idx_grid > up_maxidx) = NaN;
 [upedge_confined,upedge_minidx] = findshadow(edgebv_upmaxkymograph,true); % 3. minidx
@@ -115,7 +115,7 @@ plot(upcent_idx, 'g')
 %% lower vessel edge side kymograph
 edgebv_downkymograph = cropkymograph; % lower vessel edge kymograph
 edgebv_downkymograph(row_idx_grid < bv_downidx) = NaN;
-down_maxidx = findmax(edgebv_downkymograph);
+down_maxidx = findmax(edgebv_downkymograph, false); % upmod=false: pick innermost (lowest row idx) peak to avoid outer bright artefacts
 edgebv_downmaxkymograph = edgebv_downkymograph; % crop to maximum
 edgebv_downmaxkymograph(row_idx_grid < down_maxidx) = NaN;
 [downedge_confined,downedge_minidx] = findshadow(edgebv_downmaxkymograph,false);
@@ -310,15 +310,25 @@ imagesc(debug_ax,clean_kymograph)
 %%
 end
 
-function maxidx = findmax(cropkymograph)
+function maxidx = findmax(cropkymograph, upmod)
+% findmax - finds the innermost peak row index within the top-25% bright region.
+%
+% upmod = true  (upper side kymograph): outer artefacts are at top (low row idx),
+%                so take MAX of top-25% row indices to get the vessel-side peak.
+% upmod = false (lower side kymograph): outer artefacts are at bottom (high row idx),
+%                so take MIN of top-25% row indices to get the vessel-side peak.
 sz = size(cropkymograph);
 [row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 2D row index grid
-maxoffset = prctile(cropkymograph, 75, 1);
-maxidx = cropkymograph>=maxoffset;
+maxoffset = prctile(cropkymograph, 75, 1); % 75th percentile threshold per column
+maxidx = cropkymograph>=maxoffset; % top-25% brightest pixels
 maxidx = maxidx .* row_idx_grid;
-maxidx(maxidx == 0) = NaN; % 1.6 convert 0 to NaN for median
-maxidx = round(median(maxidx,1,"omitmissing")); % Median quarter idx
-maxidx = medfilt1(maxidx,11);
+maxidx(maxidx == 0) = NaN; % convert 0 to NaN
+if upmod
+    maxidx = round(max(maxidx,[],1,"omitmissing")); % highest row idx = vessel-side peak (upmod)
+else
+    maxidx = round(min(maxidx,[],1,"omitmissing")); % lowest row idx = vessel-side peak (downmod)
+end
+maxidx = medfilt1(maxidx,11); % smooth across columns
 end
 
 function [crop_mask,minidx] = findshadow(maxcropkymograph,upmod)
@@ -342,7 +352,7 @@ if upmod
     %%
     mincolumnidx = min(mincolumnidx,[],1);
     %%
-    differential_column = mincolumnidx - minidx;
+    differential_column = abs(minidx - mincolumnidx); % abs(): mincolumnidx is always < minidx, so unsigned distance needed
     overshadow_column = differential_column <5;
     minidx(overshadow_column) = mincolumnidx(overshadow_column); % if thickness thinner than 5 pixel, don't narrow down
     minidx(overshadow_column) = mincolumnidx(overshadow_column);
@@ -353,7 +363,7 @@ else
     maxcolumnidx = maxcropkymograph>0;
     maxcolumnidx = maxcolumnidx.*row_idx_grid;
     maxcolumnidx = max(maxcolumnidx,[],1);
-    differential_column = minidx - maxcolumnidx;
+    differential_column = abs(minidx - maxcolumnidx); % abs(): maxcolumnidx is always > minidx, so unsigned distance needed
     overshadow_column = differential_column <5;
     minidx(overshadow_column) = maxcolumnidx(overshadow_column); % if thickness thinner than 5 pixel, don't narrow down
     minidx(overshadow_column) = maxcolumnidx(overshadow_column);
