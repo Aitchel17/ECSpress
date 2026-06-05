@@ -12,9 +12,7 @@ classdef state_integration < handle
         info
         dir_struct
     end
-
-
-
+    
     methods
         
         function obj = state_integration(base_path)
@@ -48,6 +46,7 @@ classdef state_integration < handle
             %%
         end
 
+
         function awake_integration(obj,analog_dir)
             %% Whisker stimulation time table
             obj.dir_struct.analog = analog_dir;
@@ -65,8 +64,6 @@ classdef state_integration < handle
             %%
             fs = primary_analog.ball.ds_fps;
             taxis = primary_analog.ball.rs_taxis;
-            plot(taxis,primary_analog.ball.resampled_ball)
-            %%
             absball = abs(primary_analog.ball.resampled_ball);
             %% 1 second smoothing 
             kernelWidth = 1; % window (sec)
@@ -74,19 +71,89 @@ classdef state_integration < handle
             ballSmooth = conv(absball,smoothingKernel,'same');    
             %% Awake Integration: Continuous Movement Detection
             % 1. Detect binary movement from the SMOOTHED ball data first
-            smooth_threshold = 0.02; 
-            binary_smooth = abs(ballSmooth) > smooth_threshold;
-            gap_tolerance = 3 * fs;
-            binary_move = get_binaryball(absball,binary_smooth,gap_tolerance);
-            %%
-            move_table = logic2timetable(taxis,binary_move,5);
-            obj.time_table.awake_movement = [taxis(rise_idx(:))', taxis(fall_idx(:) - 1)'];
-            obj.time_table.nr_trans = get_transition(obj.param.transition_window,obj.time_table.roughnrem, obj.time_table.rem);
-            obj.time_table.na_trans = get_transition(obj.param.transition_window,obj.time_table.roughnrem, obj.time_table.roughawake);
-            obj.time_table.ra_trans = get_transition(obj.param.transition_window,obj.time_table.rem, obj.time_table.roughawake);
-            obj.time_table.an_trans = get_transition(obj.param.transition_window,obj.time_table.roughawake, obj.time_table.roughnrem);       
+            smooth_threshold = 0.02;
+            binary_smooth    = abs(ballSmooth) > smooth_threshold;
+            gap_tolerance    = 3 * fs;
+            binary_move      = get_binaryball(absball, binary_smooth, gap_tolerance);
 
+            % Convert binary to Nx2 [start, end] time table (min bout = 5 s)
+            move_table = logic2timetable(taxis, binary_move, 5);
             %%
+            obj.time_table.move = move_table;
+
+            %% Per-duration merge: merged_durX = stim start + max(stim end, move end)
+            all_air = [];
+            all_merged = [];
+            for idx = 1:numel(unique_dur)
+                stim_dur  = unique_dur(idx);
+                dur_field = strcat("dur", string(stim_dur));
+                dur_air   = obj.time_table.(dur_field);  % Nx2 for this duration
+                
+                % Merge this duration's stim intervals with movement table
+                merged_dur = merge_airtable_movtable(dur_air, move_table, 10);
+                obj.time_table.(strcat("merged_", dur_field)) = merged_dur;  % ← stored per duration
+
+                % Accumulate all stim intervals for pure_movement filtering
+                all_air = [all_air; dur_air]; %#ok<AGROW>
+                
+                % Accumulate all merged intervals for all_merged_airpuff
+                if ~isempty(merged_dur)
+                    all_merged = [all_merged; merged_dur]; %#ok<AGROW>
+                end
+            end
+
+            % Save all merged air puffs sorted by start time
+            if ~isempty(all_merged)
+                [~, sort_idx] = sort(all_merged(:, 1));
+                all_merged = all_merged(sort_idx, :);
+            end
+            obj.time_table.all_merged_airpuff = all_merged;
+
+            %% pure_movement: all movement bouts that DO NOT overlap with any merged airpuff
+            is_pure = true(size(move_table, 1), 1);
+            for m = 1:size(move_table, 1)
+                m_start = move_table(m, 1);
+                m_end   = move_table(m, 2);
+                for a = 1:size(all_merged, 1)
+                    a_start = all_merged(a, 1);
+                    a_end   = all_merged(a, 2);
+                    % Check overlap (strict overlap)
+                    if m_start <= a_end && m_end >= a_start
+                        is_pure(m) = false;
+                        break;
+                    end
+                end
+            end
+            obj.time_table.pure_movement = move_table(is_pure, :);
+
+            %% static: inverse of binary move (minimum 5 seconds of rest)
+            obj.time_table.static = logic2timetable(taxis, ~binary_move, 5);
+
+            %% Transitions
+            if ~isfield(obj.param, 'transition_window')
+                obj.param.transition_window = 10;
+            end
+            trans_win = obj.param.transition_window;
+            
+            % pure <-> static transitions
+            obj.time_table.trans_static2pure = get_transition(trans_win, obj.time_table.static, obj.time_table.pure_movement, 0.5);
+            obj.time_table.trans_pure2static = get_transition(trans_win, obj.time_table.pure_movement, obj.time_table.static, 0.5);
+            
+            % merged_durX <-> static transitions
+            for idx = 1:numel(unique_dur)
+                stim_dur = unique_dur(idx);
+                merged_field = strcat("merged_dur", string(stim_dur));
+                
+                if isfield(obj.time_table, merged_field)
+                    obj.time_table.(strcat("static_",merged_field,"_trans")) = ...
+                        get_transition(trans_win, obj.time_table.static, obj.time_table.(merged_field), 0.5);
+                    
+                    obj.time_table.(strcat(merged_field, "_static","_trans")) = ...
+                        get_transition(trans_win, obj.time_table.(merged_field), obj.time_table.static, 0.5);
+                end
+            end
+
+            %% Diagnostic plots
             figure()
             plot(taxis,binary_move)
 
@@ -96,8 +163,10 @@ classdef state_integration < handle
             hold on
             plot(taxis,absball,'Color','k')
             %%
-            plot(taxis, binary_move, 'r', 'LineWidth', 1.5)
+            plot(taxis, binary_move, 'y', 'LineWidth', 1.5)
             hold on
+            plot(taxis, binary_move, 'r', 'LineWidth', 1.5)
+
             plot(taxis, absball > 0.02, 'k:', 'LineWidth', 1)
             legend('Interpolated (final_binary_movement)', 'Raw (absball > 0.02)')
             %%
@@ -176,6 +245,51 @@ classdef state_integration < handle
                 disp(ttable_name)
                 state_idx.(ttable_name) = timetable2frame(t_axis,obj.time_table.(ttable_name));
             end
+        end
+
+        function trim_to_duration(obj, max_time_sec)
+            % TRIM_TO_DURATION  이미징이 중간에 중단된 경우, sleep_score(peripheral)이
+            % 더 길 수 있으므로 짧은 쪽(이미징 끝시간)에 맞게 time_table을 자른다.
+            %
+            % Usage:
+            %   state_integrate.trim_to_duration(pax_fwhm.t_axis(end))
+            %
+            % Input:
+            %   max_time_sec - 유지할 최대 시간 (초), 보통 pax_fwhm.t_axis(end)
+
+            fprintf('[trim_to_duration] Clipping state time_table to %.1f sec\n', max_time_sec);
+
+            %% 1. Clip binary_bin arrays (bin 단위 -> 초 변환 필요)
+            if ~isempty(obj.sleep_score) && isfield(obj.sleep_score, 'binwidth_sec')
+                max_bin = floor(max_time_sec / obj.sleep_score.binwidth_sec);
+                bin_fields = fieldnames(obj.binary_bin);
+                for i = 1:numel(bin_fields)
+                    arr = obj.binary_bin.(bin_fields{i});
+                    if numel(arr) > max_bin
+                        obj.binary_bin.(bin_fields{i}) = arr(1:max_bin);
+                    end
+                end
+                fprintf('  binary_bin clipped to %d bins (%.1f sec)\n', max_bin, max_bin * obj.sleep_score.binwidth_sec);
+            end
+
+            %% 2. Clip time_table Nx2 matrices (초 단위)
+            if isempty(obj.time_table)
+                return;
+            end
+            tfields = fieldnames(obj.time_table);
+            for i = 1:numel(tfields)
+                tbl = obj.time_table.(tfields{i});
+                if isempty(tbl)
+                    continue;
+                end
+                % start > max_time_sec 인 row 제거
+                valid_rows = tbl(:, 1) < max_time_sec;
+                tbl = tbl(valid_rows, :);
+                % end > max_time_sec 인 row의 end를 max_time_sec으로 클립
+                tbl(tbl(:, 2) > max_time_sec, 2) = max_time_sec;
+                obj.time_table.(tfields{i}) = tbl;
+            end
+            fprintf('  time_table fields clipped: %s\n', strjoin(tfields', ', '));
         end
 
     end
