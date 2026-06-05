@@ -1,3 +1,28 @@
+addpath(genpath(pwd));
+sessiondir ='G:\tmp\01_igkltdt\hql086\250909_hql086_sleep\HQL086_sleep250909_005_piv';
+session = ECSSession(sessiondir);
+session = session.load_primary_results();
+sleep_integrate = state_integration(sessiondir);
+%todo 2026 04 28
+% 1. state transition
+% 2. PIV
+% 3. Make offset video
+% 1. Load data & 3. Load processed data (Integrated via ECSSession)
+session.stackch1 = session.loadstack('ch1');
+session.stackch2 = session.loadstack('ch2');
+% 2. Twophoton data FPS matching & preprocessing
+% Note: twophoton_preprocess expects a struct with stackch1/2 and img_param.
+% ECSSession object works here as it has these properties.
+twophoton_processed = twophoton_preprocess(session);
+%%
+img_state = state_image(sleep_integrate);
+img_state.get_state_indices(twophoton_processed.t_axis,twophoton_processed.outfps);
+img_state.param.pixel2um = twophoton_processed.pixel2um;
+
+na_trans = get_stateframes(img_state.state_idx.na_trans,twophoton_processed.ch1);
+ra_trans = get_stateframes(img_state.state_idx.ra_trans,twophoton_processed.ch1);
+awake = get_stateframes(img_state.state_idx.awake,twophoton_processed.ch1);
+
 
 of.state = ra_trans{1};
 of.pre = opticalflow_preprocess(of.state);
@@ -194,3 +219,40 @@ for k = 1:numel(frameRange)
     drawnow;
     pause(0.8);
 end
+%%
+
+frameRange = 60:110;
+trailLength = 1;  % 최근 10프레임만 표시
+
+figure;
+ax = axes;
+hImg = imshow(mat2gray(imgStack(:,:,frameRange(1))), [], 'Parent', ax);
+hold(ax, 'on');
+axis(ax, 'image');
+
+cmap = turbo(trailLength);
+
+t = 60;
+
+    hImg.CData = mat2gray(imgStack(:,:,t));
+
+    % delete previous point overlays
+    delete(findobj(ax, 'Tag', 'KLTpoints'));
+
+    % show recent trail
+    recentIdx = max(1, k-trailLength+1):k;
+
+    for jj = 1:numel(recentIdx)
+        kk = recentIdx(jj);
+        tt = frameRange(kk);
+
+        xy_tt = tracks(:,:,tt);
+        isValid = valids(:,tt);
+
+        plot(ax, xy_tt(isValid,1), xy_tt(isValid,2), '.', ...
+            'Color', cmap(jj,:), ...
+            'MarkerSize', 10, ...
+            'Tag', 'KLTpoints');
+
+    end
+    title(ax, sprintf('KLT point trail: frame %d', t));

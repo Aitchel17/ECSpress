@@ -47,42 +47,84 @@ roirect = opt.roirect;
 if isempty(roirect)
     roirect = [1, 1, W-1, H-1];
 end
-
-%% Pre-compute filter matrices from first frame (all frames same size)
-img0     = imgstack(:,:,1);
-roi_img  = img0(roirect(2):roirect(2)+roirect(4)-1, ...
-                roirect(1):roirect(1)+roirect(3)-1);
-PatchSize = 2^floor(log2(min(size(roi_img))));
-Fmats     = wOFV.getFmatPyramid(PatchSize, opt.pyramid_levels);
-
-%% No mask (all pixels valid)
-mask = false(H, W);   % PIVlab convention: true = exclude
-
 %% Median filter settings (off by default, matching PIVlab default 'Off')
 MedFiltFlag = false;
 MedFiltSize = [3, 3];
-
-vartheta = ones(size(roi_img));   % uniform spatial weighting
-
-%% Main loop - RunMain_Parallel_DatasetProc uses parfor over spatial patches
-%  Open a parpool before calling this function to activate parallel workers.
 %% Pre-allocate output: H x W x N_pairs x 2  (dim 4: 1=u, 2=v)
-flow = zeros(H-1, W-1, n_pairs, 2);
+flow = NaN(H, W, n_pairs, 2);
+% Get roirect coordinates for mapping back
+rx = roirect(1);
+ry = roirect(2);
+rw = roirect(3);
+rh = roirect(4);
+
+%% single patch size to prevent grid/aperture artifacts
+M = 2^ceil(log2(max(rh, rw)));
+PatchSize = M;
+Fmats = wOFV.getFmatPyramid(PatchSize, opt.pyramid_levels);
+
+% Determine the ideal extraction box centered around the ROI to grab actual context
+cx = round(rx + rw/2);
+cy = round(ry + rh/2);
+
+nx = round(cx - M/2);
+ny = round(cy - M/2);
+
+% Clamp to image boundaries
+nx = max(1, nx);
+ny = max(1, ny);
+if nx + M - 1 > W
+    nx = W - M + 1;
+    nx = max(1, nx);
+end
+if ny + M - 1 > H
+    ny = H - M + 1;
+    ny = max(1, ny);
+end
+
+ex = min(W, nx + M - 1);
+ey = min(H, ny + M - 1);
+
+actual_w = ex - nx + 1;
+actual_h = ey - ny + 1;
+
+% Offset of the user's ROI inside the M x M block
+offset_x = rx - nx + 1;
+offset_y = ry - ny + 1;
+
+%% Pre-allocate padded inputs
+mask_pad = true(M, M); % true means exclude in PIVlab
+mask_pad(1:actual_h, 1:actual_w) = false; % Include ALL actual image context
+roirect_pad = [1, 1, M, M];
+vartheta_pad = ones(M, M);
 
 for k = 1:n_pairs
 
     fprintf('  wOFV pair %d/%d\n', k, n_pairs);
 
-    [~, ~, u, v, ~] = wOFV.RunMain_Parallel_DatasetProc( ...
-        imgstack(:,:,k), imgstack(:,:,k+1), ...
-        mask, roirect, ...
-        eta, vartheta, ...
+    % Extract actual context around ROI to prevent boundary regularizer artifacts
+    I0_actual = imgstack(ny:ey, nx:ex, k);
+    I1_actual = imgstack(ny:ey, nx:ex, k+1);
+    
+    % Pad only if M > image dimensions ('symmetric' prevents sharp black edges)
+    I0_pad = padarray(I0_actual, [M-actual_h, M-actual_w], 'symmetric', 'post');
+    I1_pad = padarray(I1_actual, [M-actual_h, M-actual_w], 'symmetric', 'post');
+
+    [~, ~, u_pad, v_pad, ~] = wOFV.RunMain_DatasetProc( ...
+        I0_pad, I1_pad, ...
+        mask_pad, roirect_pad, ...
+        eta, vartheta_pad, ...
         MedFiltFlag, MedFiltSize, ...
         opt.pyramid_levels, ...
         Fmats, PatchSize);
 
-    flow(:,:,k,1) = u;
-    flow(:,:,k,2) = v;
+    % Extract the specific ROI region back from the padded result
+    u = u_pad(offset_y : offset_y + rh - 1, offset_x : offset_x + rw - 1);
+    v = v_pad(offset_y : offset_y + rh - 1, offset_x : offset_x + rw - 1);
+
+    % Map cropped u, v back into full-frame coordinates
+    flow(ry : ry+rh-1, rx : rx+rw-1, k, 1) = u;
+    flow(ry : ry+rh-1, rx : rx+rw-1, k, 2) = v;
 end
 
 fprintf('opticalflow_wlet: done. %d pairs processed.\n', n_pairs);

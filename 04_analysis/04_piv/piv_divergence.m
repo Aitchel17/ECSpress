@@ -48,11 +48,39 @@ if size(opt.mask, 1) ~= H || size(opt.mask, 2) ~= W
     error('opticalflow_divergence: Mask size must match the spatial dimensions of the flow array (H x W).');
 end
 
-% Create coordinate grid (assuming 1-pixel spacing like PIVlab default)
+% Create coordinate grid
 [x, y] = meshgrid(1:W, 1:H);
 
-% Calculate divergence (PIVlab uses MATLAB's built-in function)
-div_map = divergence(x, y, u, v);
+% Check if the flow field is a sparse grid with NaNs (e.g., from corr_ensemble)
+mask_valid = ~isnan(u) & ~isnan(v);
+if ~all(mask_valid, 'all') && any(mask_valid, 'all')
+    % Find the rows and columns that contain the sparse grid
+    valid_rows = find(any(mask_valid, 2));
+    valid_cols = find(any(mask_valid, 1));
+    
+    % Extract the subgrid
+    u_sparse = u(valid_rows, valid_cols);
+    v_sparse = v(valid_rows, valid_cols);
+    x_sparse = x(valid_rows, valid_cols);
+    y_sparse = y(valid_rows, valid_cols);
+    
+    % Calculate divergence on the subgrid. MATLAB automatically accounts 
+    % for the grid spacing (e.g., step size) using x_sparse and y_sparse.
+    div_sparse = divergence(x_sparse, y_sparse, u_sparse, v_sparse);
+    
+    % Interpolate the sparse divergence map to make tiles (nearest neighbor)
+    valid_div = ~isnan(div_sparse);
+    if any(valid_div, 'all')
+        % scatteredInterpolant with 'nearest' creates square tiles centered on grid points
+        F = scatteredInterpolant(x_sparse(valid_div), y_sparse(valid_div), div_sparse(valid_div), 'nearest', 'nearest');
+        div_map = F(x, y);
+    else
+        div_map = NaN(H, W);
+    end
+else
+    % Standard dense field calculation
+    div_map = divergence(x, y, u, v);
+end
 
 % Extract parameters from the area (mask)
 % Equivalent to PIVlab's get_mean_of_selection and get_integral_of_selection
