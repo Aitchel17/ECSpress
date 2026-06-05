@@ -19,15 +19,15 @@ classdef state_linefwhm < handle
     end
 
     methods
-        function obj = state_linefwhm(sleep_obj)
+        function obj = state_linefwhm(state_integrate)
             % Constructor
-            obj.sleep_obj = sleep_obj;
+            obj.sleep_obj = state_integrate;
         end
 
         function obj = get_state_indices(obj, t_axis,fs)
-            obj.state_idx =  obj.sleep_obj.add_taxis(t_axis);
-            obj.t_axis = t_axis;
-            obj.param.fs = fs;
+            obj.state_idx =  obj.sleep_obj.add_taxis(t_axis); % from time axis (indice-time) get state indices
+            obj.t_axis = t_axis; % copy time axis
+            obj.param.fs = fs; % copy sampling rate
         end
 
         function obj = get_powerdensity(obj, name, data1d)
@@ -124,7 +124,6 @@ classdef state_linefwhm < handle
                     row_counter = row_counter + 1;
                 end
             end
-
             % 4. Create Table
             obj.state_summary.(name) = table(state_name, bout_idx, ...
                 bout_duration, total_bout, raw_data, ...

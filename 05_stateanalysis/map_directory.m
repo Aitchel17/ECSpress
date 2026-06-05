@@ -3,7 +3,10 @@ clc,clear,clean_editor
 save_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis';
 experiment_folder = 'G:\tmp\00_igkl';
 
-%% create primary analysis folder in primary analysis save folder
+%% [STEP 0] Rename legacy eye.avi / whisker.avi -> prefix_eye.avi / prefix_whisker.avi
+rename_avi_files(experiment_folder);
+
+%% search primary analysis folders in save folder directory
 
 [~, exp_name] = fileparts(experiment_folder);
 save_exppath = fullfile(save_path,exp_name);
@@ -30,6 +33,10 @@ stateanalysis_map = {'paxfwhm_state', 'paxfwhm_state.mat'};
 % Go down to exp_dir which contains mouse folder, ex.hql071 ...
 dirstruct_table = mapdirstruct(experiment_folder, primary_map,peripheral_map,stateanalysis_map);
 write_dirtable(dirstruct_table, dirtable_dir);
+
+%% [STEP 2] Automatic Batch State Analysis
+batch_state_analysis(dirstruct_table, experiment_folder, primary_map, peripheral_map, stateanalysis_map, dirtable_dir,true);
+
 %% Read reference sheet (Example)
 opts = detectImportOptions(dirtable_dir, 'Sheet', 'reference');
 ref_table = readtable(dirtable_dir, opts);
