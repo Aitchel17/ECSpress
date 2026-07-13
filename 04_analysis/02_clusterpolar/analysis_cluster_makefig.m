@@ -71,7 +71,7 @@ axis(ax1, 'image', 'off');
 colormap(ax1, 'gray');
 title(ax1, 'BV');
 hold(ax1, 'on');
-plot_contour_overlay(ax1, masks.c_bv, clee.clist.red, false); % Single col
+plot_contour_overlay(ax1, constricted_bv, masks.c_bv, clee.clist.red, false); % Single col
 
 % 2. PVS (Gray)
 ax2 = subplot(1, 3, 2, 'Parent', fig_cluster_c.fig);
@@ -80,7 +80,7 @@ axis(ax2, 'image', 'off');
 colormap(ax2, 'gray');
 title(ax2, 'PVS');
 hold(ax2, 'on');
-plot_contour_overlay(ax2, masks.c_pvs, clee.clist.darkgreen, false);
+plot_contour_overlay(ax2, constricted_pvs, masks.c_pvs, clee.clist.darkgreen, false);
 
 % 3. Merged
 ax3 = subplot(1, 3, 3, 'Parent', fig_cluster_c.fig);
@@ -90,8 +90,8 @@ axis(ax3, 'image', 'off');
 title(ax3, 'Merged');
 hold(ax3, 'on');
 % yellow bg + color fg
-plot_contour_overlay(ax3, masks.c_bv, clee.clist.red, true);
-plot_contour_overlay(ax3, masks.c_pvs, clee.clist.darkgreen, true);
+plot_contour_overlay(ax3, constricted_bv, masks.c_bv, clee.clist.red, true);
+plot_contour_overlay(ax3, constricted_pvs, masks.c_pvs, clee.clist.darkgreen, true);
 
 fig_cluster_c.save2svg(save_dir);
 
@@ -110,7 +110,7 @@ axis(ax1, 'image', 'off');
 colormap(ax1, 'gray');
 title(ax1, 'BV');
 hold(ax1, 'on');
-plot_contour_overlay(ax1, masks.d_bv, clee.clist.magenta, false);
+plot_contour_overlay(ax1, dilated_bv, masks.d_bv, clee.clist.magenta, false);
 
 % 2. PVS (Gray)
 ax2 = subplot(1, 3, 2, 'Parent', fig_cluster_d.fig);
@@ -119,7 +119,7 @@ axis(ax2, 'image', 'off');
 colormap(ax2, 'gray');
 title(ax2, 'PVS');
 hold(ax2, 'on');
-plot_contour_overlay(ax2, masks.d_pvs, clee.clist.green, false);
+plot_contour_overlay(ax2, dilated_pvs, masks.d_pvs, clee.clist.green, false);
 
 % 3. Merged
 ax3 = subplot(1, 3, 3, 'Parent', fig_cluster_d.fig);
@@ -128,26 +128,30 @@ imagesc(ax3, rgb_d);
 axis(ax3, 'image', 'off');
 title(ax3, 'Merged');
 hold(ax3, 'on');
-plot_contour_overlay(ax3, masks.d_bv, clee.clist.magenta, true);
-plot_contour_overlay(ax3, masks.d_pvs, clee.clist.green, true);
+plot_contour_overlay(ax3, dilated_bv, masks.d_bv, clee.clist.magenta, true);
+plot_contour_overlay(ax3, dilated_pvs, masks.d_pvs, clee.clist.green, true);
 
 fig_cluster_d.save2svg(save_dir);
 
 
 
 
-    function plot_contour_overlay(ax, mask, color, use_bg)
-        if isempty(mask), return; end
-        [B, ~] = bwboundaries(mask);
-        for k = 1:length(B)
-            boundary = B{k};
-            % If use_bg, plot yellow thick line first
-            if use_bg
-                plot(ax, boundary(:,2), boundary(:,1), 'Color', [1 1 0], 'LineWidth', 2.5); % Yellow
-            end
-            % Foreground line
-            plot(ax, boundary(:,2), boundary(:,1), 'Color', color, 'LineWidth', 1);
+    function plot_contour_overlay(ax, img, mask, color, use_bg)
+        % Draw only the auto-detected contour that falls inside the manual
+        % selection polygon (mask) -- NOT the polygon selection region itself.
+        % Edge detection must match analysis_clusterpolar_contour.m.
+        if isempty(mask) || isempty(img), return; end
+        img_smooth = imgaussfilt(double(img), 3);
+        edges = edge(img_smooth, 'log', 0.005);
+        sel = edges & logical(mask);          % keep edges within the selection
+        [Ey, Ex] = find(sel);
+        if isempty(Ex), return; end
+        % If use_bg, plot a yellow halo behind for contrast on the merged view
+        if use_bg
+            plot(ax, Ex, Ey, '.', 'Color', [1 1 0], 'MarkerSize', 6); % Yellow
         end
+        % Foreground contour, same per-panel color
+        plot(ax, Ex, Ey, '.', 'Color', color, 'MarkerSize', 3);
     end
 
     function mask = get_mask_safe(roilist, name)
