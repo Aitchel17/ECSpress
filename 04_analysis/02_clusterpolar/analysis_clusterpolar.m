@@ -13,11 +13,16 @@ polarcluster.cluster_num = 20;
     analysis_cluster_kymograph(pax_fwhm.kymograph.kgph_lumen_processed,polarcluster.cluster_num);
 
 %% 3. Make median filter of images at each cluster
-polarcluster.clust_med_bv = zeros([size(twophoton_processed.ch1,1,2),polarcluster.cluster_num]);
-polarcluster.clust_med_csf = zeros([size(twophoton_processed.ch2,1,2),polarcluster.cluster_num]);
+% Follow the channel FWHM used (recorded on pax_fwhm.param by addkymograph);
+% default BV=ch1, CSF=ch2 when not recorded.
+bvch = 'ch1';  csfch = 'ch2';
+if isfield(pax_fwhm.param, 'channel_lumen'); bvch  = char(pax_fwhm.param.channel_lumen); end
+if isfield(pax_fwhm.param, 'channel_pvs');   csfch = char(pax_fwhm.param.channel_pvs);   end
+polarcluster.clust_med_bv  = zeros([size(twophoton_processed.(bvch),1,2),polarcluster.cluster_num]);
+polarcluster.clust_med_csf = zeros([size(twophoton_processed.(csfch),1,2),polarcluster.cluster_num]);
 
-tmp.rearanged_bvstack = twophoton_processed.ch1(:,:,polarcluster.kgph_lumen_columnidx);
-tmp.rearanged_csfstack = twophoton_processed.ch2(:,:,polarcluster.kgph_lumen_columnidx);
+tmp.rearanged_bvstack  = twophoton_processed.(bvch)(:,:,polarcluster.kgph_lumen_columnidx);
+tmp.rearanged_csfstack = twophoton_processed.(csfch)(:,:,polarcluster.kgph_lumen_columnidx);
 
 for cluster_idx = 1:polarcluster.cluster_num
     tmp.clusterstart = polarcluster.clusterboundary(cluster_idx,1);

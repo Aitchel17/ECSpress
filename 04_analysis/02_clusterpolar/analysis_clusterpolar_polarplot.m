@@ -1,8 +1,11 @@
 function polarcluster = analysis_clusterpolar_polarplot(polarcluster, roilist)
 % ANALYSIS_CLUSTERPOLAR_POLARPLOT Cartesian->polar transform of manual contours.
-%   Converts the 4 manual contours (CBV/CPVS/DBV/DPVS) into PAX-aligned polar
-%   profiles and stores them on polarcluster for downstream plotting.
-%   Rendering is done separately by analysis_polar_makefig.
+%   Converts the 4 manual contours (CBV/CPVS/DBV/DPVS) into IMAGE-FRAME polar
+%   profiles (via the shared polar_frame) and stores them on polarcluster for
+%   downstream plotting. PAX is NOT baked into the transform -- rotating here and
+%   unrotating in makefig was a needless round trip. pax_angle is kept only as a
+%   display marker; makefig places every profile in the image frame via the
+%   stored polar_binstart_deg. Rendering is done by analysis_polar_makefig.
 %
 %   Inputs:
 %       polarcluster: Struct with manual_roi + cluster_bvcsf_constdil
@@ -65,11 +68,14 @@ else
     pax_angle = 0;
 end
 
-%% 2. Convert cartesian to polar (analyze_polar builds PAX-aligned maps)
-% angle_map / radius_map are intermediate: consumed by roivtx2polar below,
-% not stored (regenerable from Center + pax_angle + img_size).
-dummy_stack = zeros(img_size(1), img_size(2), 1);
-[~, radius_map, angle_map] = analyze_polar(dummy_stack, Center, pax_angle, 24, true);
+%% 2. Convert cartesian to polar via the shared image-frame polar_frame
+% Bin in the IMAGE frame (no PAX rotation): pax is applied only as a display
+% marker in makefig, so rotating here and unrotating there was a needless round
+% trip. angle_map / radius_map are intermediate (consumed by roivtx2polar below,
+% not stored -- regenerable from Center + img_size).
+frame      = polar_frame([img_size(1), img_size(2)], Center, 'n_sectors', 24);
+radius_map = frame.radius_map;
+angle_map  = frame.angle_map;
 
 %% 3. Per-condition transform (heavy loop) -> binned polar profiles
 % Order matches the color order used in analysis_polar_makefig:
@@ -125,12 +131,14 @@ end
 %% 4. Store on polarcluster (small vectors; persisted via existing polarcluster save)
 polarcluster.polar_theta    = theta_centers;
 polarcluster.polar_profiles = polar_profiles;
-% Offset to ADD to polar_theta to rotate back to the ORIGINAL IMAGE frame:
-% analyze_polar centered the map as centered = mod(theta_map - bin_start, 360),
-% so theta_map (true image-screen angle) = centered + bin_start. angle_range =
-% 360/n_angles with n_angles = 24 (as passed to analyze_polar above).
-polarcluster.polar_binstart_deg = mod(-pax_angle, 180) - (360/24)/2;
-% PAX line angle (deg) for the makefig title + direction marker
+% Offset to ADD to polar_theta to recover the image-screen angle in makefig:
+% polar_frame centered the map as angle_map = mod(theta_raw - bin_start, 360)
+% with bin_start = -angle_range/2 (pax_angle = 0 here -> image frame), so
+% theta_raw = angle_map + bin_start. Now PAX-INDEPENDENT (constant -7.5 for
+% n_sectors = 24). Old files stored a pax-dependent value; makefig applies
+% whichever each file carries, so both old and new files render correctly.
+polarcluster.polar_binstart_deg = frame.bin_start_deg;
+% PAX line angle (deg) kept ONLY for the makefig title + direction marker
 polarcluster.pax_angle = pax_angle;
 
 end

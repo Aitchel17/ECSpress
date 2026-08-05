@@ -22,8 +22,8 @@ else
 end
 
 try
-    lim1 = prctile(img_ch1(:), [1 99]);
-    lim2 = prctile(img_ch2(:), [1 99]);
+    lim1 = prctile(img_ch1(:), [10 99]);
+    lim2 = prctile(img_ch2(:), [10 99]);
 
     img_ch1_norm = mat2gray(img_ch1, double(lim1));
     img_ch2_norm = mat2gray(img_ch2, double(lim2));
@@ -37,7 +37,7 @@ end
 % R = Ch1
 % G = Ch2
 % B = Ch1 + Ch2
-rgb_img = cat(3, img_ch1_norm, img_ch2_norm, img_ch1_norm + img_ch2_norm);
+rgb_img = cat(3, img_ch1_norm, img_ch2_norm, img_ch1_norm);
 rgb_img(rgb_img > 1) = 1;
 
 end

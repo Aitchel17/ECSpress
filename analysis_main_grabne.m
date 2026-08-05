@@ -66,6 +66,14 @@ session.roilist.save2disk(session.dir_struct.primary_analysis)
 
 
 
+
+
+
+
+
+
+
+
 %% 4.1.4 FWHM analysis figure generation
 analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
 
@@ -77,8 +85,10 @@ session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_process
 analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_polarcluster);
 %% 5.3 Manual Contour Correction
 session.polarcluster = analysis_clusterpolar_contour(session.polarcluster, session.roilist);
-%% 5.4 Polar Plot of Contours
-analysis_clusterpolar_polarplot(session.polarcluster, session.roilist, session.dir_struct.figures_polarcluster);
+%% 5.4 Polar transform of contours (cartesian -> polar profiles)
+session.polarcluster = analysis_clusterpolar_polarplot(session.polarcluster, session.roilist);
+%% 5.4b Polar figure
+analysis_polar_makefig(session.polarcluster, session.dir_struct.figures_polarcluster);
 session.roilist.save2disk(session.dir_struct.primary_analysis);
 % 5.5 save polar cluster
 polarcluster = session.polarcluster;
@@ -118,6 +128,6 @@ session.roilist.save2disk
 util_checkstack(session.radon_analysis.radon_result.events(4).irtd)
 
 %% 7. ROI Setup
-setup_rois(session.roilist, twophoton_processed,session.dir_struct.primary_analysis);
+setup_rois(session.roilist, twophoton_processed, session.pax_fwhm, session.dir_struct.primary_analysis);
 %% 7.1 ROI Setup verification figures (Manual ROIs)
-setup_rois_makefig(session.roilist, twophoton_processed.ch1, twophoton_processed.ch2, session.dir_struct.figures_roi);
+setup_rois_makefig(session.roilist, twophoton_processed, session.pax_fwhm, session.dir_struct.figures_roi);

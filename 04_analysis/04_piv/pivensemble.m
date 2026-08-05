@@ -1,6 +1,6 @@
-function [xtable, ytable, utable, vtable, typevector,correlation_map] = pivensemble(imgstack,...
+function [xtable, ytable, utable, vtable, typevector,correlation_map,corr_planes] = pivensemble(imgstack,...
     roi_inpt, converted_mask,interrogationarea,step,subpixfinder,...
-    passes,int2,int3,int4,mask_auto,imdeform,repeat,do_pad)
+    passes,int2,int3,int4,mask_auto,imdeform,repeat,do_pad,save_planes)
 %this funtion performs the  PIV analysis. It is a modification of the
 %pivFFTmulti, and will do ensemble correlation. That is a suitable
 %algorithm for low seeding density as it happens in microPIV.
@@ -13,6 +13,16 @@ result_conv_ensemble = zeros(interrogationarea,interrogationarea); % prepare emp
 video_frame_selection = 1:size(imgstack, 3);
 num_slice = numel(video_frame_selection);
 total_analyses_amount = num_slice / 2 * passes;
+
+%% [DEVIATION] Optional per-frame-pair correlation-plane capture (QC/debug).
+% Normally each pair's result_conv is added into result_conv_ensemble and then
+% discarded. With save_planes==true every pair's plane stack is kept for the FINAL
+% pass -- the exact IA x IA x nWindows array that was summed -- so the ensemble peak
+% can be checked against the individual pairs that produced it.
+if nargin < 15 || isempty(save_planes); save_planes = false; end
+corr_planes = [];
+n_pairs_cap = floor(num_slice/2);
+pair_i      = 0;
 tic
 
     for sli_idx=1:2:num_slice-mod(num_slice,2)
@@ -241,6 +251,17 @@ tic
 	%apply mask
 	ii = find(mask(ss1(round(interrogationarea/2+1), round(interrogationarea/2+1), :)));
 	result_conv(:,:, ii) = 0;
+	%keep this pair's planes before the sum destroys them (pass 1 = final pass here)
+	if save_planes && passes==1
+		pair_i = pair_i+1;
+		if pair_i==1
+			corr_planes = struct('maps', zeros([size(result_conv,1) size(result_conv,2) size(result_conv,3) n_pairs_cap],'single'), ...
+				'corr2', zeros(size(result_conv,3), n_pairs_cap), ...
+				'pair_frames', zeros(n_pairs_cap,2), 'pass', 1);
+		end
+		corr_planes.maps(:,:,:,pair_i) = single(result_conv);
+		corr_planes.pair_frames(pair_i,:) = video_frame_selection([sli_idx sli_idx+1]);
+	end
 	%average the correlation matrices
 	try
 		result_conv_ensemble=result_conv_ensemble+result_conv;
@@ -257,7 +278,9 @@ tic
 			corr_map_cnt=0;
 		end
 		for cor_i=1:size(image1_cut,3)
-			correlation_map(cor_i)=correlation_map(cor_i) + corr2(image1_cut(:,:,cor_i),image2_cut(:,:,cor_i));
+			cc_i = corr2(image1_cut(:,:,cor_i),image2_cut(:,:,cor_i));
+			correlation_map(cor_i)=correlation_map(cor_i) + cc_i;
+			if save_planes; corr_planes.corr2(cor_i,pair_i) = cc_i; end
 		end
 		corr_map_cnt=corr_map_cnt+1;
 	end
@@ -619,6 +642,17 @@ tic
 			%apply mask ---
 			ii = find(mask(ss1(round(interrogationarea/2+1), round(interrogationarea/2+1), :)));
 			result_conv(:,:, ii) = 0;
+			%keep this pair's planes before the sum destroys them (final pass only)
+			if save_planes && multipass==passes-1
+				pair_i = pair_i+1;
+				if pair_i==1
+					corr_planes = struct('maps', zeros([size(result_conv,1) size(result_conv,2) size(result_conv,3) n_pairs_cap],'single'), ...
+						'corr2', zeros(size(result_conv,3), n_pairs_cap), ...
+						'pair_frames', zeros(n_pairs_cap,2), 'pass', passes);
+				end
+				corr_planes.maps(:,:,:,pair_i) = single(result_conv);
+				corr_planes.pair_frames(pair_i,:) = video_frame_selection([sli_idx sli_idx+1]);
+			end
 			%add alle result_conv
 			try
 				result_conv_ensemble=result_conv_ensemble+result_conv;
@@ -635,7 +669,9 @@ tic
 				end
 				%Correlation strength
 				for cor_i=1:size(image1_cut,3)
-					correlation_map(cor_i)=correlation_map(cor_i)+corr2(image1_cut(:,:,cor_i),image2_cut(:,:,cor_i));
+					cc_i = corr2(image1_cut(:,:,cor_i),image2_cut(:,:,cor_i));
+					correlation_map(cor_i)=correlation_map(cor_i)+cc_i;
+					if save_planes; corr_planes.corr2(cor_i,pair_i) = cc_i; end
 				end
 				corr_map_cnt=corr_map_cnt+1;
 			end
@@ -694,6 +730,12 @@ end
 	correlation_map = permute(reshape(correlation_map, [size(xtable')]), [2 1 3])/corr_map_cnt;
 	%clear Correlation map in masked area
 	correlation_map(typevector==0) = 0;
+
+	%% captured per-pair corr2 onto the vector grid: [nWin x nPair] -> [ny x nx x nPair]
+	if save_planes && ~isempty(corr_planes)
+		corr_planes.corr2 = permute(reshape(corr_planes.corr2, [size(xtable') n_pairs_cap]), [2 1 3]);
+		corr_planes.corr2(repmat(typevector==0, 1, 1, n_pairs_cap)) = 0;
+	end
 
 
 

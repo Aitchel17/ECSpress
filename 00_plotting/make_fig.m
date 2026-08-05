@@ -229,10 +229,16 @@ classdef make_fig < handle
             end
             %%
             if isempty(save_path)
-                path = fullfile(obj.save_path, obj.fig.Name);
+                target_dir = obj.save_path;
             else
-                path = fullfile(save_path, obj.fig.Name);
+                target_dir = save_path;
             end
+            % Lazily create the target folder so categories with no figures never
+            % leave an empty folder behind (see ECSSession.setup_directories).
+            if ~isempty(target_dir) && ~exist(target_dir, 'dir')
+                mkdir(target_dir);
+            end
+            path = fullfile(target_dir, obj.fig.Name);
             print(obj.fig, path, "-dsvg", "-vector");
 
         end
@@ -312,7 +318,7 @@ classdef make_fig < handle
             ylim(obj.ax,yrange);
         end
     end
-    methods (Access = private)
+    methods (Access = protected)
         function preset_axis(obj)
 
             % black background related setup

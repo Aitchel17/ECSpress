@@ -10,7 +10,8 @@ classdef color_lee
             cyan = [],...
             yellow = [],...
             gray = [],...
-            inferno = [])
+            inferno = [],...
+            hilo = [])
     end
 
     properties (Constant)
@@ -60,6 +61,18 @@ classdef color_lee
             points = linspace(0,1,256);
             obj.gradient.inferno = [interp1(x,r,points,'pchip')', interp1(x,g,points,'pchip')', interp1(x,b,points,'pchip')'];
             obj.gradient.inferno = max(0, min(1, obj.gradient.inferno));
+
+            % Diverging blue -> white -> red, for anything read against zero.
+            % Built in LCH so both arms carry the same lightness at the same
+            % distance from the centre; a sequential map on a signed quantity
+            % puts its brightest end on one sign and reads as a bias
+            n  = 128;
+            t  = linspace(0, 1, n)';                 % 0 = end, 1 = centre
+            L  = 45 + 52*t;                          % dark at the ends, white mid
+            Cf = (1 - t).^0.9;                       % chroma dies at the centre
+            lo = color_lee.lch(L, color_lee.max_chroma(L, 265*ones(n,1)).*0.85.*Cf, 265*ones(n,1));
+            hi = color_lee.lch(L, color_lee.max_chroma(L,  25*ones(n,1)).*0.85.*Cf,  25*ones(n,1));
+            obj.gradient.hilo = [lo; flipud(hi)];    % low = blue, high = red
         end
     end
     

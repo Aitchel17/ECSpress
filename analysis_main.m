@@ -16,77 +16,142 @@
 
 % 4. Analysis
 % Currently planned primary analysis outputs are
-% 1. Line full width halfmaximum (position-time)
+% 1. Line full width halfmaximum (position-time) 3,4,5,7
 
 % Path setup
 addpath(genpath(pwd));
-
+close all
 % Directory setup
-sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_005';
-% directories = manage_directories(base_path); % Removed, handled by ECSSession
+% sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';
+sessiondir ='E:\02_egfptdt\hql099\260601_hql99_sleep\HQL99_sleep260601_005';
 
-
-%% 1. Load data & 3. Load processed data (Integrated via ECSSession)
+% 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(sessiondir);
-session = session.load_primary_results();
+session = session.load_primary_results;
 %%
+
+
+% directories = manage_directories(base_path); % Removed, handled by ECSSession
 session.stackch1 = session.loadstack('ch1');
 session.stackch2 = session.loadstack('ch2');
 % 2. Twophoton data FPS matching & preprocessing
 % Note: twophoton_preprocess expects a struct with stackch1/2 and img_param.
 % ECSSession object works here as it has these properties.
 twophoton_processed = twophoton_preprocess(session);
-
 % Load Primary Results (replaces initialize_analysis_workspace/load_primaryresult)
 
 %% 4.1 FWHM Analysis
 % 4.1.1 FWHM analysis - ROI Setupw
-session.roilist.addormodifyroi(twophoton_processed.ch1,'pax','line');
+session.roilist.addormodifyroi(twophoton_processed.ch2,'pax','line',twophoton_processed.ch1);
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 session.pax_fwhm.param.fs = twophoton_processed.outfps;
 session.pax_fwhm.t_axis = twophoton_processed.t_axis;
 % Lumen (vessel) processing
-session.pax_fwhm.addkymograph("lumen", twophoton_processed.ch1,"mean")
-session.pax_fwhm.kymograph_afterprocess('lumen',[1 3])
+bvch = 'ch2';                                   % BV/lumen channel (recordings may swap ch1/ch2)
+session.pax_fwhm.param.channel_lumen = bvch;    % single source: data + record both from bvch
+session.pax_fwhm.addkymograph("lumen", twophoton_processed.(bvch),"max")
+session.pax_fwhm.kymograph_afterprocess('lumen',[1 5])
 session.pax_fwhm.fwhm("lumen");
 
 %% 4.1.3 PVS Analysis
 % PVS processing (using channel 2)
-session.pax_fwhm.addkymograph("pvs", twophoton_processed.ch2,"mean")
+csfch = 'ch1';                                  % CSF/PVS channel
+session.pax_fwhm.param.channel_pvs = csfch;     % single source: data + record both from csfch
+session.pax_fwhm.addkymograph("pvs", twophoton_processed.(csfch),"mean")
 session.pax_fwhm.kymograph_afterprocess('pvs',[1 5])
-session.pax_fwhm.pvsanalysis();
+%%
+session.pax_fwhm.pvsanalysis_inverted();
 %%
 session.pax_fwhm.clean_outlier(true)
 session.pax_fwhm.getdiameter;
 session.pax_fwhm.getdisplacement;
 session.pax_fwhm.save2disk('paxfwhm',session.dir_struct.primary_analysis);
 session.roilist.save2disk(session.dir_struct.primary_analysis)
+
+%% 4.1.5 Manual ROI setup  (needs pax_fwhm; everything downstream reads these)
+setup_rois(session.roilist, twophoton_processed, session.pax_fwhm, session.dir_struct.primary_analysis);
+setup_rois_makefig(session.roilist, twophoton_processed, session.pax_fwhm, session.dir_struct.figures_roi);
+
 %% 4.1.4 FWHM analysis figure generation
-analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
+close all
+pax_fig = analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis,...
+    twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
+%% Opt Output for FWHM boundary overlay video
+session.pax_fwhm.reconstruction_overlay(twophoton_processed.ch1,twophoton_processed.ch2,...
+    "SavePath",fullfile(session.dir_struct.primary_analysis,"overlay.tif"),"BlankBoundary",false);
+
+%%
+if isfile(fullfile(sessiondir,"peripheral/sleep_score.mat"))
+    disp('Loading sleepscore file')
+    sleepscore = load(fullfile(sessiondir,"peripheral/sleep_score.mat"));
+else
+    disp('no sleep_socre.mat')
+end
+fwhm = session.pax_fwhm.thickness;
+%%
+clee = color_lee;
+fig = figure();
+sgolayax = axes(fig);
+
+cla(sgolayax)
+plot(sgolayax,session.pax_fwhm.t_axis,sgolayfilt(fwhm.pvschanges_total*session.img_param.pixel2um,3,11),"Color",clee.clist.darkgreen,'LineWidth',1)
+hold on
+plot(sgolayax,session.pax_fwhm.t_axis,sgolayfilt(fwhm.epschanges*session.img_param.pixel2um,3,11),"Color",clee.clist.gold,'LineWidth',1)
+
+plot(sgolayax,session.pax_fwhm.t_axis,sgolayfilt(fwhm.bvchanges*session.img_param.pixel2um,3,11),"Color",'red','LineWidth',1)
+plot_sleep_patches(sgolayax,sleepscore)
+%%
+fig = figure();
+sgolayax = axes(fig);
+
+cla(sgolayax)
+plot(sgolayax,session.pax_fwhm.t_axis,fwhm.epschanges*session.img_param.pixel2um,"Color",'b','LineWidth',2)
+hold on
+plot(sgolayax,session.pax_fwhm.t_axis,fwhm.bvchanges*session.img_param.pixel2um,"Color",'red','LineWidth',2)
+plot_sleep_patches(sgolayax,sleepscore)
+%%
+
+%%
+tmp.data= ans;
+%%
+figure()
+imagesc(squeeze(tmp.data(:,:,1,2:4)))
 
 
 %% 4.2 Cluster polar analysis
 %% 5.1 Make cluster
 session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.dir_struct.primary_analysis);
 %% 5.2 Make cluster figure
-analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_polarcluster);
+analysis_cluster_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_polarcluster);
 %% 5.3 Manual Contour Correction
 session.polarcluster = analysis_clusterpolar_contour(session.polarcluster, session.roilist);
-%% 5.4 Polar Plot of Contours
-analysis_clusterpolar_polarplot(session.polarcluster, session.roilist, session.dir_struct.figures_polarcluster);
+%% 5.4 Polar transform of contours (cartesian -> polar profiles)
+session.polarcluster = analysis_clusterpolar_polarplot(session.polarcluster, session.roilist);
+%% 5.4b Polar figure
+analysis_polar_makefig(session.polarcluster, session.dir_struct.figures_polarcluster);
 session.roilist.save2disk(session.dir_struct.primary_analysis);
 % 5.5 save polar cluster
 polarcluster = session.polarcluster;
 save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcluster");
+%%
+figure()
 
+imagesc(polarcluster.dilated_medianimg)
+%%
+axis image
+%%
+colormap(clee.gradient.inferno)
+%%
+imcontrast
 %% 6. Dynamic time warping based analysis
 %% 7. PIV analysis
 
 %% 8. Radon Analysis (Only capable for clear images without debris around artery)
-session.roilist.addormodifyroi(twophoton_processed.ch2,'radon','rectangle');
+bvch = session.pax_fwhm.param.channel_lumen;    % radon follows FWHM's BV/vessel channel
+session.roilist.addormodifyroi(twophoton_processed.(bvch),'radon','rectangle');
 %%
-session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, 'ch1');
+session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, session.pax_fwhm.param.channel_lumen);
 
 
 
@@ -94,6 +159,51 @@ session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, 'c
 analysis_radon_makefig(session.radon_analysis.radon_result, twophoton_processed.t_axis, session.dir_struct.figures_radon, twophoton_processed.pixel2um);
 %%
 session.radon_analysis.get_elipsoid
+%%
+figure()
+%%
+
+
+
+
+%%
+radonresult = session.radon_analysis.radon_result;
+tmp.normt_diameter =radonresult.diameter./mean(radonresult.diameter,2) ;
+plot(tmp.normt_diameter(:,100))
+
+%%
+tmp.normd_diameter =radonresult.diameter./mean(radonresult.diameter,1) ;
+%%
+figure()
+imagesc(tmp.normd_diameter)
+%%
+plot(tmp.normd_diameter(:,100))
+hold on
+plot(tmp.normd_diameter(:,1200))
+
+%%
+figure()
+plot(tmp.normd_diameter(:,101))
+
+hold on
+plot(tmp.normd_diameter(:,880))
+
+plot(tmp.normd_diameter(:,1204))
+plot(tmp.normd_diameter(:,1242))
+
+
+%%
+figure()
+plot(radonresult.elipsoidfit.AI_1minus)
+
+%%
+
+figure()
+plot(radonresult.elipsoidfit.resnorm)
+
+
+
+
 
 
 %%
@@ -102,7 +212,3 @@ session.roilist.save2disk
 %%
 util_checkstack(session.radon_analysis.radon_result.events(4).irtd)
 
-%% 7. ROI Setup
-setup_rois(session.roilist, twophoton_processed,session.dir_struct.primary_analysis);
-%% 7.1 ROI Setup verification figures (Manual ROIs)
-setup_rois_makefig(session.roilist, twophoton_processed.ch1, twophoton_processed.ch2, session.dir_struct.figures_roi);
