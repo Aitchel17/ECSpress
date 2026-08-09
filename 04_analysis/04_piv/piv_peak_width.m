@@ -1,5 +1,5 @@
 function halfwidth = piv_peak_width(maps)
-% IN   maps       P x P x ny x nx x npairs correlation planes from corr_ensemble
+% IN   maps       P x P x ny x nx x npairs correlation planes from piv_corr_ensemble
 %                 (corr_planes.maps), one plane per interrogation window per pair
 % OUT  halfwidth  ny x nx equivalent half-max radius (px) of the ENSEMBLED peak,
 %                 NaN where the window has no usable plane

@@ -35,7 +35,9 @@ end
 
 % 0. Setup
 [H, W] = size(img);
-if isempty(mask); mask = false(H, W); end
+if isempty(mask)
+    mask = false(H, W);
+end
 [Ix, Iy] = gradient(double(img));
 [ny, nx] = size(xtable);
 lam1 = NaN(ny, nx);
@@ -46,15 +48,19 @@ need = max(4, round(0.15 * window^2));   % a window mostly masked out has no ten
 % 1. One structure tensor per window
 for r = 1:ny
     for c = 1:nx
-        yc = round(ytable(r, c));   xc = round(xtable(r, c));
+        yc = round(ytable(r, c));   
+        xc = round(xtable(r, c));
         ys = max(1, yc-h) : min(H, yc+h);
         xs = max(1, xc-h) : min(W, xc+h);
         keep = ~mask(ys, xs);
-        if nnz(keep) < need; continue; end
+        if nnz(keep) < need
+            continue; 
+        end
         gx = Ix(ys, xs);   gy = Iy(ys, xs);
         gx = gx(keep);     gy = gy(keep);
         % 1.1 Normalised by the pixel count, so a clipped window is comparable
-        M = [gx'*gx, gx'*gy; gx'*gy, gy'*gy] / numel(gx);
+        M = [gx'*gx, gx'*gy; 
+            gx'*gy, gy'*gy] / numel(gx);
         e = sort(eig(M), 'descend');
         lam1(r, c) = e(1);
         lam2(r, c) = e(2);

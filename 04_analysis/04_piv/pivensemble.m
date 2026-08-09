@@ -1,6 +1,6 @@
-function [xtable, ytable, utable, vtable, typevector,correlation_map,corr_planes] = pivensemble(imgstack,...
+function [xtable, ytable, utable, vtable, typevector,correlation_map,corr_planes, pass_planes] = pivensemble(imgstack,...
     roi_inpt, converted_mask,interrogationarea,step,subpixfinder,...
-    passes,int2,int3,int4,mask_auto,imdeform,repeat,do_pad,save_planes)
+    passes,int2,int3,int4,mask_auto,imdeform,repeat,do_pad,save_planes,save_passes)
 %this funtion performs the  PIV analysis. It is a modification of the
 %pivFFTmulti, and will do ensemble correlation. That is a suitable
 %algorithm for low seeding density as it happens in microPIV.
@@ -20,9 +20,24 @@ total_analyses_amount = num_slice / 2 * passes;
 % pass -- the exact IA x IA x nWindows array that was summed -- so the ensemble peak
 % can be checked against the individual pairs that produced it.
 if nargin < 15 || isempty(save_planes); save_planes = false; end
+if nargin < 16 || isempty(save_passes); save_passes = false; end
 corr_planes = [];
 n_pairs_cap = floor(num_slice/2);
 pair_i      = 0;
+
+%% [DEVIATION] Every pass's planes, not just the final one.
+% why      only pass 1 correlates the UNDEFORMED image2, so its peak is the only
+%          one measured against an unshifted reference. Later passes see an image2
+%          already moved by the running estimate, so their planes hold a residual
+% caution  that does NOT make pass 1's peak the total displacement -- it carries
+%          only a fraction of it (see FINDINGS.md), because a 40 px window
+%          averages over 20 px structure and reports the average. The total is
+%          pass 1 PLUS every residual after it, which is what utable_total
+%          accumulates
+% note     pass k = pass_planes{k}; window and step differ per pass, so each entry
+%          carries its own grid and the caller regrids
+pass_planes = cell(1, passes);
+pp_i        = zeros(1, passes);
 tic
 
     for sli_idx=1:2:num_slice-mod(num_slice,2)
@@ -262,6 +277,20 @@ tic
 		corr_planes.maps(:,:,:,pair_i) = single(result_conv);
 		corr_planes.pair_frames(pair_i,:) = video_frame_selection([sli_idx sli_idx+1]);
 	end
+	%% [DEVIATION] pass-1 planes, kept only when save_passes is asked for.
+	% why  this is the only plane whose peak is the TOTAL displacement -- every
+	%      later pass correlates an image2 already deformed by the running
+	%      estimate, so its plane holds a residual and its peak sits near zero
+	if save_passes
+		pp_i(1) = pp_i(1)+1;
+		if pp_i(1)==1
+			pass_planes{1}.maps = zeros([size(result_conv,1) size(result_conv,2) ...
+				size(result_conv,3) n_pairs_cap], 'single');
+			pass_planes{1}.window = interrogationarea;
+			pass_planes{1}.step   = step;
+		end
+		pass_planes{1}.maps(:,:,:,pp_i(1)) = single(result_conv);
+	end
 	%average the correlation matrices
 	try
 		result_conv_ensemble=result_conv_ensemble+result_conv;
@@ -293,6 +322,17 @@ tic
 %correlation_map=[];
 	%% Correlation matrix of pass 1 is done.
 	[xtable,ytable,utable, vtable] = peakfinding (result_conv_ensemble, mask, interrogationarea,minix,step,maxix,miniy,maxiy,SubPixOffset,ss1,subpixfinder);
+	%% [DEVIATION] pass 1's own grid, captured before the next pass overwrites it
+	if save_passes
+		pass_planes{1}.xtable = double(xtable);
+		pass_planes{1}.ytable = double(ytable);
+		pass_planes{1}.utable = double(utable);
+		pass_planes{1}.vtable = double(vtable);
+		% pass 1 has nothing before it, so its own result IS the running total.
+		% Same field set as the later passes, so they stack into one struct array
+		pass_planes{1}.utable_total = double(utable);
+		pass_planes{1}.vtable_total = double(vtable);
+	end
 	for multipass=1:passes-1
 		% unfortunately, preprocessing has to be done again for every pass, otherwise i would have to save the modified data somehow.
 		if multipass==1
@@ -653,6 +693,18 @@ tic
 				corr_planes.maps(:,:,:,pair_i) = single(result_conv);
 				corr_planes.pair_frames(pair_i,:) = video_frame_selection([sli_idx sli_idx+1]);
 			end
+			%% [DEVIATION] same capture for THIS pass, whichever it is
+			if save_passes
+				pass_k = multipass + 1;
+				pp_i(pass_k) = pp_i(pass_k)+1;
+				if pp_i(pass_k)==1
+					pass_planes{pass_k}.maps = zeros([size(result_conv,1) ...
+						size(result_conv,2) size(result_conv,3) n_pairs_cap], 'single');
+					pass_planes{pass_k}.window = interrogationarea;
+					pass_planes{pass_k}.step   = step;
+				end
+				pass_planes{pass_k}.maps(:,:,:,pp_i(pass_k)) = single(result_conv);
+			end
 			%add alle result_conv
 			try
 				result_conv_ensemble=result_conv_ensemble+result_conv;
@@ -679,6 +731,16 @@ tic
 		[xtable,ytable,utable2, vtable2] = peakfinding (result_conv_ensemble, [], interrogationarea,minix,step,maxix,miniy,maxiy,SubPixOffset,ss1,subpixfinder);
 		utable = utable+utable2;
 		vtable = vtable+vtable2;
+		%% [DEVIATION] this pass's grid. utable is the RESIDUAL this pass found;
+		% utable_total is the running sum, which is what its plane is centred on
+		if save_planes
+			pass_planes{multipass+1}.xtable = double(xtable);
+			pass_planes{multipass+1}.ytable = double(ytable);
+			pass_planes{multipass+1}.utable = double(utable2);
+			pass_planes{multipass+1}.vtable = double(vtable2);
+			pass_planes{multipass+1}.utable_total = double(utable);
+			pass_planes{multipass+1}.vtable_total = double(vtable);
+		end
 	end
 	
     
