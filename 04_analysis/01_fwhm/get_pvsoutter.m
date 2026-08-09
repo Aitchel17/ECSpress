@@ -90,6 +90,7 @@ imagesc(ax,upedge_thresholded>0)
 hold on
 plot(bv_upidx,'r')
 plot(bv_mididx,'g')
+plot(upedge_rawidx,'w')
 %%
 imagesc(ax,upedge_confined)
 hold on
@@ -228,87 +229,7 @@ imagesc(ax,sum(cat(3,kymographmask.pvs_up,kymographmask.pvs_down),3,'omitnan'));
 
 end
 
-function [boundary_idx,clean_kymograph] = clean_thresholdedkymograph(thresholded, upmod, debug_ax)
-x_length = size(thresholded,2);
-clean_kymograph = imfill(thresholded,'holes');
-boundary_idx = zeros([1,x_length]);
 
-nhood = zeros([7,3]);
-if upmod
-    nhood(1:2,2) =1; % up
-else
-    nhood(end-1:end,2) =1; % down
-end
-clean_kymograph = imerode(clean_kymograph,nhood);
-clean_kymograph = imdilate(clean_kymograph,nhood);
-clean_kymograph(1:2,:) = 0; % remove up dilation
-clean_kymograph(end-1:end,:) = 0; % remove bottom dilation
-
-%%
-zero_column = sum(clean_kymograph,1);
-zero_column = zero_column ==0;
-%%
-clean_kymograph(:,zero_column) = thresholded(:,zero_column);
-%%
-zeros_array = sum(clean_kymograph,1);
-%%
-
-%%
-%%
-cla(debug_ax);
-%plot(thresholded(:,8))
-% %%
-imagesc(debug_ax,clean_kymograph)
-%%
-for c_idx = 1: x_length
-    szfilt.x = clean_kymograph(:,c_idx);
-    szfilt.dx =diff([0;szfilt.x;0]);
-    szfilt.sx = find(szfilt.dx == 1);
-    szfilt.ex = find(szfilt.dx == -1);
-    szfilt.lx = szfilt.ex -szfilt.sx;
-
-    szfilt.y = ~szfilt.x;
-    szfilt.dy =diff([0;szfilt.y;0]);
-    szfilt.sy = find(szfilt.dy == 1);
-    szfilt.ey = find(szfilt.dy == -1);
-    szfilt.ly = szfilt.ey -szfilt.sy;
-    [~,szfilt.lxmaxszidx] = max(szfilt.lx);
-    if upmod
-        szfilt.count = 1;% up
-        szfilt.ly = szfilt.ly(2:end); % up
-        while szfilt.count < szfilt.lxmaxszidx
-            if szfilt.lx(szfilt.count) < szfilt.ly(szfilt.count)
-                % disp(szfilt.lx(szfilt.count))
-                szfilt.sx(1:szfilt.count) = Inf;
-                szfilt.ex(1:szfilt.count) = Inf;
-            end
-            szfilt.count=szfilt.count+1;
-        end
-        boundary_idx(c_idx) = min(szfilt.sx);
-    else
-        szfilt.count = numel(szfilt.lx); % down
-        szfilt.ly = szfilt.ly(1:end-1); % down
-        while szfilt.count > szfilt.lxmaxszidx
-            if szfilt.lx(szfilt.count) < szfilt.ly(szfilt.count)
-                %disp(szfilt.lx(szfilt.count))
-                szfilt.sx(szfilt.count:end) = 0;
-                szfilt.ex(szfilt.count:end) = 0;
-            end
-            szfilt.count=szfilt.count-1;
-        end
-        boundary_idx(c_idx) = max(szfilt.ex);
-    end
-
-end
-%%
-%%
-cla(debug_ax);
-%%
-imagesc(debug_ax,thresholded)
-%%
-imagesc(debug_ax,clean_kymograph)
-%%
-end
 
 function maxidx = findmax(cropkymograph, upmod)
 % findmax - finds the innermost peak row index within the top-25% bright region.
@@ -344,18 +265,27 @@ minidx = round(median(minidx,1,"omitmissing")); % Median quarter idx
 minidx = medfilt1(minidx,11);
 crop_mask = maxcropkymograph;
 if upmod
-    %%
     mincolumnidx = maxcropkymograph>0;
     mincolumnidx = mincolumnidx.*row_idx_grid;
     %%
     mincolumnidx(mincolumnidx ==0) = Inf;
     %%
     mincolumnidx = min(mincolumnidx,[],1);
+    
+    maxcolumnidx = maxcropkymograph>0;
+    maxcolumnidx = maxcolumnidx.*row_idx_grid;
+    maxcolumnidx = max(maxcolumnidx,[],1);
+
     %%
     differential_column = abs(minidx - mincolumnidx); % abs(): mincolumnidx is always < minidx, so unsigned distance needed
     overshadow_column = differential_column <5;
     minidx(overshadow_column) = mincolumnidx(overshadow_column); % if thickness thinner than 5 pixel, don't narrow down
     minidx(overshadow_column) = mincolumnidx(overshadow_column);
+
+    % Ensure at least 10 pixels of valid area
+    thickness = maxcolumnidx - minidx + 1;
+    thin_column = thickness < 10 & maxcolumnidx > 0; % Only apply if column is valid
+    minidx(thin_column) = max(mincolumnidx(thin_column), maxcolumnidx(thin_column) - 9);
 
     %%
     crop_mask(row_idx_grid<minidx) = NaN;
@@ -363,10 +293,22 @@ else
     maxcolumnidx = maxcropkymograph>0;
     maxcolumnidx = maxcolumnidx.*row_idx_grid;
     maxcolumnidx = max(maxcolumnidx,[],1);
+    
+    mincolumnidx = maxcropkymograph>0;
+    mincolumnidx = mincolumnidx.*row_idx_grid;
+    mincolumnidx(mincolumnidx ==0) = Inf;
+    mincolumnidx = min(mincolumnidx,[],1);
+
     differential_column = abs(minidx - maxcolumnidx); % abs(): maxcolumnidx is always > minidx, so unsigned distance needed
     overshadow_column = differential_column <5;
     minidx(overshadow_column) = maxcolumnidx(overshadow_column); % if thickness thinner than 5 pixel, don't narrow down
     minidx(overshadow_column) = maxcolumnidx(overshadow_column);
+    
+    % Ensure at least 10 pixels of valid area
+    thickness = minidx - mincolumnidx + 1;
+    thin_column = thickness < 10 & mincolumnidx < Inf; % Only apply if column is valid
+    minidx(thin_column) = min(maxcolumnidx(thin_column), mincolumnidx(thin_column) + 9);
+
     crop_mask(row_idx_grid > minidx) = NaN;
 end
 %%

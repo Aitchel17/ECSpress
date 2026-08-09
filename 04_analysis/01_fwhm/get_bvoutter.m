@@ -24,6 +24,7 @@ end
 cla(ax) % 0.3.1 reset axis to prevent overlay burden
 imagesc(ax,kymograph) % 0.3.2 plot entire kymograph
 while true
+    figure(fig) % keep interactive window in front (input() steals focus to command window)
     cla(ax) % 0.3.1 reset axis to prevent overlay burden
     imagesc(ax,kymograph) % 0.3.2 plot entire kymograph
     lowcropval = input('Get lower crop idx: '); % 0.3.3 get input
@@ -68,6 +69,7 @@ cla(ax) % 1.1 reset kymograph to show cropped kymograph
 imagesc(ax,upkymograph) % 1.2 show cropped kymograph
 
 while true
+    figure(fig) % keep interactive window in front
     up_offset = prctile(upkymograph,upoffset,1); %% offset
     upoffsetloc =  upkymograph<=up_offset;
     upoffsetloc = row_idx_grid.*upoffsetloc;
@@ -89,6 +91,7 @@ end
 
 
 while true
+    figure(fig) % keep interactive window in front
     cla(ax) % 1.1 reset kymograph to show cropped kymograph
     imagesc(ax,downkymograph) % 1.2 show cropped kymograph
     down_offset = prctile(downkymograph,lowoffset,1);
@@ -114,6 +117,7 @@ downkymograph(row_idx_grid > downoffsetloc) = NaN;
 cla(ax) % 1.1 reset kymograph to show cropped kymograph
 imagesc(ax,upkymograph) % 1.2 show cropped kymograph
 while true
+    figure(fig) % keep interactive window in front
     upkymograph = upkymograph - min(upkymograph,[],1); % below offset become negative
     upkymograph = upkymograph./max(upkymograph,[],1); % Max to be 1
     upkymograph_thr = upkymograph > threshold; % 6.2 thresholding

@@ -74,37 +74,31 @@ edgebv_upkymograph(row_idx_grid > bv_upidx) = NaN; % upper vessel edge kymograph
 % plot(test_ax,downedge_minidx,'r')
 % plot(test_ax,downedge_rawidx,'g')
 
-up_maxidx = findmax(edgebv_upkymograph, true); % upmod=true: pick innermost (highest row idx) peak to avoid outer bright artefacts
-edgebv_upmaxkymograph = edgebv_upkymograph;
-edgebv_upmaxkymograph(row_idx_grid < up_maxidx) = NaN;
-[upedge_confined,upedge_minidx] = findshadow(edgebv_upmaxkymograph,true); % 3. minidx
-[upedge_thresholded, upedge_rawidx] = halfmax_confinedkymograph(upedge_confined,false); % upcenter, boundary
-[upedge_idx,~] = clean_thresholdedkymograph(upedge_thresholded>0, false, ax);
+% findmax latched onto the bright vessel-wall bleed (contamination is severe here).
+% Two explicit steps instead: (1) find the dark-PVS dip + the tissue max beyond it,
+% (2) rise-onset edge where the signal first departs the dark floor on the outer
+% half [dip -> max].
+[up_dipidx, up_maxidx]      = find_dip_max(edgebv_upkymograph, true);
+[upedge_idx, upedge_rawidx] = rise_onset_edge(edgebv_upkymograph, up_dipidx, up_maxidx, true);
 
 %% Debugging
 figure(fig)
 imagesc(ax,cropkymograph)
 hold on
-plot(ax,upedge_minidx,'r')
 plot(ax,upedge_idx,'g')
 
 %% lower vessel edge side kymograph
 edgebv_downkymograph = cropkymograph; % lower vessel edge kymograph
 edgebv_downkymograph(row_idx_grid < bv_downidx) = NaN;
-down_maxidx = findmax(edgebv_downkymograph, false); % upmod=false: pick innermost (lowest row idx) peak to avoid outer bright artefacts
-edgebv_downmaxkymograph = edgebv_downkymograph; % crop to maximum
-edgebv_downmaxkymograph(row_idx_grid > down_maxidx) = NaN; % HERE Specific for invertedpvs
-[downedge_confined,downedge_minidx] = findshadow(edgebv_downmaxkymograph,false); % << problematic
-[downedge_thresholded, downedge_rawidx] = halfmax_confinedkymograph(downedge_confined,true); % downcenter, boundary
-[downedge_idx,~] = clean_thresholdedkymograph(downedge_thresholded, true, ax);
+% Same two explicit steps, downward.
+[dn_dipidx, dn_maxidx]          = find_dip_max(edgebv_downkymograph, false);
+[downedge_idx, downedge_rawidx] = rise_onset_edge(edgebv_downkymograph, dn_dipidx, dn_maxidx, false);
 %%
 figure(fig)
 cla(ax)
 imagesc(ax,cropkymograph)
 hold on
-plot(ax,upedge_minidx,'r')
 plot(ax,upedge_idx,'r')
-plot(ax,downedge_minidx,'r')
 plot(ax,downedge_idx,'r')
 
 %% output
@@ -137,187 +131,122 @@ imagesc(ax,sum(cat(3,kymographmask.pvs_up,kymographmask.pvs_down),3,'omitnan'));
 
 end
 
-function [boundary_idx,clean_kymograph] = clean_thresholdedkymograph(thresholded, upmod, debug_ax)
-x_length = size(thresholded,2);
-clean_kymograph = imfill(thresholded,'holes');
-boundary_idx = zeros([1,x_length]);
-
-nhood = zeros([7,3]);
-if upmod
-    nhood(1:2,2) =1; % up
-else
-    nhood(end-1:end,2) =1; % down
-end
-clean_kymograph = imerode(clean_kymograph,nhood);
-clean_kymograph = imdilate(clean_kymograph,nhood);
-clean_kymograph(1:2,:) = 0; % remove up dilation
-clean_kymograph(end-1:end,:) = 0; % remove bottom dilation
-
-%%
-zero_column = sum(clean_kymograph,1);
-zero_column = zero_column ==0;
-%%
-clean_kymograph(:,zero_column) = thresholded(:,zero_column);
-%%
-zeros_array = sum(clean_kymograph,1);
-%%
-
-%%
-%%
-cla(debug_ax);
-%plot(thresholded(:,8))
-% %%
-imagesc(debug_ax,clean_kymograph)
-%%
-for c_idx = 1: x_length
-    szfilt.x = clean_kymograph(:,c_idx);
-    szfilt.dx =diff([0;szfilt.x;0]);
-    szfilt.sx = find(szfilt.dx == 1);
-    szfilt.ex = find(szfilt.dx == -1);
-    szfilt.lx = szfilt.ex -szfilt.sx;
-
-    szfilt.y = ~szfilt.x;
-    szfilt.dy =diff([0;szfilt.y;0]);
-    szfilt.sy = find(szfilt.dy == 1);
-    szfilt.ey = find(szfilt.dy == -1);
-    szfilt.ly = szfilt.ey -szfilt.sy;
-    [~,szfilt.lxmaxszidx] = max(szfilt.lx);
-    if upmod
-        szfilt.count = 1;% up
-        szfilt.ly = szfilt.ly(2:end); % up
-        while szfilt.count < szfilt.lxmaxszidx
-            if szfilt.lx(szfilt.count) < szfilt.ly(szfilt.count)
-                % disp(szfilt.lx(szfilt.count))
-                szfilt.sx(1:szfilt.count) = Inf;
-                szfilt.ex(1:szfilt.count) = Inf;
-            end
-            szfilt.count=szfilt.count+1;
+function [edge_idx, edge_raw] = rise_onset_edge(edgebv, dip_idx, max_idx, upmod)
+%RISE_ONSET_EDGE  PVS edge = where the signal first departs the dark floor.
+%   Given the per-column dark-PVS dip and tissue-max anchors (dip_idx, max_idx from
+%   find_dip_max, which the caller runs explicitly), walk the OUTER half [dip -> max]
+%   outward and take the first crossing of:
+%       floor = min(outer-half),  peak = max(outer-half)
+%       edge  = first outward crossing of  floor + frac*(peak - floor).
+%   The dark PVS is normalized down to a flat 0 floor, so a half-max / Gaussian sits
+%   mid-rise and spreads too far outward; a low frac catches where the signal LEAVES
+%   the dark floor (the true outer PVS boundary) instead. floor/peak are taken from
+%   the raw outer half (no offset subtraction). frac tunes how far out the edge sits
+%   (0.5 = half-max, lower = nearer the rise onset). Cross-column median smoothed.
+    [H, W]   = size(edgebv);
+    edge_raw = nan(1, W);
+    frac = 0.2;                                              % departure level fraction (tune)
+    for c = 1:W
+        if isnan(dip_idx(c)) || isnan(max_idx(c))
+            continue; 
         end
-        boundary_idx(c_idx) = min(szfilt.sx);
-    else
-        szfilt.count = numel(szfilt.lx); % down
-        szfilt.ly = szfilt.ly(1:end-1); % down
-        while szfilt.count > szfilt.lxmaxszidx
-            if szfilt.lx(szfilt.count) < szfilt.ly(szfilt.count)
-                %disp(szfilt.lx(szfilt.count))
-                szfilt.sx(szfilt.count:end) = 0;
-                szfilt.ex(szfilt.count:end) = 0;
-            end
-            szfilt.count=szfilt.count-1;
+        d = round(dip_idx(c));  
+        m = round(max_idx(c));
+        if d == m 
+            continue; 
         end
-        boundary_idx(c_idx) = max(szfilt.ex);
+        % dip -> max, outward
+        if upmod
+            rr = (d:-1:m).';
+        else
+            rr = (d:m).';
+        end
+
+        rr = rr(rr >= 1 & rr <= H);
+        y  = edgebv(rr, c);
+
+        if any(isnan(y))
+            y = fillmissing(y, 'linear');
+        end
+
+        if numel(y) < 4
+            continue
+        end
+        fr = min(5, numel(y));
+        if mod(fr, 2) == 0
+            fr = fr - 1;
+        end
+        if fr >= 3
+            y = sgolayfilt(y, 2, fr);
+        end
+        flo = min(y);
+        pk  = max(y);
+        if pk - flo < 1e-6
+            continue
+        end
+        L = flo + frac * (pk - flo);
+        k = find(y >= L, 1, 'first');                        % first departure from the floor
+        if isempty(k)
+            continue
+        end
+        if k < 2
+            edge_raw(c) = rr(1);
+        else
+            edge_raw(c) = rr(k-1) + (L - y(k-1)) / (y(k) - y(k-1)) * (rr(k) - rr(k-1));
+        end
     end
-
-end
-%%
-%%
-cla(debug_ax);
-%%
-imagesc(debug_ax,thresholded)
-%%
-imagesc(debug_ax,clean_kymograph)
-%%
+    edge_raw = medfilt1(edge_raw, 11, [], 2, 'omitnan', 'truncate');
+    edge_idx = round(edge_raw);
 end
 
-function maxidx = findmax(cropkymograph, upmod)
-% findmax - finds the innermost peak row index within the top-25% bright region.
-%
-% upmod = true  (upper side kymograph): outer artefacts are at top (low row idx),
-%                so take MAX of top-25% row indices to get the vessel-side peak.
-% upmod = false (lower side kymograph): outer artefacts are at bottom (high row idx),
-%                so take MIN of top-25% row indices to get the vessel-side peak.
-sz = size(cropkymograph);
-[row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 2D row index grid
-maxoffset = prctile(cropkymograph, 75, 1); % 75th percentile threshold per column
-maxidx = cropkymograph>=maxoffset; % top-25% brightest pixels
-maxidx = maxidx .* row_idx_grid;
-maxidx(maxidx == 0) = NaN; % convert 0 to NaN
-if upmod
-    maxidx = round(max(maxidx,[],1,"omitmissing")); % highest row idx = vessel-side peak (upmod)
-else
-    maxidx = round(min(maxidx,[],1,"omitmissing")); % lowest row idx = vessel-side peak (downmod)
-end
-maxidx = medfilt1(maxidx,11); % smooth across columns
-end
-
-function [crop_mask,minidx] = findshadow(maxcropkymograph,upmod)
-% upmod true : minposition is above maximum, so remove upper portion become
-% NaN
-sz = size(maxcropkymograph);
-[row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 2D row index grid
-minoffset = prctile(maxcropkymograph, 10, 1);
-minidx = maxcropkymograph<= minoffset;
-minidx = minidx .* row_idx_grid;
-minidx(minidx == 0) = NaN; % 1.6 convert 0 to NaN for median
-minidx = round(median(minidx,1,"omitmissing")); % Median quarter idx
-minidx = medfilt1(minidx,11);
-crop_mask = maxcropkymograph;
-if upmod
-    %%
-    mincolumnidx = maxcropkymograph>0;
-    mincolumnidx = mincolumnidx.*row_idx_grid;
-    mincolumnidx(mincolumnidx ==0) = Inf;
-    mincolumnidx = min(mincolumnidx,[],1);
-    %%
-    differential_column = abs(minidx - mincolumnidx);
-    overshadow_column = differential_column <5;
-    minidx(overshadow_column) = mincolumnidx(overshadow_column); % if thickness thinner than 5 pixel, don't narrow down
-    minidx(overshadow_column) = mincolumnidx(overshadow_column);
-    crop_mask(row_idx_grid > minidx) = NaN; % This part is flipped compare to normal PVS
-else
-    maxcolumnidx = maxcropkymograph>0;
-    maxcolumnidx = maxcolumnidx.*row_idx_grid;
-    maxcolumnidx = max(maxcolumnidx,[],1);
-    %%
-    differential_column = abs(minidx - maxcolumnidx);
-    overshadow_column = differential_column <5;
-    minidx(overshadow_column) = maxcolumnidx(overshadow_column); % if thickness thinner than 5 pixel, don't narrow down
-    minidx(overshadow_column) = maxcolumnidx(overshadow_column);
-    crop_mask(row_idx_grid < minidx) = NaN;
-end
-%%
-
-end
-
-function [thresholded_kgph,thresholded_rawidx] = halfmax_confinedkymograph(confined_kymograph,upmod)
-sz = size(confined_kymograph);
-[row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 2D row index grid
-normconfined_kgph = confined_kymograph -min(confined_kymograph,[],1);
-zerocolumn = sum(normconfined_kgph,1,'omitmissing');
-zerocolumn = zerocolumn ==0 ;
-normconfined_kgph(:,zerocolumn) = confined_kymograph(:,zerocolumn);
-normconfined_kgph = normconfined_kgph./max(normconfined_kgph,[],1);
-%%
-zerocolumn = sum(normconfined_kgph,1,'omitmissing');
-zerocolumn = zerocolumn ==0 ;
-%%
-
-thresholded_kgph = normconfined_kgph>=0.5;
-
-
-thresholded_rawidx = thresholded_kgph.*row_idx_grid;
-if upmod
-    thresholded_rawidx(thresholded_rawidx==0) = Inf;
-    thresholded_rawidx = min(thresholded_rawidx,[],1);
-else
-    thresholded_rawidx = max(thresholded_rawidx,[],1);
-end
-%%
-
-end
-
-function [sz1d, sz1dind,sizematrix] = binary2columnsize(binary_matrix)
-sz = size(binary_matrix);
-transit = abs(diff(binary_matrix,1,1));
-transit = [true(1,sz(2));transit];
-%%
-columnszind = cumsum(transit,1);
-%%
-sz1dind = columnszind + (0:sz(2)-1)*max(columnszind,[],'all'); % make each column to be unique 1d count and reconstruction
-sz1dind = sz1dind(:);
-sz1d = accumarray(sz1dind, 1); % count idx = size
-%%
-sizematrix = sz1d(sz1dind); % duplicate size back to correspoinding idx
-sizematrix = reshape(sizematrix,sz(1), sz(2));
+function [dip_idx, max_idx] = find_dip_max(edgebv, upmod)
+%FIND_DIP_MAX  Per column: approximate dark-PVS dip (min) + the max just beyond it.
+%   Marches the sgolay-smoothed profile from the vessel wall outward. The dip is the
+%   smoothed minimum (the dark PVS valley -- robust to the bright wall bleed that
+%   fooled findmax); the max is the largest value outward of the dip (the tissue
+%   beyond the PVS). Both are approximate anchors; halfmax refines the actual edge.
+%   Returns row indices (1 x W), median-smoothed across columns; NaN where undefined.
+    [~, W]  = size(edgebv);
+    dip_idx = nan(1, W);  
+    max_idx = nan(1, W);
+    for c = 1:W
+        rr = find(~isnan(edgebv(:, c)));
+        % 1. Don't restrict if it goes below 7 pixels
+        if numel(rr) < 7 
+            continue; 
+        end
+        % 2. flip direction if its upside outside decrease idx
+        if upmod 
+            rows = (rr(end):-1:rr(1)).'; 
+        else
+            rows = (rr(1):rr(end)).';
+        end  % wall -> outward
+        % 3. 
+        p = edgebv(rows, c);
+        if any(isnan(p))
+            p = fillmissing(p, 'linear');
+        end
+        fr = min(9, numel(p));  
+        if mod(fr, 2) == 0
+            fr = fr - 1; 
+        end
+        if fr < 3
+            continue
+        end
+        ps = sgolayfilt(p, 2, fr);
+        [~, dloc] = min(ps);                 % dark PVS dip (approx valley centre)
+        if dloc >= numel(ps)
+            continue 
+        end
+        [~, mrel] = max(ps(dloc:end));       % max just beyond the dip (outward tissue)
+        mloc = dloc + mrel - 1;
+        if mloc <= dloc
+            continue
+        end
+        dip_idx(c) = rows(dloc);
+        max_idx(c) = rows(mloc);
+    end
+    dip_idx = medfilt1(dip_idx, 11, [], 2, 'omitnan', 'truncate');
+    max_idx = medfilt1(max_idx, 11, [], 2, 'omitnan', 'truncate');
 end
 
