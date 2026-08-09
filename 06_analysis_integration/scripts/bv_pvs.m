@@ -24,41 +24,106 @@ tmp.correlation = {"thickness_bv","thickness_totalpvs"};
 tmp.state = "rem";
 
 %%
-%% Collect raw_data per (MouseID, Date, VesselID, state) for thickness_bv and thickness_totalpvs
+%% Collect raw_data per (MouseID, Date, VesselID, state, bout_idx)
 T = bv_pvsAnalyzer.filtered_table;
 
-% Separate by DataType
 T_bv  = T(strcmp(T.DataType, 'thickness_bv'), :);
 T_pvs = T(strcmp(T.DataType, 'thickness_totalpvs'), :);
 
-states = unique(T.state_name);
-id_vars = {'MouseID', 'Date', 'VesselID'};
-
-% Get unique vessel identities
-[unique_ids, ~, ic_bv] = unique(T_bv(:, id_vars), 'rows', 'stable');
-
 results = table();
-for i = 1:height(unique_ids)
-    for s = 1:numel(states)
-        state = states(s);
+for i = 1:height(T_bv)
+    row_bv = T_bv(i,:);
+    
+    % Find matching pvs row with same identity and bout_idx
+    mask_pvs = strcmp(T_pvs.MouseID,     row_bv.MouseID) & ...
+               strcmp(T_pvs.Date,        row_bv.Date) & ...
+               strcmp(T_pvs.VesselID,    row_bv.VesselID) & ...
+               strcmp(T_pvs.state_name,  row_bv.state_name) & ...
+               T_pvs.bout_idx ==         row_bv.bout_idx;
 
-        % Match rows in T_bv
-        mask_bv = ic_bv == i & strcmp(T_bv.state_name, state);
-        % Match rows in T_pvs for same identity
-        mask_pvs = strcmp(T_pvs.MouseID, unique_ids.MouseID(i)) & ...
-                   strcmp(T_pvs.Date, unique_ids.Date(i)) & ...
-                   strcmp(T_pvs.VesselID, unique_ids.VesselID(i)) & ...
-                   strcmp(T_pvs.state_name, state);
+    if ~any(mask_pvs), continue; end
 
-        if ~any(mask_bv) || ~any(mask_pvs), continue; end
+    % Extract data as 1x1 cells
+    bv_data = row_bv.raw_data;
+    if height(T_pvs(mask_pvs,:)) > 1
+        % Take the first match in case of duplicates
+        all_matches = T_pvs.raw_data(mask_pvs);
+        pvs_data = all_matches(1); 
+    else
+        pvs_data = T_pvs.raw_data(mask_pvs);
+    end
 
-        % Concatenate all raw_data cells into a single vector
-    raw_bv  = T_bv.raw_data(mask_bv);    % cell array, one entry per bout
-    raw_pvs = T_pvs.raw_data(mask_pvs);  % cell array, one entry per bout
+    row = table(row_bv.MouseID, row_bv.Date, row_bv.VesselID, ...
+                row_bv.state_name, row_bv.bout_idx, ...
+                bv_data, pvs_data, ...
+                'VariableNames', {'MouseID','Date','VesselID','state_name','bout_idx','raw_bv','raw_totalpvs'});
+    results = [results; row];
+end
 
-        row = [unique_ids(i,:), table(state, {raw_bv}, {raw_pvs}, ...
-               'VariableNames', {'state_name','raw_bv','raw_totalpvs'})];
-        results = [results; row];
+%% Plot all bouts colored by state (filtered by vessel and date)
+vessel_to_plot = 'PA01';
+date_to_plot = '251016';
+
+figure('Position', [2048, 431, 286, 385])
+hold on;
+plot_states = unique(results.state_name);
+colors = lines(numel(plot_states));
+
+for s = 1:numel(plot_states)
+    st = plot_states(s);
+    
+    % Assign color based on state
+    switch lower(char(st))
+        case 'awake'
+            % Gray
+            c = clee.lch(55, 0, 0);
+        case 'rem'
+            % Scarlet
+            c = clee.lch(55, 80, 10);
+        case 'nrem'
+            % Skyblue
+            c = clee.lch(55, 80, 240);
+        case 'drowsy'
+            c = clee.lch(75, 80, 135);
+        otherwise
+            c = clee.lch(55, 0, 0); % fallback
+    end
+    
+    % Get all bouts for this state AND target vessel AND target date
+    t_state = results(strcmp(results.state_name, st) & ...
+                      strcmp(results.VesselID, vessel_to_plot) & ...
+                      strcmp(results.Date, date_to_plot), :);
+    
+    if isempty(t_state) || height(t_state) == 0
+        continue;
+    end
+    
+    % Flatten and combine all bouts into single vectors
+    all_bv  = cell2mat(cellfun(@(x) x(:), t_state.raw_bv, 'UniformOutput', false));
+    all_pvs = cell2mat(cellfun(@(x) x(:), t_state.raw_totalpvs, 'UniformOutput', false));
+    
+    % Reduce marker alpha to make scatter less busy
+    scatter(all_bv, all_pvs, 5, c, 'filled', 'MarkerFaceAlpha', 0.3, 'DisplayName', char(st))
+    
+    % Add robust fitted line
+    valid_idx = ~isnan(all_bv) & ~isnan(all_pvs) & ~isinf(all_bv) & ~isinf(all_pvs);
+    if sum(valid_idx) > 2
+        b = robustfit(all_bv(valid_idx), all_pvs(valid_idx));
+        x_fit = [min(all_bv(valid_idx)), max(all_bv(valid_idx))];
+        y_fit = b(1) + b(2)*x_fit;
+        plot(x_fit, y_fit, 'Color', c, 'LineWidth', 2, 'HandleVisibility', 'off');
     end
 end
+
+xlabel('BV Thickness')
+ylabel('Total PVS Thickness')
+%title(sprintf('All States: BV vs Total PVS (Vessel: %s | Date: %s)', vessel_to_plot, date_to_plot))
+grid off;
+hold off;
+
+
+
+
+
+
 

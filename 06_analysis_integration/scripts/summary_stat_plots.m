@@ -11,6 +11,10 @@ mtable_FWHMsleep.filtLogics.bout_dur = mtable_FWHMsleep.analysis_table.bout_dura
 mtable_FWHMsleep.filtLogics.state = ismember(mtable_FWHMsleep.analysis_table.state_name,["awake","drowsy","nrem","rem"] );
 %mtable_FWHMsleep.filtLogics.dtype = mtable_FWHMsleep.analysis_table.DataType == "thickness_bv"; % target analysis: thickness_bv
 mtable_FWHMsleep.apply_filter
+
+
+
+
 %%
 data_colnames = {"raw_data"};
 numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var'};
@@ -21,18 +25,20 @@ myAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames);
 myAnalyzer.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
 myAnalyzer.addPrctilecol("raw_data","prctile_95", 95);
 myAnalyzer.addPrctilecol("raw_data","prctile_5",5);
-%%
 myAnalyzer.get_numericsummary("Date","filtered_table")
-%%
 myAnalyzer.get_numericsummary("VesselID","Date_ave")
 myAnalyzer.get_numericsummary("MouseID","VesselID_ave")
-%%
-
 mtable = myAnalyzer.numeric_tables.MouseID_ave;
+rem_table = mtable_FWHMsleep;
+rem_table.filtLogics = [];
+mtable_FWHMsleep.filtLogics.state = ismember(mtable_FWHMsleep.analysis_table.state_name,["rem"]);
 %%
+mtable_FWHMsleep.filtLogics.state = ismember(mtable_FWHMsleep.analysis_table.state_name,["rem"]);
 
 
-bv_table = ;
+
+
+
 %%
 figure("Name","")
 %%
