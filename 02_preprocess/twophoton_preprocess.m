@@ -9,7 +9,7 @@ downsampled_2p.targetfrequency = 3;
 downsampled_2p.medianframes = 11;
 
 % Transfer metadata
-if isfield(session_instance, 'img_param')
+if isprop(session_instance, 'img_param')
     downsampled_2p.startframe = session_instance.img_param.imgstartframe;
     downsampled_2p.endframe = session_instance.img_param.imgendframe;
 end

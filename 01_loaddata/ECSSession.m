@@ -162,25 +162,24 @@ classdef ECSSession < mdfExtractLoader
                 disp(['Created directory: ', obj.dir_struct.primary_analysis]);
             end
 
-            % Create unique figure directory to preserve results
-            timestamp = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
-            obj.dir_struct.figures = fullfile(obj.dir_struct.primary_analysis, ['figures_', timestamp]);
 
-            if ~exist(obj.dir_struct.figures, 'dir')
-                mkdir(obj.dir_struct.figures);
-                disp(['Created figure directory: ', obj.dir_struct.figures]);
-            end
+            %% figure directory structure
+            % Flat, lazily-created figure folders directly under primary_analysis:
+            %   <yyMMdd_HHmmss>_<category>     e.g. 260717_143022_polarcluster
+            % The folders are NOT created here. make_fig.save2svg creates each one
+            % only when a figure is actually saved into it, so categories (and whole
+            % session loads) that produce no figures never leave an empty folder.
+            % All categories from one run share the timestamp prefix, so they still
+            % sort together.
+            delete_emptydir(fullfile(obj.dir_struct.primary_analysis, 'figures_*'));  % clean up legacy nested run folders
 
-            % Create subdirectories
+            timestamp = char(datetime('now', 'Format', 'yyMMdd_HHmmss'));
+            obj.dir_struct.figures = obj.dir_struct.primary_analysis;  % base (kept for back-compat)
+
             subdirs = {'fwhm', 'radon_figures', 'polarcluster', 'roi_fig'};
             fields  = {'figures_fwhm', 'figures_radon', 'figures_polarcluster', 'figures_roi'};
-
             for i = 1:numel(subdirs)
-                dpath = fullfile(obj.dir_struct.figures, subdirs{i});
-                if ~exist(dpath, 'dir')
-                    mkdir(dpath);
-                end
-                obj.dir_struct.(fields{i}) = dpath;
+                obj.dir_struct.(fields{i}) = fullfile(obj.dir_struct.primary_analysis, [timestamp, '_', subdirs{i}]);
             end
         end
     end
