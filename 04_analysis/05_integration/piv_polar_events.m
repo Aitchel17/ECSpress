@@ -32,10 +32,10 @@ if ~any(coremask, 'all')
 end
 % 0.2 Vector-grid step: both cell shapes are sized from it, and it is a property
 %     of the PIV run, not of the geometry, so it is measured once here
-step = piv_grid_step(piv_run(1).uv);
+step = vfield_grid_step(piv_run(1).uv);
 
 % 0.3 Box partition -- geometry only, so it is built once and reused for every
-%     event. The wedge partition is built inside piv_divergence_polar
+%     event. The wedge partition is built inside vfield_divergence_polar
 [tiles, tinfo] = sector_block(coremask, opt.box_step * step);
 if ~isempty(opt.exclmask); tiles(opt.exclmask) = 0; end
 
@@ -44,13 +44,13 @@ polar = cell(1, numel(piv_run));
 for k = 1:numel(piv_run)
     uv = piv_run(k).uv;                 % already a total displacement -- no * nfr
     % 1.1 Radial: ring/sector v_r, then dv_r/dr
-    [pdiv, cells, pinfo] = piv_divergence_polar(uv, coremask, ...
+    [pdiv, cells, pinfo] = vfield_divergence_polar(uv, coremask, ...
         'ring_width', 2*step, 'n_sectors', opt.n_sectors, ...
         'min_valid', opt.min_valid, 'exclmask', opt.exclmask, 'method', 'radial');
     % 1.2 Plain: cartesian du/dx + dv/dy over equal-area boxes
     tk  = sector_validate(tiles, ~isnan(uv(:,:,1)) & ~isnan(uv(:,:,2)), ...
         tinfo.n_labels, opt.min_valid);
-    div = sector_paint(tk, piv_divergence(uv, tk, tinfo.n_labels));
+    div = sector_paint(tk, vfield_divergence(uv, tk, tinfo.n_labels));
     polar{k} = struct('cells', cells, 'rcen', pinfo.rcen, ...
         'vr', pinfo.vr_cells, 'vt', pinfo.vt_cells, 'pdiv', pdiv, ...
         'vrmap', pinfo.vr_map, 'vtmap', pinfo.vt_map, 'div', div, 'info', pinfo);

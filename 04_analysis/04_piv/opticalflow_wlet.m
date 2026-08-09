@@ -1,76 +1,59 @@
 function flow = opticalflow_wlet(imgstack, opt)
 %OPTICALFLOW_WLET  Run PIVlab wavelet optical flow (wOFV) on an image stack.
-%   Applies wOFV to each consecutive frame pair (k, k+1) in imgstack.
-%   imgstack should already be preprocessed (e.g. via opticalflow_preprocess).
+%   Applies wOFV to each consecutive frame pair (k, k+1). imgstack must already be
+%   preprocessed (e.g. by piv_preprocess). Flow is px/frame, unscaled.
 %
-%   USAGE
-%     result = opticalflow_wlet(imgstack)
-%     result = opticalflow_wlet(imgstack, pyramid_levels=3, smoothness=50)
-%
-%   INPUTS
-%     imgstack         : double H x W x N array, values in [0,1]
-%     pyramid_levels   : int    - number of pyramid levels (default: 3)
-%                        higher → captures larger displacements, slower
-%     smoothness       : scalar - regularization strength, GUI scale [0,100]
-%                        (default: 50 → eta = 10^0 = 1)
-%                        lower = less smooth / more detail
-%                        higher = smoother / less noise
-%     roirect          : [x y w h] - ROI to analyze (default: full frame)
-%
-%   OUTPUT
-%     flow : double H x W x N_pairs x 2
-%            flow(:,:,k,1) = u (horizontal velocity) for pair k
-%            flow(:,:,k,2) = v (vertical velocity)   for pair k
+% IN   imgstack        H x W x N double, values in [0,1]
+%      pyramid_levels  pyramid depth; higher = larger displacements, slower, default 3
+%      smoothness      PIVlab GUI scale [0,100]; lower = more detail, default 50
+%      roirect         [x y w h] region to analyse, default full frame
+% OUT  flow            H x W x (N-1) x 2 double; (:,:,k,1) = u horizontal,
+%                      (:,:,k,2) = v vertical, for pair k
 
 arguments
     imgstack         {mustBeNumeric, mustBeNonempty}
     opt.pyramid_levels double  = 3
     opt.smoothness     double  = 50    % GUI scale [0,100]
     opt.roirect        double  = []
-
 end
 
+% 0. Setup
+% 0.1 Number of frame pairs
 n_frames  = size(imgstack, 3);
 n_pairs   = n_frames - 1;
-
 if n_pairs < 1
     error('opticalflow_wlet: imgstack must have at least 2 frames.');
 end
-
-%% Convert GUI smoothness [0,100] → eta (same formula PIVlab uses)
-%  etaUnscaled = 50 → eta = 10^(50*0.1 - 5) = 10^0 = 1
+% 0.2 GUI smoothness to regularizer eta, PIVlab formula: 50 -> 10^0 = 1
 eta = 10^(opt.smoothness * 0.1 - 5);
-
-%% Build roirect (full frame if empty)
+% 0.3 ROI rect, full frame if empty
 [H, W, ~] = size(imgstack);
 roirect = opt.roirect;
 if isempty(roirect)
     roirect = [1, 1, W-1, H-1];
 end
-%% Median filter settings (off by default, matching PIVlab default 'Off')
+% 0.4 Median filter settings, off as in PIVlab
 MedFiltFlag = false;
 MedFiltSize = [3, 3];
-%% Pre-allocate output: H x W x N_pairs x 2  (dim 4: 1=u, 2=v)
+% 0.5 Output, dim 4: 1 = u, 2 = v
 flow = NaN(H, W, n_pairs, 2);
-% Get roirect coordinates for mapping back
+% 0.6 ROI corner and size
 rx = roirect(1);
 ry = roirect(2);
 rw = roirect(3);
 rh = roirect(4);
 
-%% single patch size to prevent grid/aperture artifacts
+% 1. Build the M x M analysis block around the ROI
+% 1.1 One power-of-two patch size covering the whole ROI
 M = 2^ceil(log2(max(rh, rw)));
 PatchSize = M;
 Fmats = wOFV.getFmatPyramid(PatchSize, opt.pyramid_levels);
-
-% Determine the ideal extraction box centered around the ROI to grab actual context
+% 1.2 Block centred on the ROI centre
 cx = round(rx + rw/2);
 cy = round(ry + rh/2);
-
 nx = round(cx - M/2);
 ny = round(cy - M/2);
-
-% Clamp to image boundaries
+% 1.3 Clamp the block inside the image
 nx = max(1, nx);
 ny = max(1, ny);
 if nx + M - 1 > W
@@ -81,35 +64,35 @@ if ny + M - 1 > H
     ny = H - M + 1;
     ny = max(1, ny);
 end
-
+% 1.4 Image extent actually available inside the block
 ex = min(W, nx + M - 1);
 ey = min(H, ny + M - 1);
-
 actual_w = ex - nx + 1;
 actual_h = ey - ny + 1;
-
-% Offset of the user's ROI inside the M x M block
+% 1.5 Offset of the ROI inside the block
 offset_x = rx - nx + 1;
 offset_y = ry - ny + 1;
 
-%% Pre-allocate padded inputs
-mask_pad = true(M, M); % true means exclude in PIVlab
-mask_pad(1:actual_h, 1:actual_w) = false; % Include ALL actual image context
+% 2. Padded inputs shared by every pair
+mask_pad = true(M, M);                      % true = exclude, PIVlab convention
+mask_pad(1:actual_h, 1:actual_w) = false;
 roirect_pad = [1, 1, M, M];
 vartheta_pad = ones(M, M);
 
+% 3. Solve the flow field for each consecutive frame pair
 for k = 1:n_pairs
 
     fprintf('  wOFV pair %d/%d\n', k, n_pairs);
 
-    % Extract actual context around ROI to prevent boundary regularizer artifacts
+    % 3.1 Image context around the ROI
     I0_actual = imgstack(ny:ey, nx:ex, k);
     I1_actual = imgstack(ny:ey, nx:ex, k+1);
-    
-    % Pad only if M > image dimensions ('symmetric' prevents sharp black edges)
+
+    % 3.2 Fill the block out to M x M
     I0_pad = padarray(I0_actual, [M-actual_h, M-actual_w], 'symmetric', 'post');
     I1_pad = padarray(I1_actual, [M-actual_h, M-actual_w], 'symmetric', 'post');
 
+    % 3.3 Run wOFV on the block
     [~, ~, u_pad, v_pad, ~] = wOFV.RunMain_DatasetProc( ...
         I0_pad, I1_pad, ...
         mask_pad, roirect_pad, ...
@@ -118,11 +101,11 @@ for k = 1:n_pairs
         opt.pyramid_levels, ...
         Fmats, PatchSize);
 
-    % Extract the specific ROI region back from the padded result
+    % 3.4 Crop the ROI back out of the block
     u = u_pad(offset_y : offset_y + rh - 1, offset_x : offset_x + rw - 1);
     v = v_pad(offset_y : offset_y + rh - 1, offset_x : offset_x + rw - 1);
 
-    % Map cropped u, v back into full-frame coordinates
+    % 3.5 Place the ROI in full-frame coordinates
     flow(ry : ry+rh-1, rx : rx+rw-1, k, 1) = u;
     flow(ry : ry+rh-1, rx : rx+rw-1, k, 2) = v;
 end

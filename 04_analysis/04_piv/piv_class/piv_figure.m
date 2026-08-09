@@ -36,7 +36,7 @@ classdef piv_figure < handle
     end
 
     properties (Constant, Access = private)
-        REQ = {'S','coremask','exclmask','t_axis','dtrace','dsg','fps','p2u', ...
+        req_fields = {'S','coremask','exclmask','t_axis','dtrace','dsg','fps','p2u', ...
                'halfwin','events'};
     end
 
@@ -51,7 +51,7 @@ classdef piv_figure < handle
                 error('piv_figure:sizeMismatch', ...
                     'run has %d events but polar has %d entries.', numel(run), numel(polar));
             end
-            missing = obj.REQ(~isfield(ctx, obj.REQ));
+            missing = obj.req_fields(~isfield(ctx, obj.req_fields));
             if ~isempty(missing)
                 error('piv_figure:ctxMissing', 'ctx is missing field(s): %s', ...
                     strjoin(missing, ', '));
@@ -67,7 +67,7 @@ classdef piv_figure < handle
         end
 
         function q = quiveropts(obj)
-            %QUIVEROPTS  Name-value cell for piv_plotquiver. frame_span is pinned to 1.
+            %QUIVEROPTS  Name-value cell for vfield_plotquiver. frame_span is pinned to 1.
             q = {"block_size",1, "frame_span",1, "scale",obj.scale, "linewidth",obj.linew, ...
                  "head_len",obj.headsz, "head_width",obj.headsz, ...
                  "filled_head",true, "head_abs",true};
@@ -78,7 +78,7 @@ classdef piv_figure < handle
             if nargin < 3 || isempty(ax); figure('Name', obj.figname(k, 'piv')); ax = gca; end
             R = obj.run(k);
             imshow(obj.bg(k), 'Parent', ax); hold(ax, 'on');
-            piv_plotquiver(R.uv, obj.quiveropts{:});
+            vfield_plotquiver(R.uv, obj.quiveropts{:});
             title(ax, obj.label(k));
         end
 
@@ -98,7 +98,7 @@ classdef piv_figure < handle
             h = imagesc(ax, M); set(h, 'AlphaData', obj.alpha * ~isnan(M));
             axis(ax, 'image'); colormap(ax, obj.cmap); colorbar(ax);
             if isfinite(cl) && cl > 0; clim(ax, [-cl cl]); end
-            piv_plotquiver(obj.run(k).uv, obj.quiveropts{:});
+            vfield_plotquiver(obj.run(k).uv, obj.quiveropts{:});
             title(ax, [ttl '   ' obj.label(k)]);
         end
 
@@ -172,7 +172,7 @@ classdef piv_figure < handle
             %TILES  One column per event of a polarity; rows = vr / dv_r/dr / div / trace.
             arguments
                 obj
-                pol   (1,:) char {mustBeMember(pol, {'dilation','constriction'})} = 'dilation'
+                pol   (1,:) char {mustBeMember(pol, {'dilation','constriction','none'})} = 'dilation'
                 which cell = {'vr','radial','plain'}
             end
             sel = find(strcmp({obj.run.pol}, pol));
@@ -200,19 +200,29 @@ classdef piv_figure < handle
             figure('Name', 'radial profile', 'Position', [120 80 1000 460]); hold on; grid on
             for k = 1:numel(obj.run)
                 A = obj.polar{k};
-                co = [.20 .40 .85];
-                if strcmp(obj.run(k).pol, 'dilation'); co = [.85 .25 .25]; end
+                % err  a two-way test coloured the stable controls as constrictions
+                switch obj.run(k).pol
+                    case 'dilation';     co = [.85 .25 .25];
+                    case 'constriction'; co = [.20 .40 .85];
+                    otherwise;           co = [.55 .55 .55];
+                end
                 plot(mean(A.rcen, 2, 'omitnan'), mean(A.cells, 2, 'omitnan'), '-o', ...
                     'Color', co, 'LineWidth', 1.1, 'MarkerSize', 4, 'HandleVisibility', 'off');
             end
             yline(0, 'k--', 'HandleVisibility', 'off');
             xlabel('distance from vessel wall (px)'); ylabel('dv_r/dr');
-            title('red = dilation (PVS compressed), blue = constriction (refill)');
+            title('red = dilation (PVS compressed), blue = constriction (refill), grey = stable control');
         end
 
         function signcheck(obj)
             %SIGNCHECK  dD vs measured direction; the two polarities must separate.
+            %   err  ~isd used to mean constriction. A stable control (pol 'none')
+            %        has no direction to be consistent WITH, so counting it as a
+            %        failed constriction turned the controls into a fake defect
+            %        rate. They are drawn, greyed, and left out of the count
             isd = strcmp({obj.run.pol}, 'dilation');
+            isc = strcmp({obj.run.pol}, 'constriction');
+            isn = ~isd & ~isc;
             mvr = cellfun(@(A) mean(A.vr(:),    'omitnan'), obj.polar);
             mdv = cellfun(@(A) mean(A.cells(:), 'omitnan'), obj.polar);
             figure('Name', 'sign check', 'Position', [200 200 950 400]);
@@ -221,19 +231,28 @@ classdef piv_figure < handle
                 if p == 1
                     % 1. Wall motion: dilation pushes out, constriction pulls in
                     y = mvr;  yl = 'mean v_r (px, + outward)';  t = 'wall motion follows \DeltaD';
-                    ok = (isd & y > 0) | (~isd & y < 0);
+                    ok = (isd & y > 0) | (isc & y < 0);
                 else
                     % 2. PVS strain: v_r decays with distance, so dilation squeezes
                     y = mdv;  yl = 'mean dv_r/dr';  t = 'PVS compressed on dilation';
-                    ok = (isd & y < 0) | (~isd & y > 0);
+                    ok = (isd & y < 0) | (isc & y > 0);
                 end
                 nexttile; hold on; grid on
-                scatter([obj.run(isd).diameter_change],  y(isd),  70, 'r', 'filled');
-                scatter([obj.run(~isd).diameter_change], y(~isd), 70, 'b', 'filled');
+                scatter([obj.run(isd).diameter_change], y(isd), 70, 'r', 'filled');
+                scatter([obj.run(isc).diameter_change], y(isc), 70, 'b', 'filled');
+                if any(isn)
+                    scatter([obj.run(isn).diameter_change], y(isn), 70, ...
+                        [.55 .55 .55], 'filled');
+                end
                 xline(0, 'k--'); yline(0, 'k--');
                 xlabel('\DeltaD (\mum)'); ylabel(yl);
-                title(sprintf('%s   (%d/%d consistent)', t, nnz(ok), numel(obj.run)));
-                if p == 1; legend('dilation', 'constriction', 'Location', 'best'); end
+                % the denominator is the rows that HAVE a prescribed direction
+                title(sprintf('%s   (%d/%d consistent)', t, nnz(ok), nnz(isd | isc)));
+                if p == 1
+                    leg = [{'dilation', 'constriction'}, ...
+                           repmat({'stable control'}, 1, any(isn))];
+                    legend(leg, 'Location', 'best');
+                end
             end
         end
 

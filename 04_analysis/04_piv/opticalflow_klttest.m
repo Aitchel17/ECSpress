@@ -25,7 +25,7 @@ awake = get_stateframes(img_state.state_idx.awake,twophoton_processed.ch1);
 
 
 of.state = ra_trans{1};
-of.pre = opticalflow_preprocess(of.state);
+of.pre = piv_preprocess(of.state);
 
 imgStack = of.pre;
 I0 = imgStack(:,:,1);

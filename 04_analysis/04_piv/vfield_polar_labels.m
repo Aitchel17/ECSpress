@@ -1,10 +1,10 @@
-function h = piv_polar_labels(div_cells, info, opt)
-%PIV_POLAR_LABELS  Overlay per-cell divergence values on a polar map (toggleable).
+function h = vfield_polar_labels(div_cells, info, opt)
+%VFIELD_POLAR_LABELS  Overlay per-cell divergence values on a polar map (toggleable).
 %   Draws each valid cell's value at its anchor in info.cell_xy and adds a "values"
 %   toggle button that shows/hides the whole label group. Call it after the polar
 %   map is drawn; the labels go on the given axes.
 %
-% IN   div_cells  n_rings x n_sectors matrix from piv_divergence_polar
+% IN   div_cells  n_rings x n_sectors matrix from vfield_divergence_polar
 %      info       its info struct; label anchors come from info.cell_xy
 %      ax         target axes, default gca
 %      format     sprintf format for the value, default '%.3f'
@@ -23,8 +23,8 @@ end
 
 % 0. Require the anchors from the polar run
 if ~isfield(info, 'cell_xy') || isempty(info.cell_xy)
-    error('piv_polar_labels:noXY', ...
-        'info.cell_xy missing -- rerun piv_divergence_polar (block>1 / valid cells).');
+    error('vfield_polar_labels:noXY', ...
+        'info.cell_xy missing -- rerun vfield_divergence_polar (block>1 / valid cells).');
 end
 
 % 1. Target axes and cell grid

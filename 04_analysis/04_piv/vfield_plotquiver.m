@@ -1,5 +1,5 @@
-function piv_plotquiver(flow, opt)
-%PIV_PLOTQUIVER  PIVlab-style quiver plot of a displacement field.
+function vfield_plotquiver(flow, opt)
+%VFIELD_PLOTQUIVER  PIVlab-style quiver plot of a displacement field.
 %   4D input is summed over the pair axis (time_range selects which pairs); a 2D
 %   ensemble field carries per-frame displacement, so frame_span scales it to the
 %   total over a window. Leave frame_span at 1 for 4D input. Draws into gca.

@@ -1,5 +1,5 @@
-function frame_range = opticalflow_viewer(imgstack, flow, opt)
-%OPTICALFLOW_VIEWER  Interactive frame-by-frame quiver viewer.
+function frame_range = vfield_viewer(imgstack, flow, opt)
+%VFIELD_VIEWER  Interactive frame-by-frame quiver viewer.
 %   Draws one flow pair at a time over its background image. Arrow buttons or
 %   arrow keys step, [Mark Start] / [Mark End] set the range. Blocks until the
 %   figure is closed; every index here is a flow-pair index, not an image frame.
@@ -28,7 +28,7 @@ end
 % 0.1 Pair count
 n_pairs = size(flow, 3);
 if n_pairs < 1
-    error('opticalflow_viewer: flow has no pairs.');
+    error('vfield_viewer: flow has no pairs.');
 end
 % 0.2 Range state, shared with the callbacks
 sel_start = 1;

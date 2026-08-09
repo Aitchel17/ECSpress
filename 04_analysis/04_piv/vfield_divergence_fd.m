@@ -1,8 +1,8 @@
-function [div_map, div_mean, div_sum] = piv_divergence_fd(flow, opt)
-%PIV_DIVERGENCE_FD  Divergence by finite differences on the sparse vector grid.
+function [div_map, div_mean, div_sum] = vfield_divergence_fd(flow, opt)
+%VFIELD_DIVERGENCE_FD  Divergence by finite differences on the sparse vector grid.
 %   Not a cell partition: it differentiates the vector grid point by point with
 %   MATLAB's divergence(), then tiles the result out by nearest neighbour. Use
-%   piv_divergence with a cell map when a per-region plane fit is wanted.
+%   vfield_divergence with a cell map when a per-region plane fit is wanted.
 %   Units per-frame (px displacement / px).
 %
 % IN   flow      HxWx2 field, last dim 1 = u, 2 = v; HxWxNx2 is summed over time
@@ -32,7 +32,7 @@ end
 % 0.2 ROI mask, default the whole image
 if isempty(opt.mask); opt.mask = true(H, W); end
 if size(opt.mask, 1) ~= H || size(opt.mask, 2) ~= W
-    error('piv_divergence_fd:maskSize', 'mask must be %dx%d.', H, W);
+    error('vfield_divergence_fd:maskSize', 'mask must be %dx%d.', H, W);
 end
 % 0.3 Pixel coordinate grid
 [x, y] = meshgrid(1:W, 1:H);
@@ -67,7 +67,7 @@ end
 % 2. Blank the excluded pixels (true = exclude)
 if ~isempty(opt.exclmask)
     if ~isequal(size(opt.exclmask), [H, W])
-        error('piv_divergence_fd:maskSize', 'exclmask must be %dx%d.', H, W);
+        error('vfield_divergence_fd:maskSize', 'exclmask must be %dx%d.', H, W);
     end
     div_map(opt.exclmask) = NaN;
 end

@@ -1,10 +1,10 @@
-function [div_map, div_cells, info] = piv_divergence_polar(flow, coremask, opt)
-%PIV_DIVERGENCE_POLAR  Perivascular divergence in polar (ring x sector) wedges.
-%   Composition: sector_polar partitions, sector_validate prunes, piv_divergence
+function [div_map, div_cells, info] = vfield_divergence_polar(flow, coremask, opt)
+%VFIELD_DIVERGENCE_POLAR  Perivascular divergence in polar (ring x sector) wedges.
+%   Composition: sector_polar partitions, sector_validate prunes, vfield_divergence
 %   fits, sector_paint spreads.
 %   Adds what only makes sense in polar coordinates -- the mean radial and
 %   tangential velocity per wedge, and the 'radial' method d<v_r>/dr along the
-%   radius. Units per-frame (px displacement / px), same as piv_divergence.
+%   radius. Units per-frame (px displacement / px), same as vfield_divergence.
 %   A wedge clipped by the frame edge still gives the right v_r and v_theta:
 %   each pixel is projected before averaging, so partial angular coverage does
 %   not bias them (measured on a synthetic pure-radial field, 17% coverage,
@@ -66,26 +66,39 @@ else
 end
 [H, W] = size(u);
 if ~isequal(size(coremask), [H, W])
-    error('piv_divergence_polar:maskSize', 'coremask must be %dx%d.', H, W);
+    error('vfield_divergence_polar:maskSize', 'coremask must be %dx%d.', H, W);
 end
 % 1.1. Partitioning into wedges -- geometry only, identical for every event
-[wedges, geo] = sector_polar(coremask, opt.ring_width, opt.n_sectors);
-nr = geo.grid(1);
-ns = geo.grid(2);
+% sector_polar returns H x W x 3 : label, ring, wedge. Everything below works on
+% the LABEL channel, because sector_validate / vfield_divergence / sector_paint
+% all accumulate by label. Channels 2-3 are for callers that select by (ring,wedge)
+[part, geo] = sector_polar(coremask, opt.ring_width, opt.n_sectors);
+wedges  = part(:,:,1);
+ring_ch = part(:,:,2);
+nr = max(ring_ch(isfinite(ring_ch)), [], 'all');
+ns = opt.n_sectors;
+% the GRID cell count, which is what every reshape below needs. Not the same as
+% max(wedges(:)) : that is only how far a for-loop has to go, and it comes up
+% short whenever the last cell holds no pixels
+n_gridcell = nr * ns;
 % 1.2. Dropping excluded pixels from the partition
-if ~isempty(opt.exclmask); wedges(opt.exclmask) = 0; end
+if ~isempty(opt.exclmask)
+    wedges(opt.exclmask) = 0;
+end
 % 1.3. Clearing the wedges that cannot carry the reported measure. 'plane' solves
 %      a + bx + cy per component, so it needs the samples to span two rows and two
 %      columns; 'radial' only averages a scalar, and forcing that rank condition on
 %      it drops a third of the wedges for nothing. Measured on ev2: the drop is
 %      uneven across rings, which by itself moved ring 2 from 1.135 to 1.374 px
 min_span = 2;
-if strcmp(opt.method, 'radial'); min_span = 1; end
+if strcmp(opt.method, 'radial')
+    min_span = 1;
+end
 sample = ~isnan(u) & ~isnan(v);
-[wedges, counts] = sector_validate(wedges, sample, geo.n_labels, opt.min_valid, min_span);
+[wedges, counts] = sector_validate(wedges, sample, n_gridcell, opt.min_valid, min_span);
 
 % 2. Fitting one plane per wedge
-[plane_cells, anchor_xy] = piv_divergence(flow, wedges, geo.n_labels);
+[plane_cells, anchor_xy] = vfield_divergence(flow, wedges, n_gridcell);
 
 % 3. Per-wedge radial quantities
 % 3.1. Projecting onto the radial and tangential directions
@@ -93,12 +106,14 @@ vrad_field = u .* cos(geo.theta_map) + v .* sin(geo.theta_map);
 vtan_field = -u .* sin(geo.theta_map) + v .* cos(geo.theta_map);
 % 3.2. Averaging both, and distance-from-wall, per wedge
 lab      = double(wedges);
-vr_cells = NaN(geo.n_labels, 1);
-vt_cells = NaN(geo.n_labels, 1);
-rcen     = NaN(geo.n_labels, 1);
-for k = 1:geo.n_labels
+vr_cells = NaN(n_gridcell, 1);
+vt_cells = NaN(n_gridcell, 1);
+rcen     = NaN(n_gridcell, 1);
+for k = 1:n_gridcell
     sel = sample & lab == k;
-    if ~any(sel, 'all'); continue; end
+    if ~any(sel, 'all')
+        continue
+    end
     vr_cells(k) = mean(vrad_field(sel));
     vt_cells(k) = mean(vtan_field(sel));
     rcen(k)     = mean(geo.radius_map(sel));
@@ -147,7 +162,9 @@ end
 div_map = sector_paint(wedges, div_cells(:));
 
 % 5. Pack
-info = struct('centroid', geo.centroid, 'ring_width', geo.ring_width, ...
+% note  ring_width is not echoed back : it came in as opt.ring_width and the
+%       caller still has it. ring_edges below IS derived, so it stays
+info = struct('centroid', geo.centroid, ...
     'n_rings', nr, 'n_sectors', ns, 'counts', reshape(counts, nr, ns), ...
     'ring_edges', geo.ring_edges, 'cell_xy', reshape(anchor_xy, nr, ns, 2), ...
     'vr_cells', vr_cells, 'vt_cells', vt_cells, 'rcen', rcen, 'r_cen', r_cen, ...
@@ -171,7 +188,9 @@ function g = tangential_gradient(vt_all, r_all)
         for is = 1:ns
             im = mod(is-2, ns) + 1;
             ip = mod(is,   ns) + 1;
-            if any(isnan([vt_all(ir,im), vt_all(ir,ip), r_all(ir,is)])); continue; end
+            if any(isnan([vt_all(ir,im), vt_all(ir,ip), r_all(ir,is)]))
+                continue
+            end
             g(ir, is) = (vt_all(ir,ip) - vt_all(ir,im)) / (2*dth) / r_all(ir,is);
         end
     end
@@ -186,13 +205,19 @@ function g = radial_fit(vrad, rmap, sect, sample, rcen, nr, ns, halfw, minn)
     g = NaN(nr, ns);
     for is = 1:ns
         here = sample & sect == is;
-        if ~any(here, 'all'); continue; end
+        if ~any(here, 'all')
+            continue
+        end
         d = rmap(here);   y = vrad(here);
         for ir = 1:nr
             r0 = rcen(ir, is);
-            if isnan(r0); continue; end
+            if isnan(r0)
+                continue
+            end
             in = abs(d - r0) <= halfw;
-            if nnz(in) < minn || range(d(in)) < halfw; continue; end
+            if nnz(in) < minn || range(d(in)) < halfw
+                continue
+            end
             p = [ones(nnz(in), 1), d(in)] \ y(in);
             g(ir, is) = p(2);
         end

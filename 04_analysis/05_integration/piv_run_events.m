@@ -5,12 +5,12 @@ function [piv_run, info] = piv_run_events(events, S, opt)
 %   every pair spans the whole transition and uv is the total from->to displacement
 %   already -- do NOT multiply by nfr.
 %
-% IN   events   struct array from piv_pick_excursions (from/to, plus
+% IN   events   struct array from fwhm_pick_excursions (from/to, plus
 %               state/pol/rise_s/diameter_change for the record)
-%      S        H x W x T preprocessed stack (opticalflow_preprocess)
+%      S        H x W x T preprocessed stack (piv_preprocess)
 %      halfwin  frames either side of from/to forming each frameset (default 2)
 %      sel      indices into events ([] = all)
-%      piv_opt  cell of name-values passed to corr_ensemble; exclmask belongs here
+%      piv_opt  cell of name-values passed to piv_corr_ensemble; exclmask belongs here
 %      save_planes  keep the per-pair correlation planes (large; default false)
 %      verbose  progress line per event (default true)
 % OUT  piv_run  1xN struct: id, state, pol, from, to, rise_s, diameter_change,
@@ -92,9 +92,10 @@ function [uv, cc, cp] = ens_interleave(S, w_from, w_to, popt)
     inter = zeros(size(S, 1), size(S, 2), 2 * k);
     inter(:, :, 1:2:end) = S(:, :, a);
     inter(:, :, 2:2:end) = S(:, :, b);
-    % 2. Ensemble PIV, then relabel pairs with original stack indices
-    [uv, cc, cp] = corr_ensemble(inter, popt{:});
-    if ~isempty(cp)
-        cp.pair_frames = [a(:), b(:)];
-    end
+    % 2. Ensemble PIV. It correlates only, so the gating is explicit here
+    cp = piv_corr_ensemble(inter, popt{:});
+    [cp.utable, cp.vtable] = piv_validate(cp.utable, cp.vtable, cp.corr);
+    [uv, cc] = vfield_stamp(cp);
+    % 3. Relabel pairs with original stack indices
+    cp.pair_frames = [a(:), b(:)];
 end

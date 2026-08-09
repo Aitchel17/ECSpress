@@ -1,6 +1,6 @@
-function step = piv_grid_step(flow)
-%PIV_GRID_STEP  Spacing (px) of the sparse vector grid in a PIV field.
-%   corr_ensemble returns NaN everywhere except the interrogation-window centres,
+function step = vfield_grid_step(flow)
+%VFIELD_GRID_STEP  Spacing (px) of the sparse vector grid in a PIV field.
+%   piv_corr_ensemble returns NaN everywhere except the interrogation-window centres,
 %   so the spacing is the gap between the rows and columns that hold vectors. The
 %   cell-map builders size their cells from it.
 %

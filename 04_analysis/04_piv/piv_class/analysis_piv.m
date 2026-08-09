@@ -52,11 +52,18 @@ classdef analysis_piv < handle
             %   Writes displacement_map (dense, time-averaged, um/s) and corr_map.
             p = obj.param.ensemble;
             r = obj.param.roi;
-            [uv, cm] = corr_ensemble(obj.imgstack, ...
+            % piv_corr_ensemble correlates and nothing else, so the gating is
+            % spelled out here where param.validation already claimed to describe
+            % it. Order is PIVlab's: correlation filter, then the local median
+            cp = piv_corr_ensemble(obj.imgstack, ...
                 window_sizes = p.window_sizes, roirect = r.roirect, ...
                 subpixfinder = p.subpixfinder, mask_auto = p.mask_auto, ...
                 imdeform = p.imdeform, repeat = p.repeat, do_pad = p.do_pad, ...
                 use_gpu = p.use_gpu);
+            q = obj.param.validation;
+            [cp.utable, cp.vtable] = piv_validate(cp.utable, cp.vtable, cp.corr, ...
+                corr_thr = q.corr_thr, neigh_thresh = q.neigh_thresh);
+            [uv, cm] = vfield_stamp(cp);
             uv = uv * (obj.resolution / obj.frame_interval);   % px/frame -> um/s
             obj.vectormap.displacement_map = struct('data', uv, 'method', 'ensemble', 'units', 'um/s', 'param', p);
             obj.vectormap.corr_map         = struct('data', cm, 'units', 'corr', 'param', obj.param.validation);
@@ -96,7 +103,7 @@ classdef analysis_piv < handle
                 error('analysis_piv:noField', 'Run ensemble() or wavelet() before add_divergence().');
             end
             % field is um/s on a pixel grid, so divide by resolution (um/px) -> 1/s
-            div = piv_divergence_fd(obj.vectormap.displacement_map.data, mask = mask) / obj.resolution;
+            div = vfield_divergence_fd(obj.vectormap.displacement_map.data, mask = mask) / obj.resolution;
             obj.vectormap.divergent_map = struct('data', div, 'units', '1/s', 'param', struct('mask', mask));
             obj.param.divergence.mask = mask;
         end
