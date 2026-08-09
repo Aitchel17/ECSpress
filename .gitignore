@@ -11,3 +11,10 @@ ecspress_main.asv
 
 # Third-party dependencies
 04_analysis/04_piv/pivlab_thirdparty/
+
+# Deliberately compact copies kept for sharing. They duplicate pipeline code on
+# purpose and must NOT be edited to match it -- versioning them would invite that
+functions/toshare/
+
+# Scratch pad. Whatever is being tried right now, by design
+untitled.m

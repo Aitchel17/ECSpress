@@ -23,7 +23,6 @@ addpath(genpath(pwd));
 
 % Directory setup
 sessiondir = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_008';
-% directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
