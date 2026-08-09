@@ -1,4 +1,20 @@
-function radon_result = analyze_radon(hold_stack)
+function radon_result = legacy_analyze_radon(hold_stack)
+%LEGACY_ANALYZE_RADON  Gao's radon vessel-diameter code, sinogram part only.
+%   KEPT ON PURPOSE. Nothing calls it and nothing should: it is the reference,
+%   not the pipeline. analyze_radon is what runs.
+%
+%   Source: DrewLab/Thresholding_in_Radon_Space
+%           https://github.com/DrewLab/Thresholding_in_Radon_Space
+%
+%   What it is: that code with the per-frame for loop taken out, cut off after
+%   the sinogram. Everything downstream of that -- the thresholding, the
+%   diameter read -- was rewritten here, so this file is what the rewrite can
+%   still be checked against when a number looks wrong.
+%
+%   Do not "fix" it to match analyze_radon. Its value is that it does not.
+%
+% IN   hold_stack  H x W x N   the ROI stack, moved to the GPU here
+% OUT  radon_result  struct
 
 % 1. Set parameter
 the_angles=1:1:180;

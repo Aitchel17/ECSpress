@@ -17,35 +17,37 @@ end
 clee = color_lee;
 
 %%
-
-
-
-
-
-
+radon_multidia = plot_radon_multidiameter(t_axis,radon_analysis.diameter,radon_analysis.var_diameter,pixel2um,clee);
+% radon_multidia = make_fig("multiple diameter");
+% radon_multidia.update_figsize([9 3]); % 6:1 ratio for 2 subplots (each 3:1)
+% radon_multidia.loc.x = t_axis;
+% hold(radon_multidia.ax,"on")
+% [~,maxvar_angle] = max(radon_analysis.var_diameter);
+% 
+% tmp.init_val = 0;
+% for angleidx = 0:5
+%     tmp.plot_angle = mod(maxvar_angle+angleidx*30,180);
+%     tmp.hue_angle = angleidx*50+5;
+%     tmp.init_val = 20*angleidx - radon_analysis.diameter(tmp.plot_angle,1); 
+%     tmp.plot_data = radon_analysis.diameter(tmp.plot_angle,:) +tmp.init_val;
+%     radon_multidia.plot_line(tmp.plot_data , clee.lch(45,80,tmp.hue_angle))
+% end
+% radon_multidia.change_xylim([min(t_axis) max(t_axis)],...
+%     [min(radon_analysis.diameter(maxvar_angle,:))- radon_analysis.diameter(maxvar_angle,1),max(tmp.plot_data)])
+% set(radon_multidia.ax,"YTick",[])
+% radon_multidia.ax.YAxis.Visible = 'off';
+% radon_multidia.put_xaxistitle("Time (sec)")
+%%
 
 
 %%
-radon_multidia = make_fig("multiple diameter");
-radon_multidia.update_figsize([9 3]); % 6:1 ratio for 2 subplots (each 3:1)
-radon_multidia.loc.x = t_axis;
-hold(radon_multidia.ax,"on")
-[~,maxvar_angle] = max(radon_analysis.var_diameter);
-
-tmp.init_val = 0;
-for angleidx = 0:5
-    tmp.plot_angle = mod(maxvar_angle+angleidx*30,180);
-    tmp.hue_angle = angleidx*50+5;
-    tmp.init_val = 20*angleidx - radon_analysis.diameter(tmp.plot_angle,1); 
-    tmp.plot_data = radon_analysis.diameter(tmp.plot_angle,:) +tmp.init_val;
-    radon_multidia.plot_line(tmp.plot_data , clee.lch(45,80,tmp.hue_angle))
-end
-radon_multidia.change_xylim([min(t_axis) max(t_axis)],...
-    [min(radon_analysis.diameter(maxvar_angle,:))- radon_analysis.diameter(maxvar_angle,1),max(tmp.plot_data)])
-set(radon_multidia.ax,"YTick",[])
-radon_multidia.ax.YAxis.Visible = 'off';
-
 radon_multidia.save2svg(save_dir);
+%%
+centershift_fig = make_fig("Center shift","normal");
+centershift_fig.update_figsize([9 3]);
+centershift_fig.loc.x = t_axis;
+centershift_fig.plot_line(radon_analysis.centershift_table.Amplitude,clee.lch(45,80,5));
+
 
 %% 03.12 aim: 
 % 1. make figure of centermass amplitude phase shift figure.

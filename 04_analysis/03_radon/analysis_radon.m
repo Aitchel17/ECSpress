@@ -196,6 +196,7 @@ classdef analysis_radon < handle
             diameter2pi(182:end,:) = diameter(end,:)+diameter(1,:)-diameter(2:end-1,:);
             angle = (0:1:359)*2*pi/360; % deg2rad
             result =  diameter2elipsoid(diameter2pi,angle);
+            obj.radon_result.elipsoidfit = result;
         end
 
         function make_median_projection(obj, twophoton_processed, roilist)

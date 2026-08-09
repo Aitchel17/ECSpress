@@ -19,7 +19,7 @@ function result = diameter2elipsoid(Dmat,theta)
 %       .AI_ratio    [Ntime x 1] b/a
 %       .AI_1minus   [Ntime x 1] 1 - b/a
 %       .AI_diffsum  [Ntime x 1] (a-b)/(a+b)
-
+    disp("Elipsoid fit started")
     [Ntheta, Nt] = size(Dmat);
 
 
