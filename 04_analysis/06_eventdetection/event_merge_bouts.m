@@ -1,5 +1,5 @@
-function pairs = piv_merge_bouts(state_idx, merge, t_axis, search_s)
-%PIV_MERGE_BOUTS  Pair adjacent state bouts and build their two search windows.
+function pairs = event_merge_bouts(state_idx, merge, t_axis, search_s)
+%EVENT_MERGE_BOUTS  Pair adjacent state bouts and build their two search windows.
 %   Structural step: reads the bout tables only, never the diameter trace.
 %   The transition frame is search_from(2) == search_to(1).
 %
@@ -20,7 +20,7 @@ end
 % 0. Setup
 % 0.1 Check merge table shape
 if size(merge, 2) ~= 4
-    error('piv_merge_bouts:mergeShape', ...
+    error('event_merge_bouts:mergeShape', ...
         'merge must be Nx4 {earlier,later,label,polarity}, got %d columns.', size(merge, 2));
 end
 % 0.2 Search half-width in frames
