@@ -23,7 +23,7 @@ addpath(genpath(pwd));
 close all
 % Directory setup
 % sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';
-sessiondir ='E:\02_egfptdt\hql099\260601_hql99_sleep\HQL99_sleep260601_005';
+sessiondir ='G:\tmp\01_igkltdt\hql080\250619_hql080_sleep\HQL080_sleep250619_002';
 
 % 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(sessiondir);
@@ -31,7 +31,6 @@ session = session.load_primary_results;
 %%
 
 
-% directories = manage_directories(base_path); % Removed, handled by ECSSession
 session.stackch1 = session.loadstack('ch1');
 session.stackch2 = session.loadstack('ch2');
 % 2. Twophoton data FPS matching & preprocessing

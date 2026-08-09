@@ -23,7 +23,6 @@ addpath(genpath(pwd));
 
 % Directory setup
 sessiondir = 'G:\tmp\Mike_pvs\260302_forHyunseok_Grabmut_REM\260302_forHyunseok_Grabmut_REM\260301_009';
-% directories = manage_directories(base_path); % Removed, handled by ECSSession
 
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
