@@ -1,4 +1,4 @@
-function batch_state_analysis(dirstruct_table, experiment_folder, primary_map, peripheral_map, stateanalysis_map, dirtable_dir, force_rerun)
+function batch_state_analysis(dirstruct_table, experiment_folder, primary_map, peripheral_map, stateanalysis_map, dirtable_dir, force_rerun, cache_path)
 %BATCH_STATE_ANALYSIS Automatically run state analysis for sessions that have
 % paxfwhm.mat + sleep_score.mat but are missing paxfwhm_state.mat.
 %
@@ -15,6 +15,9 @@ function batch_state_analysis(dirstruct_table, experiment_folder, primary_map, p
 
 if nargin < 7 || isempty(force_rerun)
     force_rerun = false;
+end
+if nargin < 8 || isempty(cache_path)
+    cache_path = '';   % '' -> mapdirstruct parses all MDF metadata (no cache)
 end
 
 % --- Filter: paxfwhm + sleep_score 있고, state analysis 없는 행 ---
@@ -99,7 +102,7 @@ end
 %% 6. Re-scan dirtable to reflect newly created paxfwhm_state.mat files
 if nargin >= 6 && ~isempty(dirtable_dir)
     fprintf('[batch_state_analysis] Re-scanning dirtable...\n');
-    updated_table = mapdirstruct(experiment_folder, primary_map, peripheral_map, stateanalysis_map);
+    updated_table = mapdirstruct(experiment_folder, primary_map, peripheral_map, stateanalysis_map, cache_path);
     write_dirtable(updated_table, dirtable_dir);
     fprintf('[batch_state_analysis] dirtable updated: %s\n', dirtable_dir);
 end

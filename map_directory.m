@@ -14,6 +14,7 @@ if ~isfolder(save_exppath)
     mkdir(save_exppath)
 end
 dirtable_dir = fullfile(save_exppath,strcat(exp_name,'_dirtable.xlsx'));
+dircache_dir = fullfile(save_exppath,strcat(exp_name,'_dircache.mat'));  % immutable MDF metadata cache
 %
 primary_map = {
     'RadonResult', 'radon_result.mat';
@@ -31,11 +32,11 @@ peripheral_map = {
 stateanalysis_map = {'paxfwhm_state', 'paxfwhm_state.mat'};
 
 % Go down to exp_dir which contains mouse folder, ex.hql071 ...
-dirstruct_table = mapdirstruct(experiment_folder, primary_map,peripheral_map,stateanalysis_map);
+dirstruct_table = mapdirstruct(experiment_folder, primary_map,peripheral_map,stateanalysis_map, dircache_dir);
 write_dirtable(dirstruct_table, dirtable_dir);
 
 %% [STEP 2] Automatic Batch State Analysis
-batch_state_analysis(dirstruct_table, experiment_folder, primary_map, peripheral_map, stateanalysis_map, dirtable_dir,true);
+batch_state_analysis(dirstruct_table, experiment_folder, primary_map, peripheral_map, stateanalysis_map, dirtable_dir, true, dircache_dir);
 
 %% Read reference sheet (Example)
 opts = detectImportOptions(dirtable_dir, 'Sheet', 'reference');

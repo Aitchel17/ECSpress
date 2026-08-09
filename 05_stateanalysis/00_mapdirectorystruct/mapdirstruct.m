@@ -1,6 +1,28 @@
-function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map, state_map)
-%MAPDIRECTORY Summary of this function goes here
-%   Detailed explanation goes here
+function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map, state_map, cache_path)
+%MAPDIRECTORY Build the session directory table by scanning experiment_folder.
+%   cache_path (optional): path to a .mat file caching immutable MDF metadata
+%   per session directory. When given, each session's MDF info is parsed at
+%   most once ever -- subsequent runs reuse the cached metadata and skip the
+%   expensive mdfExtractLoader read. Pass '' to disable caching (full parse).
+    if nargin < 5
+        cache_path = '';
+    end
+
+    % --- Load MDF metadata cache (immutable per session -> parse once) ---
+    meta_cache = containers.Map('KeyType', 'char', 'ValueType', 'any');
+    if ~isempty(cache_path) && isfile(cache_path)
+        try
+            loaded = load(cache_path, 'meta_cache');
+            if isfield(loaded, 'meta_cache') && isa(loaded.meta_cache, 'containers.Map')
+                meta_cache = loaded.meta_cache;
+            end
+        catch ME
+            warning('mapdirstruct:cacheLoad', ...
+                'Could not load metadata cache (%s); reparsing all sessions.', ME.message);
+        end
+    end
+    cache_dirty = false;
+
     exp_dir = dir(experiment_folder);
     exp_dir = exp_dir([exp_dir.isdir] & ~ismember({exp_dir.name}, {'.', '..'}));
     % Go down to mouse_dir which contains imaging date folder, ex. 251012_hql090_sleep_....
@@ -81,12 +103,36 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
                 % if strcmp(session.name, "HQL086_sleep250912_009")
                 %     keyboard();
                 % end
+                % Session folders are named like HQL###_<type><date>_###,
+                % HQL###_<type>_<date>_###, or with a trailing suffix. Take the
+                % session number as the last purely-numeric token. Skip anything
+                % that is not a session folder (e.g. a 'peripheral' subfolder, or
+                % a date folder mis-filed one level too deep) instead of indexing
+                % s_split{3}, which errors when there are fewer than 3 tokens.
                 s_split = strsplit(session.name, '_');
-                current_session_id = s_split{3};
+                num_tokens = s_split(~cellfun('isempty', regexp(s_split, '^\d+$', 'once')));
+                is_session = ~isempty(regexpi(session.name, '^HQL\d+', 'once')) && ~isempty(num_tokens);
+                if ~is_session
+                    warning('mapdirstruct:skipNonSession', ...
+                        'Skipping non-session folder: %s', ...
+                        fullfile(datefolder.dirs(session_idx).folder, session.name));
+                    continue
+                end
+                current_session_id = num_tokens{end};
     
                 % --- Scan Session Folder ---
                 session.directory = fullfile(datefolder.dirs(session_idx).folder, session.name);
-                session_data = scan_sessionfolder(session.directory);
+                cache_key = char(session.directory);
+                if isKey(meta_cache, cache_key)
+                    cached_meta = meta_cache(cache_key);
+                else
+                    cached_meta = [];
+                end
+                [session_data, parsed_meta] = scan_sessionfolder(session.directory, cached_meta);
+                if isempty(cached_meta) && ~isempty(parsed_meta)
+                    meta_cache(cache_key) = parsed_meta;   % first parse -> cache for reuse
+                    cache_dirty = true;
+                end
     
                 % --- Scan Primary Analysis Folder ---
                 if ~strcmp(session_data.PrimaryAnalysis, 'NA')
@@ -172,6 +218,16 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
     % Sort by date
     if ~isempty(dirstruct_table)
         dirstruct_table = sortrows(dirstruct_table, 'Date');
+    end
+
+    % --- Persist updated metadata cache (only when new sessions were parsed) ---
+    if ~isempty(cache_path) && cache_dirty
+        try
+            save(cache_path, 'meta_cache');
+        catch ME
+            warning('mapdirstruct:cacheSave', ...
+                'Could not save metadata cache: %s', ME.message);
+        end
     end
 end
 

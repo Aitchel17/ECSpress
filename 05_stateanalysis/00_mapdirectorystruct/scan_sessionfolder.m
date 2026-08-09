@@ -1,14 +1,25 @@
-function session_data = scan_sessionfolder(session_dir)
+function [session_data, parsed_meta] = scan_sessionfolder(session_dir, cached_meta)
 % SCAN_SESSIONFOLDER Scan a session folder for files and metadata
 %
 % Input:
 %   session_dir - Full path to session directory
+%   cached_meta - (optional) previously parsed MDF metadata struct for this
+%                 session. MDF acquisition metadata is immutable, so when a
+%                 cached struct is supplied the expensive MDF parse is skipped.
 %
 % Output:
 %   session_data - Struct containing parsed metadata, main files, and analysis sub-structs
+%   parsed_meta  - The MDF metadata struct used (freshly parsed or the cached
+%                  input), so the caller can persist it for reuse. Empty if the
+%                  folder was missing.
+
+if nargin < 2
+    cached_meta = [];
+end
 
 session_data = struct();
 session_data.directory = session_dir;
+parsed_meta = [];
 
 if ~isfolder(session_dir)
     warning('Session folder not found: %s', session_dir);
@@ -16,8 +27,12 @@ if ~isfolder(session_dir)
     return;
 end
 
-%% 1. Parse Metadata (MDF parser)
-parsed_meta = mdf_commentparser(session_dir);
+%% 1. Parse Metadata (MDF parser) -- immutable per session; reuse cache if given
+if isempty(cached_meta)
+    parsed_meta = mdf_commentparser(session_dir);
+else
+    parsed_meta = cached_meta;
+end
 fields = fieldnames(parsed_meta);
 for i = 1:numel(fields)
     % Sanitize name -> if parser returns 'VesselID', use it
