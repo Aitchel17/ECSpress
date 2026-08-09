@@ -52,9 +52,11 @@ function load_and_update_tables(dirstruct_table, dirtable_dir)
         file_cols = setdiff(all_cols, meta_cols);
 
         % Iterate and Update
+        any_changed = false;
         for i = 1:height(dirstruct_table)
             new_row = dirstruct_table(i, :);
-            [ref_table, log_table] = process_session_update(ref_table, log_table, new_row, file_cols);
+            [ref_table, log_table, changed] = process_session_update(ref_table, log_table, new_row, file_cols);
+            any_changed = any_changed || changed;
         end
 
         % Sort by Date
@@ -63,19 +65,27 @@ function load_and_update_tables(dirstruct_table, dirtable_dir)
             log_table = log_table(sort_idx, :); % Keep log in sync
         end
 
-        % Save
-        writetable(ref_table, dirtable_dir, "Sheet", "reference");
-        writetable(dirstruct_table, dirtable_dir, "Sheet", "auto_mapped");
-        writetable(log_table, dirtable_dir, "Sheet", "log");
+        % Save (only when something actually changed -- skip the full workbook
+        % rewrite on no-op runs where every session already matches on disk)
+        if any_changed
+            writetable(ref_table, dirtable_dir, "Sheet", "reference");
+            writetable(dirstruct_table, dirtable_dir, "Sheet", "auto_mapped");
+            writetable(log_table, dirtable_dir, "Sheet", "log");
+        else
+            fprintf('[write_dirtable] No changes detected; directory table left as-is.\n');
+        end
         
     catch ME
-        warning('Failed to update directory table: %s', ME.message);
+        warning('write_dirtable:updateFailed', 'Failed to update directory table: %s', ME.message);
     end
 end
 
-function [ref_table, log_table] = process_session_update(ref_table, log_table, new_row, file_cols)
+function [ref_table, log_table, changed] = process_session_update(ref_table, log_table, new_row, file_cols)
 %PROCESS_SESSION_UPDATE Update single session row in reference and log tables.
+%   Returns changed=true when a file column was updated or a new session was
+%   appended, so the caller can skip rewriting the workbook on no-op runs.
 
+    changed = false;
     key = new_row.Directory; % Unique Key
     
     % Find match in reference table
@@ -116,6 +126,7 @@ function [ref_table, log_table] = process_session_update(ref_table, log_table, n
                     ref_table.(col_name)(match_idx) = new_val;
                     log_table.(col_name)(match_idx) = datetime("now");
                     fprintf('Updated: %s [%s]\n', key, col_name);
+                    changed = true;
                 end
             end
         end
@@ -131,8 +142,9 @@ function [ref_table, log_table] = process_session_update(ref_table, log_table, n
              new_log_row.(var_names{i}) = datetime("now");
         end
         log_table = append_row(log_table, new_log_row);
-        
+
         fprintf('New Session Added: %s\n', key);
+        changed = true;
     end
 end
 

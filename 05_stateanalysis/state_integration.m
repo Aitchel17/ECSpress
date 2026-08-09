@@ -12,9 +12,9 @@ classdef state_integration < handle
         info
         dir_struct
     end
-    
+
     methods
-        
+
         function obj = state_integration(base_path)
             %UNTITLED Construct an instance of this class
             %   Detailed explanation goes here
@@ -65,10 +65,10 @@ classdef state_integration < handle
             fs = primary_analog.ball.ds_fps;
             taxis = primary_analog.ball.rs_taxis;
             absball = abs(primary_analog.ball.resampled_ball);
-            %% 1 second smoothing 
+            %% 1 second smoothing
             kernelWidth = 1; % window (sec)
             smoothingKernel = gausswin(kernelWidth*fs)/sum(gausswin(kernelWidth*fs));
-            ballSmooth = conv(absball,smoothingKernel,'same');    
+            ballSmooth = conv(absball,smoothingKernel,'same');
             %% Awake Integration: Continuous Movement Detection
             % 1. Detect binary movement from the SMOOTHED ball data first
             smooth_threshold = 0.02;
@@ -88,14 +88,14 @@ classdef state_integration < handle
                 stim_dur  = unique_dur(idx);
                 dur_field = strcat("dur", string(stim_dur));
                 dur_air   = obj.time_table.(dur_field);  % Nx2 for this duration
-                
+
                 % Merge this duration's stim intervals with movement table
                 merged_dur = merge_airtable_movtable(dur_air, move_table, 10);
                 obj.time_table.(strcat("merged_", dur_field)) = merged_dur;  % ← stored per duration
 
                 % Accumulate all stim intervals for pure_movement filtering
                 all_air = [all_air; dur_air]; %#ok<AGROW>
-                
+
                 % Accumulate all merged intervals for all_merged_airpuff
                 if ~isempty(merged_dur)
                     all_merged = [all_merged; merged_dur]; %#ok<AGROW>
@@ -134,20 +134,20 @@ classdef state_integration < handle
                 obj.param.transition_window = 10;
             end
             trans_win = obj.param.transition_window;
-            
+
             % pure <-> static transitions
             obj.time_table.trans_static2pure = get_transition(trans_win, obj.time_table.static, obj.time_table.pure_movement, 0.5);
             obj.time_table.trans_pure2static = get_transition(trans_win, obj.time_table.pure_movement, obj.time_table.static, 0.5);
-            
+
             % merged_durX <-> static transitions
             for idx = 1:numel(unique_dur)
                 stim_dur = unique_dur(idx);
                 merged_field = strcat("merged_dur", string(stim_dur));
-                
+
                 if isfield(obj.time_table, merged_field)
                     obj.time_table.(strcat("static_",merged_field,"_trans")) = ...
                         get_transition(trans_win, obj.time_table.static, obj.time_table.(merged_field), 0.5);
-                    
+
                     obj.time_table.(strcat(merged_field, "_static","_trans")) = ...
                         get_transition(trans_win, obj.time_table.(merged_field), obj.time_table.static, 0.5);
                 end
@@ -170,7 +170,7 @@ classdef state_integration < handle
             plot(taxis, absball > 0.02, 'k:', 'LineWidth', 1)
             legend('Interpolated (final_binary_movement)', 'Raw (absball > 0.02)')
             %%
-                        % Generate a color map for the different durations
+            % Generate a color map for the different durations
             y_pos = 0;
 
             % Loop through each duration to draw its bars
@@ -180,7 +180,7 @@ classdef state_integration < handle
                 % Retrieve the Nx2 table/matrix of [StartTime, EndTime]
                 time_intervals = obj.time_table.(strcat("dur", string(stim_dur)));
 
-                % Fast plotting strategy: Create vectors separated by NaNs 
+                % Fast plotting strategy: Create vectors separated by NaNs
                 % so we only call plot() once per duration type.
                 num_intervals = size(time_intervals, 1);
                 x_data = NaN(3, num_intervals);
@@ -192,7 +192,7 @@ classdef state_integration < handle
 
                 % Plot all horizontal bars for this duration type
                 plot(x_data(:), y_data(:), 'Color', 'g', ...
-                     'LineWidth', 4, 'DisplayName', sprintf('Duration %d s', stim_dur));
+                    'LineWidth', 4, 'DisplayName', sprintf('Duration %d s', stim_dur));
             end
         end
 
@@ -212,13 +212,13 @@ classdef state_integration < handle
             obj.binary_bin.rem = sleep_score.behavState == sleep_score.statecodes.REM;
             obj.binary_bin.drowsy = sleep_score.behavState == sleep_score.statecodes.Drowsy;
             [obj.time_table.long_nrem, obj.info.bigchunk_nrem_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_nrem_weight,...
-                                        obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
             [obj.time_table.long_awake, obj.info.bigchunk_awake_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_awake_weight,...
-                                        obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
             [obj.time_table.long_drowsy, obj.info.bigchunk_drowsy_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_drowsy_weight,...
-                                        obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
             [obj.time_table.long_rem, obj.info.bigchunk_rem_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_rem_weight,...
-                                        obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
             % Time table generation
             % for chunk analysis
             obj.time_table.roughawake = statebin2timetable(obj.sleep_score.AwakeTimes, obj.sleep_score.DrowsyTimes);
@@ -233,7 +233,7 @@ classdef state_integration < handle
             obj.time_table.nr_trans = get_transition(obj.param.transition_window,obj.time_table.roughnrem, obj.time_table.rem);
             obj.time_table.na_trans = get_transition(obj.param.transition_window,obj.time_table.roughnrem, obj.time_table.roughawake);
             obj.time_table.ra_trans = get_transition(obj.param.transition_window,obj.time_table.rem, obj.time_table.roughawake);
-            obj.time_table.an_trans = get_transition(obj.param.transition_window,obj.time_table.roughawake, obj.time_table.roughnrem);                  
+            obj.time_table.an_trans = get_transition(obj.param.transition_window,obj.time_table.roughawake, obj.time_table.roughnrem);
         end
 
         function state_idx = add_taxis(obj,t_axis)
@@ -250,6 +250,8 @@ classdef state_integration < handle
         function trim_to_duration(obj, max_time_sec)
             % TRIM_TO_DURATION  이미징이 중간에 중단된 경우, sleep_score(peripheral)이
             % 더 길 수 있으므로 짧은 쪽(이미징 끝시간)에 맞게 time_table을 자른다.
+            % transition_window 1개 분량을 safety margin으로 추가로 자름 ->
+            % get_transitionsummary에서 center ± onset 윈도우가 절대 넘치지 않음.
             %
             % Usage:
             %   state_integrate.trim_to_duration(pax_fwhm.t_axis(end))
@@ -257,11 +259,20 @@ classdef state_integration < handle
             % Input:
             %   max_time_sec - 유지할 최대 시간 (초), 보통 pax_fwhm.t_axis(end)
 
-            fprintf('[trim_to_duration] Clipping state time_table to %.1f sec\n', max_time_sec);
+            % Safety margin: transition_window 1개 (없으면 보수적으로 30초)
+            if isfield(obj.param, 'transition_window')
+                safety_margin = obj.param.transition_window;
+            else
+                safety_margin = 30;
+            end
+            effective_max = max(0, max_time_sec - safety_margin);
+
+            fprintf('[trim_to_duration] imaging=%.1f sec, margin=%.1f sec -> clip to %.1f sec\n', ...
+                max_time_sec, safety_margin, effective_max);
 
             %% 1. Clip binary_bin arrays (bin 단위 -> 초 변환 필요)
             if ~isempty(obj.sleep_score) && isfield(obj.sleep_score, 'binwidth_sec')
-                max_bin = floor(max_time_sec / obj.sleep_score.binwidth_sec);
+                max_bin = floor(effective_max / obj.sleep_score.binwidth_sec);
                 bin_fields = fieldnames(obj.binary_bin);
                 for i = 1:numel(bin_fields)
                     arr = obj.binary_bin.(bin_fields{i});
@@ -282,11 +293,11 @@ classdef state_integration < handle
                 if isempty(tbl)
                     continue;
                 end
-                % start > max_time_sec 인 row 제거
-                valid_rows = tbl(:, 1) < max_time_sec;
+                % start > effective_max 인 row 제거
+                valid_rows = tbl(:, 1) < effective_max;
                 tbl = tbl(valid_rows, :);
-                % end > max_time_sec 인 row의 end를 max_time_sec으로 클립
-                tbl(tbl(:, 2) > max_time_sec, 2) = max_time_sec;
+                % end > effective_max 인 row의 end를 effective_max로 클립
+                tbl(tbl(:, 2) > effective_max, 2) = effective_max;
                 obj.time_table.(tfields{i}) = tbl;
             end
             fprintf('  time_table fields clipped: %s\n', strjoin(tfields', ', '));

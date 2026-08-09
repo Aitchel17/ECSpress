@@ -31,6 +31,24 @@ classdef state_linefwhm < handle
         end
 
         function obj = get_powerdensity(obj, name, data1d)
+            % A bout too short for the tapers is SKIPPED, not shortened.
+            %   err       get_spectrogram asks for tapers [2 3], so dpss(N,2,3)
+            %             wants NW < N/2, i.e. N > 4. One 3-sample bout threw
+            %             "Time-bandwidth product NW must be less than N/2" and took
+            %             the whole session's state analysis with it
+            %   why       such a bout is a TRIM REMAINDER, not a scored state.
+            %             Scoring runs on a fixed grid, so at the imaging rate
+            %             every scored bout comes out a whole number of grid steps
+            %             long. The only short one is the last, whatever
+            %             trim_to_duration left at the end of the recording --
+            %             a fraction of a second nobody scored. see FINDINGS.md
+            %   caution   bout_idx keeps its ORIGINAL number. tablegeneration_main
+            %             groups on it (get_numericsummary("bout_idx",...)), so
+            %             renumbering would make powerdensity's bout 5 a different
+            %             bout from state_summary's
+            min_samples = 5;        % dpss(N,2,3) needs N > 2*NW = 4
+            n_skipped = 0;
+
             sidx_fnames = fieldnames(obj.state_idx);
             nsidx = length(sidx_fnames);
             %%
@@ -49,6 +67,10 @@ classdef state_linefwhm < handle
                     start_idx = obj.state_idx.(sidx_fname)(bout,1);
                     end_idx = obj.state_idx.(sidx_fname)(bout,2);
                     duration = (end_idx - start_idx)/obj.param.fs;
+                    if (end_idx - start_idx + 1) < min_samples
+                        n_skipped = n_skipped + 1;
+                        continue
+                    end
                     crop_data = data1d(start_idx:end_idx);
                     spec = get_spectrogram(obj.param.fs,crop_data);
                     % specify
@@ -64,6 +86,10 @@ classdef state_linefwhm < handle
             end
             obj.powerdensity.(name) = table(state_name,bout_idx,bout_duration,total_bout,...
                 spectral_density,spectral_frequency,spectral_lognorm);
+            if n_skipped > 0
+                fprintf('      %s : %d bout(s) under %d samples skipped\n', ...
+                    name, n_skipped, min_samples);
+            end
 
         end
 
@@ -168,52 +194,60 @@ classdef state_linefwhm < handle
             post_var = zeros(total_bouts, 1);
 
             % 3. Fill Data
+            % onset: transition_window의 절반을 샘플 수로 고정
+            % -> 모든 state 타입에서 data 컬럼 벡터 길이가 동일해짐
+            % (이전: indices(1)의 절반 -> fname마다 달라져 vertcat 에러 발생)
+            if isfield(obj.sleep_obj.param, 'transition_window')
+                onset = round(obj.sleep_obj.param.transition_window * obj.param.fs / 2);
+            else
+                onset = round(10 * obj.param.fs / 2);  % fallback: 10초
+            end
+
             row_counter = 1;
             for sidx = 1:length(sidx_fnames) % per state transition
                 fname = sidx_fnames{sidx};
                 indices = obj.state_idx.(fname); % Nx2 matrix
                 nbouts = size(indices, 1);
                 if ~isempty(indices)
-                    onset = round((indices(1, 2) - indices(1, 1))/2);
 
                     for b = 1:nbouts % per bout
                         start_i = indices(b, 1);
                         end_i   = indices(b, 2);
-    
+
                         % Calculate center point (transition point)
                         center_i = round((start_i + end_i) / 2);
                         duration = (end_i - start_i) / obj.param.fs;
-    
+
                         % Store Metadata
                         state_name(row_counter) = fname;
                         bout_idx(row_counter) = b;
                         bout_duration(row_counter) = duration;
                         total_bout(row_counter) = nbouts;
                         transition_point(row_counter) = center_i;
-    
+
                         % Split data at center
                         data(row_counter) = {data1d(center_i-onset:center_i+onset)};
                         pre_seg = data1d(center_i-onset:center_i);
                         post_seg = data1d(center_i:center_i+onset);
-    
+
                         % BEFORE transition statistics
                         pre_mean(row_counter) = mean(pre_seg, 'omitnan');
                         pre_median(row_counter) = median(pre_seg, 'omitnan');
                         pre_var(row_counter) = var(pre_seg, 'omitnan');
-    
+
                         qs_before = quantile(pre_seg, [0.25, 0.75]);
                         pre_q1(row_counter) = qs_before(1);
                         pre_q3(row_counter) = qs_before(2);
-    
+
                         % AFTER transition statistics
                         post_mean(row_counter) = mean(post_seg, 'omitnan');
                         post_median(row_counter) = median(post_seg, 'omitnan');
                         post_var(row_counter) = var(post_seg, 'omitnan');
-    
+
                         qs_after = quantile(post_seg, [0.25, 0.75]);
                         post_q1(row_counter) = qs_after(1);
                         post_q3(row_counter) = qs_after(2);
-    
+
                         row_counter = row_counter + 1;
                     end
                 end
@@ -222,7 +256,7 @@ classdef state_linefwhm < handle
             % 4. Create Table with all columns
             obj.transition.(name) = table(state_name, bout_idx, bout_duration, total_bout, transition_point, ...
                 data, pre_mean, pre_median, pre_q1, pre_q3, pre_var, ...
-                 post_mean, post_median, post_q1, post_q3, post_var);
+                post_mean, post_median, post_q1, post_q3, post_var);
 
         end
 
@@ -247,27 +281,27 @@ classdef state_linefwhm < handle
             f_cutoff = bparam.dc_cutoff;
             Wn = f_cutoff / fn;
             [b, a] = butter(bparam.order, Wn, 'low');
-            decomposed.continuous = filtfilt(b, a, data1d);
+            decomposed.continuous = {filtfilt(b, a, data1d)};
             %% 1. Infraslow (0.005 - 0.1 Hz) -> Bandpass
             f_range = bparam.isf_range;
             Wn = f_range / fn;
             [b, a] = butter(bparam.order, Wn, 'bandpass');
-            decomposed.isf = filtfilt(b, a, data1d);
+            decomposed.isf = {filtfilt(b, a, data1d)};
             %% 2. VLF (0.1 - 0.3 Hz) -> Bandpass
             f_range = bparam.vlf_range;
             Wn = f_range / fn;
             [b, a] = butter(bparam.order, Wn, 'bandpass');
-            decomposed.vlf = filtfilt(b, a, data1d);
+            decomposed.vlf = {filtfilt(b, a, data1d)};
             %% 3. LF (0.3 - 1 Hz) -> Bandpass
             f_range = bparam.lf_range;
             Wn = f_range / fn;
             [b, a] = butter(bparam.order, Wn, 'bandpass');
-            decomposed.lf = filtfilt(b, a, data1d);
+            decomposed.lf = {filtfilt(b, a, data1d)};
             %% 4. HF (1 - 1.5 Hz) -> Bandpass
             f_cutoff = bparam.hf_cutoff; % Just close to Nyquist
             Wn = f_cutoff / fn;
             [b, a] = butter(bparam.order, Wn, 'high');
-            decomposed.hf_residual = filtfilt(b, a, data1d);
+            decomposed.hf_residual = {filtfilt(b, a, data1d)};
             obj.param.butter = bparam;
             obj.band_decomposition.(name) = decomposed;
         end
@@ -329,7 +363,13 @@ classdef state_linefwhm < handle
                     % Process each band
                     for k = 1:length(bandnames) % 3. per band
                         bn = bandnames{k};
-                        signal_full = decomposed.(bn);
+                        
+                        % Cell에서 배열 꺼내기
+                        if iscell(decomposed.(bn))
+                            signal_full = decomposed.(bn){1};
+                        else
+                            signal_full = decomposed.(bn);
+                        end
 
                         % Slicing check
                         if start_i > numel(signal_full) || end_i > numel(signal_full)

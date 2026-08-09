@@ -37,21 +37,27 @@ parsed_struct.objx = [];
 parsed_struct.objy = [];
 parsed_struct.objz = [];
 parsed_struct.resolution = [];
-%% Zoom
-try
-    parsed_struct.zoom = mdf.info.zoom;
-catch
-    keyboard()
+%% Acquisition metadata, one field at a time
+% err      only zoom used to be guarded, so a session whose folder has no
+%          *_info.txt died on objpix and took the whole mapdirstruct with it.
+%          NONE of the folders that hit it has a paxfwhm.mat -- the scan was
+%          dying on folders it had nothing to collect from
+%          see FINDINGS.md
+% note     the fields keep the [] they were initialised with when absent, so a
+%          session with no metadata reads as empty rather than as a wrong number
+info_fields = { ...
+    'zoom',          'zoom'; ...
+    'resolution',    'objpix'; ...
+    'objx',          'objx'; ...
+    'objy',          'objy'; ...
+    'objz',          'objz'; ...
+    'power_percent', 'laserpower'; ...
+    'wavelength',    'excitation'};
+for fi = 1:size(info_fields, 1)
+    if isfield(mdf.info, info_fields{fi, 2})
+        parsed_struct.(info_fields{fi, 1}) = mdf.info.(info_fields{fi, 2});
+    end
 end
-%% resolution
-parsed_struct.resolution = mdf.info.objpix;
-%% Objective lens position
-parsed_struct.objx = mdf.info.objx;
-parsed_struct.objy = mdf.info.objy;
-parsed_struct.objz = mdf.info.objz;
-
-parsed_struct.power_percent = mdf.info.laserpower;
-parsed_struct.wavelength = mdf.info.excitation;
 
 if isempty(comment_str)
     return;

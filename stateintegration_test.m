@@ -11,6 +11,7 @@ sessiondir = 'G:\tmp\00_igkl\hql097\260321_hql097_sleep\HQL097_sleep260321_010';
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
 state_integrate = state_integration(sessiondir);
+state_integrate.trim_to_duration(session.pax_fwhm.t_axis(end));
 
 
 %
@@ -68,7 +69,7 @@ na_trans = get_stateframes(img_state.state_idx.na_trans,twophoton_processed.ch1)
 ra_trans = get_stateframes(img_state.state_idx.ra_trans,twophoton_processed.ch1);
 
 %%
-result = opticalflow_preprocess(ra_trans{1});
+result = piv_preprocess(ra_trans{1});
 %%
 util_checkstack(result)
 %%
@@ -77,7 +78,7 @@ of_data =opticalflow_wlet(result);
 opticalflow_quiver(of_data(:,:,1,:),"block_size",5,"scale",10)
 %%
 
-op_range = opticalflow_viewer(result,of_data,"block_size",5,scale=10);
+op_range = vfield_viewer(result,of_data,"block_size",5,scale=10);
 %%
 figure()
 imshow(result(:,:,op_range(2)))
