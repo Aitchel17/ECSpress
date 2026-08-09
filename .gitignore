@@ -5,6 +5,10 @@
 *.mat
 *.tif
 
+# Reference data is an INPUT, not an output. Small, third-party, and the code
+# cannot run without it -- see the folder's own README for provenance
+!07_figuregeneration/allen/*.mat
+
 # Archive of legacy/unused files
 # 99_notinuse/
 ecspress_main.asv
