@@ -15,8 +15,17 @@ function polarcluster = analysis_clusterpolar_polarplot(polarcluster, roilist)
 %           .polar_theta    (1x360) bin-center angles [rad], shared by all conditions
 %           .polar_profiles (1x4 struct) .roi_label, .binned_r (1x360, NaN=missing)
 
-if ~isfield(polarcluster, 'manual_roi') || isempty(polarcluster.manual_roi)
-    warning('polarcluster.manual_roi is empty. Skipping polar transform.');
+% err  this used to gate on polarcluster.manual_roi, which the contour step only
+%      ever sets to an empty struct() -- the contours themselves live in roilist.
+%      Sessions contoured by an older version have no manual_roi field at all, so
+%      the guard rejected most of the fully contoured set
+%      see FINDINGS.md
+% why  the four contour labels in roilist ARE the precondition, so check those
+contour_labels = ["constrictedBV_contour", "constrictedPVS_contour", ...
+                  "dilatedBV_contour",     "dilatedPVS_contour"];
+if isempty(roilist) || ~all(ismember(contour_labels, roilist.list()))
+    warning('roilist is missing one of the 4 %s labels. Skipping polar transform.', ...
+        'contour');
     return;
 end
 
