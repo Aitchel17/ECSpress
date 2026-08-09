@@ -1,7 +1,20 @@
 clc, clear
 addpath(genpath('g:\03_program\01_ecspress\00_plotting'));
 clee = color_lee();
-exp_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis\00_igkl';
+% integrate_analysisresult sets these in the environment, which survives the clear
+% above; run this file on its own and the defaults below apply.
+%   this used to be pinned to 00_igkl while transition_fig drew merged_igkl_igkltdt,
+%   so the two figures were of different datasets. see CLAUDE_LOG.md
+param.dataset = getenv('ECSPRESS_DATASET');
+if isempty(param.dataset)
+    param.dataset = 'merged_igkl_igkltdt';
+end
+dirs.secondary_root = getenv('ECSPRESS_ROOT');
+if isempty(dirs.secondary_root)
+    dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
+        '2023ecspress\02_secondary_analysis'];
+end
+exp_path = fullfile(dirs.secondary_root, param.dataset);
 table_path = fullfile(exp_path, "state_summary.mat");
 load_struct = load(table_path);
 statsummary_table = load_struct.save_content;
@@ -43,6 +56,25 @@ for ti = 1:numel(states)
         spec_states.tiles(ti).items(vi).label      = vessel_names(vi);
     end
 end
+
+%% ── Tiled Figure 1: Grouped by Transition (1 figure, 4 tiles) ─────────────
+spec_states = struct();
+spec_states.title = "Q2Q3 mean Grouped by states";
+spec_states.tile_layout = [1 3];
+for ti = 1:numel(states)
+    spec_states.tiles(ti).title = vessel_names(ti);
+    for vi = 1:numel(data_types)
+        spec_states.tiles(vi).items(ti).states = states(ti);
+        spec_states.tiles(vi).items(ti).datatype   = data_types(vi);
+        spec_states.tiles(vi).items(ti).color      = vessel_colors{vi};
+        spec_states.tiles(vi).items(ti).label      = states_labels(ti);
+    end
+end
+render_scatter_figure(spec_states, plotdata);
+
+
+
+
 %%
 render_scatter_figure(spec_states, plotdata);
 

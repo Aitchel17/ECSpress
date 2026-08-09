@@ -1,6 +1,25 @@
 clc, clear
 addpath(genpath('g:\03_program\01_ecspress\06_analysis_integration\01_tablemanager'));
-masterDirTable_path = 'E:\OneDrive - The Pennsylvania State University\2023ecspress\02_secondary_analysis\00_igkl\00_igkl_dirtable.xlsx';
+
+% Which dataset this run analyses. The rest of the script does not care -- it reads
+% whatever mtable_FWHMsleep.mat sits beside the dirtable it is pointed at.
+%   note  'merged' spans 00_igkl and 01_igkltdt; the single-cohort folders are still
+%         there and still work, so a cohort can be re-run on its own at any time
+%   caution the OUTPUT (state_summary.mat, transition.mat) lands next to the sheet.
+%         Pointing this at a different dataset writes a different pair of files
+% integrate_analysisresult exports these; they survive the clear above. Run this
+% file on its own and the defaults apply.
+param.dataset = getenv('ECSPRESS_DATASET');
+if isempty(param.dataset)
+    param.dataset = 'merged_igkl_igkltdt';      % or '00_igkl' / '01_igkltdt'
+end
+dirs.secondary_root = getenv('ECSPRESS_ROOT');
+if isempty(dirs.secondary_root)
+    dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
+        '2023ecspress\02_secondary_analysis'];
+end
+
+masterDirTable_path = fullfile(dirs.secondary_root, param.dataset, [param.dataset '_dirtable.xlsx']);
 mtable_FWHMsleep = tableManager.load_recon(masterDirTable_path, "mtable_FWHMsleep.mat");
 %% State summary analysis
 
@@ -48,10 +67,30 @@ result.state_summary.awakesubtract_numeric = awakesubtract_summarystatAnalyzer.n
 
 
 %% transition analysis
-mtable_FWHMsleep.analysis_table = mtable_FWHMsleep.subTables.transition; % State summary to transition table 
+mtable_FWHMsleep.analysis_table = mtable_FWHMsleep.subTables.transition; % State summary to transition table
 mtable_FWHMsleep.filtLogics = [];
 mtable_FWHMsleep.filtLogics.vType = contains(mtable_FWHMsleep.analysis_table.VesselID, "PA", 'IgnoreCase', true); % Artery filter
 mtable_FWHMsleep.filtLogics.depth = mtable_FWHMsleep.analysis_table.NumericDepth <70; % L1 filter
+% Sleep only. SessionType lives in refTable and is not carried into the subTables;
+% SessionIndex is that table's ROW NUMBER, not the session id, so it indexes it directly
+%   err  without this a whiskerb session rides along : hql090 251020 sets
+%        transition_window to 20 s where every sleep session uses 50, so its traces
+%        are a different WINDOW and not just a different sampling of one
+tmp.sidx  = mtable_FWHMsleep.analysis_table.SessionIndex;
+tmp.stype = string(mtable_FWHMsleep.refTable.SessionType(tmp.sidx));
+% the index has to MEAN that, so check it against the identity it should carry
+tmp.agree = string(mtable_FWHMsleep.refTable.MouseID(tmp.sidx)) == ...
+                string(mtable_FWHMsleep.analysis_table.MouseID) & ...
+            string(mtable_FWHMsleep.refTable.Date(tmp.sidx)) == ...
+                string(mtable_FWHMsleep.analysis_table.Date);
+if ~all(tmp.agree)
+    error('tablegeneration:sessionIndex', ...
+        'SessionIndex does not index refTable: %d of %d rows disagree on MouseID/Date.', ...
+        nnz(~tmp.agree), numel(tmp.agree));
+end
+mtable_FWHMsleep.filtLogics.sleep = tmp.stype == "sleep";
+fprintf('SessionType : sleep %d rows | dropped %d (%s)\n', nnz(tmp.stype == "sleep"), ...
+    nnz(tmp.stype ~= "sleep"), strjoin(unique(tmp.stype(tmp.stype ~= "sleep"))', ','));
 mtable_FWHMsleep.apply_filter
 data_colnames = {"data"};
 numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
