@@ -2,8 +2,12 @@ function [sectormap, counts] = sector_validate(sectormap, valid, n_labels, min_c
 % IN   sectormap  HxW label map from sector_block / sector_polar
 %      valid      HxW logical, true where the measurement is usable. For a PIV
 %                 field: ~isnan(u) & ~isnan(v) & ~exclmask
-%      n_labels   from info.n_labels; [] = read it off the map, which shrinks the
-%                 partition when the trailing sectors are already empty
+%      n_labels   how many labels the partition DEFINES, so counts lines up with
+%                 it. For sector_block that is info.n_labels, an exact count. For
+%                 sector_polar it is n_rings * n_sectors, which the caller builds
+%                 from max of the ring channel -- see sector_polar
+%                 [] = read it off the map, which comes up SHORT whenever the
+%                 highest-numbered cell holds no pixels
 %      min_count  samples a sector needs, default 4
 %      min_span   distinct rows AND columns its samples must span, default 2
 % OUT  sectormap  same map with failing sectors cleared to 0

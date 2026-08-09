@@ -19,9 +19,13 @@ arguments
 end
 
 % 0. Setup
+% n_sectors = 1, so a cell IS a layer and channel 1 already equals the ring index
 [layers, geo] = sector_polar(coremask, box_px, 1);
-layer = double(layers);
-n_lay = geo.grid(1);
+layer = layers(:,:,1);
+% ring count off the map itself : sector_polar no longer echoes a grid, and Inf
+% marks the region past the last ring so it has to come out of the max
+ring_ch = layers(:,:,2);
+n_lay   = max(ring_ch(isfinite(ring_ch)), [], 'all');
 n_per = zeros(1, n_lay);
 pos   = zeros(size(layer));
 
@@ -48,7 +52,8 @@ sectormap = zeros(size(layer), 'uint32');
 sectormap(inband) = uint32(offset(layer(inband))' + pos(inband));
 
 % 3. Packing
+% box_px is the caller's own argument, so it is not echoed back here
 info = struct('n_per', n_per, 'n_labels', sum(n_per), 'offset', offset, ...
-    'box_px', box_px, 'centroid', geo.centroid, ...
+    'centroid', geo.centroid, ...
     'radius_map', geo.radius_map, 'theta_map', geo.theta_map);
 end
