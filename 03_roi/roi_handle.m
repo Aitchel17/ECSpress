@@ -21,27 +21,29 @@ classdef roi_handle < handle
             end
         end
 
-        function addormodifyroi(obj, ref_stack, label, roimode)
+        function addormodifyroi(obj, ref_stack, label, roimode, stack2)
             arguments
                 obj
                 ref_stack (:,:,:) {mustBeNumeric}
                 label (1,:) char
                 roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','line'})}
+                stack2 = []   % optional co-registered 2nd channel (ch2) for reflect view
             end
             try
-                obj.addroi(ref_stack, label, roimode);
+                obj.addroi(ref_stack, label, roimode, stack2);
             catch
                 disp(['ROI "' label '" already exists. Modifying...']);
-                obj.modifyroi(ref_stack, label);
+                obj.modifyroi(ref_stack, label, stack2);
             end
         end
 
-        function addroi(obj, ref_stack, label, roimode)
+        function addroi(obj, ref_stack, label, roimode, stack2)
             arguments
                 obj
                 ref_stack (:,:,:) {mustBeNumeric}
                 label   (1,:) char
                 roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','line'})}
+                stack2 = []
             end
             % 라벨 중복 금지
             if any(strcmp({obj.ROIs.Label}, label))
@@ -49,7 +51,11 @@ classdef roi_handle < handle
             end
 
             vis_stack = pre_groupaverage(ref_stack, 10);
-            selector  = roiSelector(vis_stack, roimode);
+            vis_stack2 = [];
+            if ~isempty(stack2)
+                vis_stack2 = pre_groupaverage(stack2, 10);   % match ch1 frame grouping
+            end
+            selector  = roiSelector(vis_stack, roimode, [], vis_stack2);
             [vtx, sli, roimask] = selector.getROI();
 
             nowt = datetime('now');
@@ -127,15 +133,20 @@ classdef roi_handle < handle
             end
         end
 
-        function modifyroi(obj, ref_stack, label)
+        function modifyroi(obj, ref_stack, label, stack2)
             arguments
                 obj
                 ref_stack (:,:,:) {mustBeNumeric}
                 label   (1,:) char
+                stack2 = []
             end
             i = obj.findLabel(label);
             vis_stack = pre_groupaverage(ref_stack, 10);
-            selector  = roiSelector(vis_stack, obj.ROIs(i).Mode, obj.ROIs(i).Vertices);
+            vis_stack2 = [];
+            if ~isempty(stack2)
+                vis_stack2 = pre_groupaverage(stack2, 10);
+            end
+            selector  = roiSelector(vis_stack, obj.ROIs(i).Mode, obj.ROIs(i).Vertices, vis_stack2);
             [vtx, sli, roimask] = selector.getROI();
             obj.ROIs(i).Vertices  = vtx;
             obj.ROIs(i).Mask      = roimask;
