@@ -15,13 +15,10 @@ numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
 
 myTransAnalyzer = tableAnalyzer(mtable_FWHMsleep.filtered_table, mtable_FWHMsleep.action_log);
 
-myTransAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames);
+myTransAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames,'subtraction');
 
 %%
-
-
 myTransAnalyzer.get_numericsummary("Date","filtered_table")
-
 
 %% Mouse table
 ra_transitions = [];

@@ -154,6 +154,22 @@ classdef tableAnalyzer < handle
             ave_table.(var_name) = cell(n_groups, 1);
             ci_table.(var_name)  = cell(n_groups, 1);
             col_data = target_table.(var_name);
+
+            % Traces of different LENGTH but the same DURATION cannot be stacked.
+            % why      the transition window is transition_window SECONDS wide for
+            %          every session (state_linefwhm line 203 cuts center+/-onset,
+            %          onset = transition_window*fs/2), so only fs differs -- two
+            %          sessions at different rates give different point counts for
+            %          the same window (see FINDINGS.md). Putting them on one
+            %          normalised axis is a resampling, not a reinterpretation
+            % caution  bout_duration is NOT the window -- it is (end-start)/fs of the
+            %          bout itself (line 193). Rows reading shorter still carry a
+            %          full-width window. Anything building a time axis from it is
+            %          wrong, transition_fig included
+            % err      DOWN to the shortest, never up : upsampling would invent
+            %          samples a 1.52 Hz recording never took
+            col_data = tableAnalyzer.match_tracelength(col_data, var_name);
+
             for g = 1:n_groups
                 row_idx = find(group_idx == g);
                 n = numel(row_idx);
@@ -175,7 +191,41 @@ classdef tableAnalyzer < handle
             obj.save_summary("data_tables", aveTable_name, ave_table, ci95Table_name, ci_table, new_keyname);
         end
 
-    end 
+    end
+
+    methods (Static)
+        function out = match_tracelength(col_data, var_name)
+            % MATCH_TRACELENGTH  Put every trace on the SHORTEST one's grid.
+            %   Traces spanning the same window at different frame rates differ in
+            %   sample count only, so a normalised-axis interpolation is exact.
+            %
+            % IN   col_data  n x 1 cell   each a 1 x L numeric trace, L may vary
+            %      var_name  str          for the one-line report
+            % OUT  out       n x 1 cell   every trace 1 x min(L)
+            %
+            % err  down only. Interpolating the slower recording UP would hand the
+            %      average a precision it never had, and the CI that follows would
+            %      be narrower than the data earns.  see FINDINGS.md
+            % caution  linear interpolation onto a coarser grid is decimation with
+            %      no anti-alias filter, so content between the new Nyquist and the
+            %      old one folds back. Harmless for a slow caliber trace; check
+            %      before using this on anything with power up there
+            out = col_data;
+            n_pts = cellfun(@numel, col_data);
+            live  = n_pts > 0;
+            if nnz(live) < 2 || isscalar(unique(n_pts(live))); return; end
+
+            n_target = min(n_pts(live));
+            for k = find(live & n_pts ~= n_target)'
+                v = col_data{k};
+                out{k} = interp1(linspace(0, 1, numel(v)), v(:).', ...
+                                 linspace(0, 1, n_target), 'linear');
+            end
+            fprintf('  %s : %d of %d traces resampled to %d pts (from %s)\n', ...
+                var_name, nnz(live & n_pts ~= n_target), nnz(live), n_target, ...
+                mat2str(unique(n_pts(live))'));
+        end
+    end
 
     methods (Access = private)
         function ci95 = calculate_ci95(obj, std_val, n)

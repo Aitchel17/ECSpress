@@ -42,10 +42,10 @@ batch_state_analysis(dirstruct_table, experiment_folder, primary_map, peripheral
 opts = detectImportOptions(dirtable_dir, 'Sheet', 'reference');
 ref_table = readtable(dirtable_dir, opts);
 % Read state analysis
-rows = ref_table.LineFWHM == "paxfwhm.mat";
+rows = string(ref_table.Primary_paxFWHM) == "paxfwhm.mat";
 
 fwhm_table = ref_table(rows, :);
 %
-rows = fwhm_table.SessionType == "sleep";
+rows = string(fwhm_table.SessionType) == "sleep";
 
 sleep_fwhm_table = fwhm_table(rows,:);
