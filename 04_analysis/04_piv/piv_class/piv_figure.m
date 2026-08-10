@@ -7,63 +7,107 @@ classdef piv_figure < handle
 %     colour limits  computed once over all events, symmetric about 0, so the maps
 %                    show amplitude differences instead of self-normalising
 %
-% IN   run    1xN struct from piv_run_events
-%             (id,state,pol,from,to,rise_s,diameter_change,nfr,uv,corr)
-%      polar  1xN cell from piv_polar_events
-%             (cells,rcen,vr,vt,pdiv,vrmap,vtmap,div,info)
-%      ctx    struct: S, coremask, exclmask, t_axis, dtrace, dsg, fps, p2u,
-%             halfwin, events, and optionally state_idx / states
-% OUT  obj    handle object; call the methods below
+%   THE MAPS ARE PAINTED, NOT MEASURED.
+%   vfield_polar does not emit a dense map; it bins triangles. paint() spreads a
+%   per-cell value back over the frame so it can be looked at where it came from.
+%   Nothing downstream reads a painted map.
+%
+%   radprofile() USED TO BE WRONG.
+%   It ran mean(cells, 2, 'omitnan') -- a mean over the wedges present at each
+%   ring, and a wedge that runs off the frame stops sooner than its neighbours,
+%   so the inner radii averaged more wedges than the outer ones. It now goes
+%   through vfield_profile, which fixes one wedge set across the whole interval.
+%   See CLAUDE_LOG.md
+%
+% IN   run      1xN struct from piv_run_events
+%               (id,state,pol,from,to,rise_s,diameter_change,nfr,uv,corr)
+%      fields   1xN cell of vfield_polar, from piv_polar_events
+%      profile  vfield_profile from the same call, one row per event
+%      ctx      struct: S, coremask, exclmask, t_axis, dtrace, dsg, fps, p2u,
+%               halfwin, events, and optionally state_idx / states
+% OUT  obj      handle object; call the methods below
 %
 %   USAGE
-%     F = piv_figure(piv_run, polar, ctx);
-%     F.summary();          % text table
-%     F.map(2, 'radial');   % dv_r/dr overlay + quiver for event index 2
-%     F.panel(2);           % vr | dv_r/dr | plain div | diameter, one figure
-%     F.tiles('dilation');  % every dilation event tiled
+%     [P, V] = piv_polar_events(piv_run, coremask, p2u, gated = false);
+%     F = piv_figure(piv_run, V, P, ctx);
+%     F.summary();                     % text table
+%     F.map(2, 'divergence');          % overlay + quiver for event index 2
+%     F.panel(2);                      % four panels, one figure
+%     F.tiles('dilation');
 %     F.radprofile();  F.signcheck();  F.slices(2);
 
     properties
-        run                     % per-event PIV results
-        polar                   % per-event polar/divergence maps
-        ctx                     % shared context (stack, masks, traces, geometry)
-        lims                    % struct(vr,dvr,div): symmetric limits shared by all events
-        scale   = 5             % quiver length multiplier (frame_span is always 1)
-        alpha   = 0.55          % overlay transparency
-        cmap    = 'turbo'
-        headsz  = 5             % absolute arrowhead size (px)
-        linew   = 1
+        run                     % 1 x N struct   per-event PIV results
+        fields                  % 1 x N cell     vfield_polar, one per event
+        profile                 % vfield_profile the cohort, one row per event
+        ctx                     % struct         stack, masks, traces, geometry
+        lims                    % struct         symmetric limits shared by all events
+        scale   = 5             % float          quiver length multiplier
+        alpha   = 0.55          % float          overlay transparency
+        cmap    = 'turbo'       % char
+        headsz  = 5             % float px       absolute arrowhead size
+        linew   = 1             % float
     end
 
     properties (Constant, Access = private)
         req_fields = {'S','coremask','exclmask','t_axis','dtrace','dsg','fps','p2u', ...
                'halfwin','events'};
+        % which = this quantity, with its axis label. The names are the settled
+        % vocabulary; see BACKLOG.md
+        quantities = {'divergence',      'divergence  \DeltaA/A'; ...
+                      'strain_radial',   'strain_radial  n''En'; ...
+                      'strain_hoop',     'strain_hoop  t''Et'; ...
+                      'disp_radial',     'disp_radial  (+ outward, \mum)'; ...
+                      'disp_tangential', 'disp_tangential  (+ CCW, \mum)'; ...
+                      'volume_out',      'volume_out  (cumulative, \mum^2)'};
     end
 
     methods
-        function obj = piv_figure(run, polar, ctx)
+        function obj = piv_figure(run, fields, profile, ctx)
             arguments
-                run   struct
-                polar cell
-                ctx   struct
+                run     struct
+                fields  cell
+                profile vfield_profile
+                ctx     struct
             end
-            if numel(run) ~= numel(polar)
+            if numel(run) ~= numel(fields)
                 error('piv_figure:sizeMismatch', ...
-                    'run has %d events but polar has %d entries.', numel(run), numel(polar));
+                    'run has %d events but fields has %d entries.', numel(run), numel(fields));
+            end
+            if numel(run) ~= profile.n_row
+                error('piv_figure:sizeMismatch', ...
+                    'run has %d events but profile has %d rows.', numel(run), profile.n_row);
+            end
+            % row k must BE event k. append() fills in order, but a caller that
+            % built the profile separately could have reordered it, and every
+            % method below indexes both by the same k
+            for k = 1:numel(run)
+                if profile.rows(k).event_idx ~= run(k).id
+                    error('piv_figure:rowMismatch', ...
+                        'profile row %d is event %d but run(%d) is event %d.', ...
+                        k, profile.rows(k).event_idx, k, run(k).id);
+                end
             end
             missing = obj.req_fields(~isfield(ctx, obj.req_fields));
             if ~isempty(missing)
                 error('piv_figure:ctxMissing', 'ctx is missing field(s): %s', ...
                     strjoin(missing, ', '));
             end
-            obj.run   = run;
-            obj.polar = polar;
-            obj.ctx   = ctx;
-            obj.lims  = struct( ...
-                'vr',  obj.symlim(cellfun(@(A) max(abs(A.vrmap(:)), [], 'omitnan'), polar)), ...
-                'dvr', obj.symlim(cellfun(@(A) max(abs(A.pdiv(:)),  [], 'omitnan'), polar)), ...
-                'div', obj.symlim(cellfun(@(A) prctile(abs(A.div(~isnan(A.div))), 99), polar)), ...
-                'vt',  obj.symlim(cellfun(@(A) max(abs(A.vtmap(:)), [], 'omitnan'), polar)));
+            obj.run = run;
+            obj.fields = fields;
+            obj.profile = profile;
+            obj.ctx = ctx;
+
+            obj.lims = struct();
+            for q = 1:size(obj.quantities, 1)
+                name = obj.quantities{q, 1};
+                peak = nan(1, numel(run));
+                for k = 1:numel(run)
+                    v = profile.rows(k).cells.(name);
+                    peak(k) = max(abs(v(:)), [], 'omitnan');
+                end
+                obj.lims.(name) = obj.symlim(peak);
+            end
         end
 
         function q = quiveropts(obj)
@@ -75,40 +119,57 @@ classdef piv_figure < handle
 
         function ax = vectors(obj, k, ax)
             %VECTORS  Ensemble displacement field over the FROM-state frame.
-            if nargin < 3 || isempty(ax); figure('Name', obj.figname(k, 'piv')); ax = gca; end
+            if nargin < 3 || isempty(ax)
+                figure('Name', obj.figname(k, 'piv'));
+                ax = gca;
+            end
             R = obj.run(k);
-            imshow(obj.bg(k), 'Parent', ax); hold(ax, 'on');
+            imshow(obj.bg(k), 'Parent', ax);
+            hold(ax, 'on');
             vfield_plotquiver(R.uv, obj.quiveropts{:});
             title(ax, obj.label(k));
         end
 
         function ax = map(obj, k, which, ax)
-            %MAP  Overlay a scalar field on the FROM frame and draw the vectors on top.
-            %   which: 'radial' = dv_r/dr (- compressed), 'plain' = du/dx+dv/dy,
-            %          'vr' = mean radial velocity (+ outward),
-            %          'vt' = mean tangential velocity (+ counter-clockwise).
+            %MAP  Overlay a per-cell quantity on the FROM frame, vectors on top.
             arguments
-                obj, k (1,1) double
-                which (1,:) char {mustBeMember(which, {'radial','plain','vr','vt'})} = 'radial'
+                obj
+                k (1,1) double
+                which (1,:) char = 'divergence'
                 ax = []
             end
-            if isempty(ax); figure('Name', obj.figname(k, which)); ax = gca; end
+            if isempty(ax)
+                figure('Name', obj.figname(k, which));
+                ax = gca;
+            end
             [M, cl, ttl] = obj.field(k, which);
-            imshow(repmat(obj.bg(k), [1 1 3]), 'Parent', ax); hold(ax, 'on');
-            h = imagesc(ax, M); set(h, 'AlphaData', obj.alpha * ~isnan(M));
-            axis(ax, 'image'); colormap(ax, obj.cmap); colorbar(ax);
-            if isfinite(cl) && cl > 0; clim(ax, [-cl cl]); end
+            imshow(repmat(obj.bg(k), [1 1 3]), 'Parent', ax);
+            hold(ax, 'on');
+            h = imagesc(ax, M);
+            set(h, 'AlphaData', obj.alpha * ~isnan(M));
+            axis(ax, 'image');
+            colormap(ax, obj.cmap);
+            colorbar(ax);
+            if isfinite(cl) && cl > 0
+                clim(ax, [-cl cl]);
+            end
             vfield_plotquiver(obj.run(k).uv, obj.quiveropts{:});
             title(ax, [ttl '   ' obj.label(k)]);
         end
 
         function ax = trace(obj, k, ax)
             %TRACE  Diameter around the event, with the merged window shaded.
-            if nargin < 3 || isempty(ax); figure('Name', obj.figname(k, 'trace')); ax = gca; end
-            R = obj.run(k);  C = obj.ctx;
+            if nargin < 3 || isempty(ax)
+                figure('Name', obj.figname(k, 'trace'));
+                ax = gca;
+            end
+            R = obj.run(k);
+            C = obj.ctx;
             w  = [C.events(R.id).start_f, C.events(R.id).end_f];
             rg = max(1, w(1) - 60):min(numel(C.dtrace), w(2) + 60);
-            plot(ax, C.t_axis(rg), C.dtrace(rg), 'Color', [.75 .75 .75]); hold(ax, 'on'); grid(ax, 'on');
+            plot(ax, C.t_axis(rg), C.dtrace(rg), 'Color', [.75 .75 .75]);
+            hold(ax, 'on');
+            grid(ax, 'on');
             plot(ax, C.t_axis(rg), C.dsg(rg), 'k', 'LineWidth', 1.4);
             yl = ylim(ax);
             % Shade the merged bout window. plot_sleep_patches keys colour off the
@@ -118,10 +179,14 @@ classdef piv_figure < handle
             % Surrounding state bands, when ctx carries them
             if isfield(C, 'state_idx')
                 st = {'roughnrem', 'rem', 'roughawake'};
-                if isfield(C, 'states'); st = C.states; end
+                if isfield(C, 'states')
+                    st = C.states;
+                end
                 bands = struct();
                 for q = 1:numel(st)
-                    if isfield(C.state_idx, st{q}); bands.(st{q}) = C.state_idx.(st{q}); end
+                    if isfield(C.state_idx, st{q})
+                        bands.(st{q}) = C.state_idx.(st{q});
+                    end
                 end
                 if ~isempty(fieldnames(bands))
                     hp = [hp, plot_sleep_patches(ax, bands, C.t_axis, ...
@@ -132,8 +197,10 @@ classdef piv_figure < handle
             plot(ax, C.t_axis([R.from R.to]), C.dsg([R.from R.to]), 'g-', 'LineWidth', 2);
             plot(ax, C.t_axis(R.from), C.dsg(R.from), 'ko', 'MarkerFaceColor', 'w', 'MarkerSize', 9);
             plot(ax, C.t_axis(R.to),   C.dsg(R.to),   'ko', 'MarkerFaceColor', 'k', 'MarkerSize', 9);
-            ylim(ax, yl); xlim(ax, C.t_axis([rg(1) rg(end)]));
-            xlabel(ax, 't (s)'); ylabel(ax, 'diameter (\mum)');
+            ylim(ax, yl);
+            xlim(ax, C.t_axis([rg(1) rg(end)]));
+            xlabel(ax, 't (s)');
+            ylabel(ax, 'diameter (\mum)');
             title(ax, ['open=from, filled=to   ' obj.label(k)]);
         end
 
@@ -141,7 +208,9 @@ classdef piv_figure < handle
             %SLICES  sliceViewer of the frames PIV ACTUALLY used, plus the slice map.
             %   Odd slices = FROM state, even = TO state, so stepping one slice at a
             %   time works as a blink comparator (wall motion vs whole-field drift).
-            R = obj.run(k);  C = obj.ctx;  nT = numel(C.dtrace);
+            R = obj.run(k);
+            C = obj.ctx;
+            nT = numel(C.dtrace);
             wf = max(1, R.from - C.halfwin):min(nT, R.from + C.halfwin);
             wt = max(1, R.to   - C.halfwin):min(nT, R.to   + C.halfwin);
             kk = min(numel(wf), numel(wt));
@@ -158,36 +227,45 @@ classdef piv_figure < handle
         end
 
         function panel(obj, k)
-            %PANEL  vr | dv_r/dr | plain divergence | diameter, one figure.
+            %PANEL  disp_radial | divergence | volume_out | diameter, one figure.
             figure('Name', obj.figname(k, 'panel'), 'Position', [40 80 1750 430]);
             tl = tiledlayout(1, 4, 'TileSpacing', 'compact', 'Padding', 'compact');
-            obj.map(k, 'vr',     nexttile);
-            obj.map(k, 'radial', nexttile);
-            obj.map(k, 'plain',  nexttile);
-            obj.trace(k,         nexttile);
+            obj.map(k, 'disp_radial', nexttile);
+            obj.map(k, 'divergence',  nexttile);
+            obj.map(k, 'volume_out',  nexttile);
+            obj.trace(k,              nexttile);
             title(tl, obj.label(k), 'FontWeight', 'bold');
         end
 
         function tiles(obj, pol, which)
-            %TILES  One column per event of a polarity; rows = vr / dv_r/dr / div / trace.
+            %TILES  One column per event of a polarity; one row per quantity + trace.
             arguments
                 obj
                 pol   (1,:) char {mustBeMember(pol, {'dilation','constriction','none'})} = 'dilation'
-                which cell = {'vr','radial','plain'}
+                which cell = {'disp_radial','divergence','volume_out'}
             end
             sel = find(strcmp({obj.run.pol}, pol));
-            if isempty(sel); warning('piv_figure:noEvents', 'no %s events', pol); return; end
+            if isempty(sel)
+                warning('piv_figure:noEvents', 'no %s events', pol);
+                return
+            end
             nr = numel(which) + 1;
             figure('Name', sprintf('all %s events', pol), 'Position', [20 25 1860 980]);
             tl = tiledlayout(nr, numel(sel), 'TileSpacing', 'compact', 'Padding', 'compact');
             for row = 1:nr
                 for ii = 1:numel(sel)
                     ax = nexttile;
-                    if row <= numel(which); obj.map(sel(ii), which{row}, ax);
-                    else;                   obj.trace(sel(ii), ax);
+                    if row <= numel(which)
+                        obj.map(sel(ii), which{row}, ax);
+                    else
+                        obj.trace(sel(ii), ax);
                     end
-                    if ii ~= numel(sel) || row > numel(which); colorbar(ax, 'off'); end
-                    if row > 1; title(ax, ''); end
+                    if ii ~= numel(sel) || row > numel(which)
+                        colorbar(ax, 'off');
+                    end
+                    if row > 1
+                        title(ax, '');
+                    end
                     set(ax, 'FontSize', 7);
                 end
             end
@@ -195,23 +273,50 @@ classdef piv_figure < handle
                 'FontWeight', 'bold');
         end
 
-        function radprofile(obj)
-            %RADPROFILE  dv_r/dr vs distance from the vessel wall, all events.
-            figure('Name', 'radial profile', 'Position', [120 80 1000 460]); hold on; grid on
+        function [bin_range, wedge_ok] = radprofile(obj, opt)
+            %RADPROFILE  Per-event radial profile, on ONE wedge set for every row.
+            %   The wedge set comes from vfield_profile, which requires a wedge to
+            %   span the whole interval before it may contribute. Without that this
+            %   plot averages more wedges near the wall than far from it and the
+            %   slope it shows is partly the change in membership.
+            arguments
+                obj
+                opt.quantity (1,:) char = 'volume_out'
+                opt.bin_range (1,2) double = [NaN NaN]
+            end
+            allrows = true(1, obj.profile.n_row);
+            bin_range = opt.bin_range;
+            if any(isnan(bin_range))
+                [bin_range, wedge_ok] = obj.profile.widest_common(allrows, opt.quantity);
+            else
+                wedge_ok = obj.profile.wedges_over(allrows, bin_range, opt.quantity);
+            end
+            if any(isnan(bin_range))
+                warning('piv_figure:noCommonSupport', ...
+                    'no wedge spans any interval for every row; nothing to plot');
+                return
+            end
+            curves = obj.profile.curve_rows(allrows, bin_range, quantity = opt.quantity);
+            r = obj.profile.bin_center_um;
+
+            figure('Name', 'radial profile', 'Position', [120 80 1000 460]);
+            hold on
+            grid on
             for k = 1:numel(obj.run)
-                A = obj.polar{k};
-                % err  a two-way test coloured the stable controls as constrictions
                 switch obj.run(k).pol
                     case 'dilation';     co = [.85 .25 .25];
                     case 'constriction'; co = [.20 .40 .85];
                     otherwise;           co = [.55 .55 .55];
                 end
-                plot(mean(A.rcen, 2, 'omitnan'), mean(A.cells, 2, 'omitnan'), '-o', ...
-                    'Color', co, 'LineWidth', 1.1, 'MarkerSize', 4, 'HandleVisibility', 'off');
+                plot(r, curves(k, :), '-o', 'Color', co, 'LineWidth', 1.1, ...
+                    'MarkerSize', 4, 'HandleVisibility', 'off');
             end
             yline(0, 'k--', 'HandleVisibility', 'off');
-            xlabel('distance from vessel wall (px)'); ylabel('dv_r/dr');
-            title('red = dilation (PVS compressed), blue = constriction (refill), grey = stable control');
+            xlabel('\mum from the vessel wall');
+            ylabel(obj.axis_label(opt.quantity));
+            title(sprintf(['red = dilation, blue = constriction, grey = quiet   |   ' ...
+                '%d/%d wedges over %.1f-%.1f \\mum'], nnz(wedge_ok), obj.profile.n_wedge, ...
+                r(bin_range(1)), r(bin_range(2))));
         end
 
         function signcheck(obj)
@@ -223,29 +328,39 @@ classdef piv_figure < handle
             isd = strcmp({obj.run.pol}, 'dilation');
             isc = strcmp({obj.run.pol}, 'constriction');
             isn = ~isd & ~isc;
-            mvr = cellfun(@(A) mean(A.vr(:),    'omitnan'), obj.polar);
-            mdv = cellfun(@(A) mean(A.cells(:), 'omitnan'), obj.polar);
+            mdr = obj.cell_mean('disp_radial');
+            mdv = obj.cell_mean('divergence');
             figure('Name', 'sign check', 'Position', [200 200 950 400]);
             tiledlayout(1, 2, 'TileSpacing', 'compact');
             for p = 1:2
                 if p == 1
                     % 1. Wall motion: dilation pushes out, constriction pulls in
-                    y = mvr;  yl = 'mean v_r (px, + outward)';  t = 'wall motion follows \DeltaD';
+                    y = mdr;
+                    yl = 'mean disp\_radial (\mum, + outward)';
+                    t = 'wall motion follows \DeltaD';
                     ok = (isd & y > 0) | (isc & y < 0);
                 else
-                    % 2. PVS strain: v_r decays with distance, so dilation squeezes
-                    y = mdv;  yl = 'mean dv_r/dr';  t = 'PVS compressed on dilation';
-                    ok = (isd & y < 0) | (isc & y > 0);
+                    % 2. Volume: the sign the tissue's own divergence takes, which
+                    %    is a RESULT and not a check -- see DIVERGENCE_RESULT.md.
+                    %    Consistency here is counted, not asserted
+                    y = mdv;
+                    yl = 'mean divergence';
+                    t = 'divergence follows polarity';
+                    ok = (isd & y > 0) | (isc & y < 0);
                 end
-                nexttile; hold on; grid on
+                nexttile;
+                hold on
+                grid on
                 scatter([obj.run(isd).diameter_change], y(isd), 70, 'r', 'filled');
                 scatter([obj.run(isc).diameter_change], y(isc), 70, 'b', 'filled');
                 if any(isn)
                     scatter([obj.run(isn).diameter_change], y(isn), 70, ...
                         [.55 .55 .55], 'filled');
                 end
-                xline(0, 'k--'); yline(0, 'k--');
-                xlabel('\DeltaD (\mum)'); ylabel(yl);
+                xline(0, 'k--');
+                yline(0, 'k--');
+                xlabel('\DeltaD (\mum)');
+                ylabel(yl);
                 % the denominator is the rows that HAVE a prescribed direction
                 title(sprintf('%s   (%d/%d consistent)', t, nnz(ok), nnz(isd | isc)));
                 if p == 1
@@ -259,14 +374,22 @@ classdef piv_figure < handle
         function T = summary(obj)
             %SUMMARY  One row per event; returns the table as well as printing it.
             n = numel(obj.run);
-            T = table('Size', [n 8], 'VariableTypes', ...
-                {'double','string','string','double','double','double','double','double'}, ...
-                'VariableNames', {'id','state','pol','dur_s','dD_um','v_r_px','dvr_dr','frac_neg'});
+            T = table('Size', [n 9], 'VariableTypes', ...
+                {'double','string','string','double','double','double','double','double','double'}, ...
+                'VariableNames', {'id','state','pol','dur_s','dD_um', ...
+                                  'disp_radial','divergence','frac_neg','n_wedge_data'});
+            mdr = obj.cell_mean('disp_radial');
+            mdv = obj.cell_mean('divergence');
             for k = 1:n
-                A = obj.polar{k};  v = A.cells(~isnan(A.cells));
+                cells = obj.profile.rows(k).cells;
+                v = cells.divergence(~isnan(cells.divergence));
+                % wedges holding ANY data. NOT the number radprofile draws with,
+                % which is the smaller set that spans the whole interval. The two
+                % being confused is the bug this class was rebuilt around
+                with_data = nnz(isfinite(cells.reach_bin));
                 T(k,:) = {obj.run(k).id, string(obj.run(k).state), string(obj.run(k).pol), ...
-                    obj.run(k).rise_s, obj.run(k).diameter_change, mean(A.vr(:), 'omitnan'), ...
-                    mean(v), mean(v < 0)};
+                    obj.run(k).rise_s, obj.run(k).diameter_change, ...
+                    mdr(k), mdv(k), mean(v < 0), with_data};
             end
             disp(T);
         end
@@ -290,20 +413,42 @@ classdef piv_figure < handle
         end
 
         function [M, cl, ttl] = field(obj, k, which)
-            A = obj.polar{k};
-            switch which
-                case 'radial'; M = A.pdiv;  cl = obj.lims.dvr; ttl = 'dv_r/dr  (- compressed)';
-                case 'plain';  M = A.div;   cl = obj.lims.div; ttl = 'div  \DeltaA/A';
-                case 'vr';     M = A.vrmap; cl = obj.lims.vr;  ttl = 'v_r  (+ outward, px)';
-                case 'vt';     M = A.vtmap; cl = obj.lims.vr;  ttl = ['v_' char(92) 'theta  (+ CCW, px)'];
+            % paint() spreads the per-cell value over the frame. Display only:
+            % vfield_polar does not keep a dense map and nothing reads one back
+            ttl = obj.axis_label(which);
+            cells = obj.profile.rows(k).cells;
+            M = obj.fields{k}.paint(cells.(which));
+            cl = obj.lims.(which);
+        end
+
+        function m = cell_mean(obj, quantity)
+            % One number per event: the mean over every cell that has a value.
+            % Not a radial profile -- for a profile use radprofile(), which fixes
+            % the wedge set. Here every cell of one event is one sample and the
+            % membership question does not arise
+            m = nan(1, numel(obj.run));
+            for k = 1:numel(obj.run)
+                v = obj.profile.rows(k).cells.(quantity);
+                m(k) = mean(v(:), 'omitnan');
             end
+        end
+
+        function s = axis_label(obj, which)
+            hit = strcmp(obj.quantities(:,1), which);
+            if ~any(hit)
+                error('piv_figure:unknownQuantity', ...
+                    '%s is not one of: %s', which, strjoin(obj.quantities(:,1)', ', '));
+            end
+            s = obj.quantities{hit, 2};
         end
     end
 
     methods (Static, Access = private)
         function v = symlim(x)
             v = max(x(isfinite(x)));
-            if isempty(v) || v <= 0; v = 1; end
+            if isempty(v) || v <= 0
+                v = 1;
+            end
         end
     end
 end

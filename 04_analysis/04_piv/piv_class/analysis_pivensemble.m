@@ -76,7 +76,7 @@ classdef analysis_pivensemble < handle
         %             gate, so gates(3).mask still shows what it would have taken.
         %             gate(neighbour = true) puts it back for one call
         %
-        % RETIRED, in notinuse/ : gate_rheight (corr2 reads displacement, not
+        % RETIRED, in zz_notinuse/piv_legacy/ : gate_rheight (corr2 reads displacement, not
         % failure, corr(|d|,corr2) = -0.475) and gate_rwidth (peak width in an
         % ensemble is displacement spread, and it had a direction preference)
         %

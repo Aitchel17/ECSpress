@@ -380,8 +380,16 @@ piv_sel = piv_run(sel);
 fprintf('divergence on %d of %d events (%s)\n', numel(sel), numel(piv_run), ...
     strjoin(unique({piv_sel.state}), ', '));
 
-polar = piv_polar_events(piv_sel, coremask, 'exclmask', exclmask, ...
-    'n_sectors', 8, 'min_valid', 4, 'box_step', 3, 'verbose', true);
+% gated = anything was applied to the field after the correlation. TRUE here
+% because piv_run_events calls piv_validate at ens_interleave:97 -- PIVlab's
+% outlier removal, NOT the tomasi / corr_floor gates that analysis_pivensemble
+% applies. The flag is coarse on purpose: what it protects is pooling rows that
+% were filtered differently, and vfield_profile.append refuses a mixed set.
+% Whether either kind of filtering belongs here is a separate question with a
+% measured answer -- see CLAUDE_LOG.md, the gates remove the larger vectors
+[vprofile, vfields] = piv_polar_events(piv_sel, coremask, p2u, ...
+    exclmask = exclmask, n_wedge = 12, bin_edges_um = 0:1.5:40, ...
+    min_tri_wedge = 10, gated = true, verbose = true);
 
 %% 13. Batch figures
 % ctx carries everything the figures need; piv_figure holds the shared quiver scale
@@ -389,15 +397,15 @@ polar = piv_polar_events(piv_sel, coremask, 'exclmask', exclmask, ...
 ctx = struct('S', S, 'coremask', coremask, 'exclmask', exclmask, 't_axis', t_axis, ...
              'dtrace', dtrace, 'dsg', dsg, 'fps', fps, 'p2u', p2u, ...
              'halfwin', halfwin, 'events', events, 'state_idx', img_state.state_idx);
-F = piv_figure(piv_sel, polar, ctx);
+F = piv_figure(piv_sel, vfields, vprofile, ctx);
 T = F.summary();
 
 %% 13.1 Sign and radial-profile overview
 F.signcheck();                 % dD vs measured direction -- the polarities must split
-F.radprofile();                % dv_r/dr vs distance from the wall, all events
+F.radprofile();                % volume_out vs distance, ONE wedge set for every row
 
 %% 13.2 One event in full
-F.panel(1);                    % v_r | dv_r/dr | plain div | diameter
+F.panel(1);                    % disp_radial | divergence | volume_out | diameter
 
 %% 13.3 All events of one polarity
 F.tiles('dilation');           % shared colour limits
