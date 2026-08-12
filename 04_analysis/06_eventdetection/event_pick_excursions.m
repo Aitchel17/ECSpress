@@ -14,8 +14,9 @@ function [events, info] = event_pick_excursions(dtrace, t_axis, pairs, sg_win_s,
 %      info      struct       dsg, sg_frame, P, sign_ok, sign_bad, clipped, dropped
 %
 % UNIT  whatever dtrace was in. from/to do not depend on it at all
-%   why       sgolayfilt is linear and band_mask is median + frac*(extreme-median),
-%             also linear, so a constant scale cancels out of the level it compares
+%   why       sgolayfilt is linear and eventdetect_findtransition bands at
+%             median + frac*(extreme-median), also linear, so a constant scale
+%             cancels out of the level it compares
 %   see FINDINGS.md
 %   caution   diameter_change and .dsg DO carry the unit. Callers that print um
 %             must have handed um in, or scale on the way out
@@ -64,14 +65,22 @@ for k = 1:numel(pairs)
         dropped.out_of_range = dropped.out_of_range + 1;  continue
     end
     % 2.4 Band each side: a dilation starts low and ends high, constriction reversed
-    sA = 1 - 2 * strcmp(Q.pol, 'dilation');
-    ca = wa(band_mask(dsg(wa),  sA, peaktol));
-    cb = wb(band_mask(dsg(wb), -sA, peaktol));
-    if isempty(ca) || isempty(cb)
-        dropped.empty_band = dropped.empty_band + 1;  continue
+    if strcmp(Q.pol, 'dilation')
+        dir_pre  = "min";
+        dir_post = "max";
+    else
+        dir_pre  = "max";
+        dir_post = "min";
     end
     % 2.5 Take the banded sample closest to the transition on each side
-    f = ca(end);   t = cb(1);
+    idx_pre  = eventdetect_findtransition(dsg(wa), dir_pre,  "pre",  peaktol);
+    idx_post = eventdetect_findtransition(dsg(wb), dir_post, "post", peaktol);
+    if isempty(idx_pre) || isempty(idx_post)
+        dropped.empty_band = dropped.empty_band + 1;
+        continue
+    end
+    f = wa(idx_pre);
+    t = wb(idx_post);
     % 2.6 Fill the event record
     E = Q;
     E.from = f;
@@ -103,13 +112,4 @@ info = struct('dsg', dsg, 'sg_frame', sg_frame, ...
     'P', struct('sg_win_s', sg_win_s, 'peaktol', peaktol, 'fps', fps), ...
     'sign_ok', ~any(sign_bad), 'sign_bad', find(sign_bad), ...
     'clipped', find(clipped), 'dropped', dropped);
-end
-
-% ---------------------------------------------------------------------------
-function m = band_mask(v, s, frac)
-%BAND_MASK  Samples inside the extreme amplitude band. s = +1 upper, -1 lower.
-%   level = median + frac*(extreme - median), an amplitude fraction, not a rank.
-    v  = s * v;
-    md = median(v, 'omitnan');
-    m  = v >= md + frac * (max(v) - md);
 end
