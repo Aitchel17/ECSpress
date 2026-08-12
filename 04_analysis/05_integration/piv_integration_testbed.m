@@ -236,31 +236,29 @@ imagesc(plane - min(plane(:)));   axis image;   colorbar
 title(sprintf('%s, %d pair(s) | uv (%+.2f, %+.2f) px | valid %d', ...
     info.which, numel(info.pairs), info.uv(1), info.uv(2), info.valid));
 
-%% 8. Divergence three ways, from the same u,v map
-% vfield_strain is a router: one input, one output shape, and only method=
-% changes. fd differentiates point by point, tri integrates over Delaunay
-% triangles (the divergence theorem, so interior edges cancel), the polar wedges
-% isolate the RADIAL component. Agreement in sign is the cross-validation; the
-% spread is how much vector noise each route lets through
-% see FINDINGS.md
-% err       'radial_fit' is eps_rr, ONE strain component, not the trace. Holding
-%           it against fd compares two different quantities
-coremask = session.roilist.getmask('manual_dilated_pvs');
-for route = ["fd" "tri" "plane" "radial_fit"]
-    [strain_map, strain_cells, strain_info] = vfield_strain( ...
-        piv_ensemble.endpoint.uv, method = char(route), coremask = coremask, ...
-        exclmask = piv_ensemble.param.pivlab_mask);
-    strain_finite = strain_map(~isnan(strain_map));
-    fprintf('%-11s cells %4d | p50 %+.5f | IQR %.5f | %s\n', route, ...
-        numel(strain_cells), median(strain_finite), iqr(strain_finite), strain_info.unit);
-end
+%% 8. (removed) Divergence four ways
+% The cell drove vfield_strain's `method` router over fd / tri / plane /
+% radial_fit and printed one table, calling the agreement a cross-validation.
+% Its own header already warned that radial_fit is eps_rr, one component, not the
+% trace -- so two of the four rows were a different quantity from the other two.
+%
+% PIV_PLAN 10.1 measured what that costs. On one event the fd and tri routes give
+% divergence that is isequaln, and the radial route differs by a median 7.6%
+% because it takes `outward` from the core centroid while vfield_polar takes it
+% from the nearest wall pixel -- a median 3.9 deg apart, worst at the wall. The
+% table was pooling two conventions and reading the spread as noise.
+%
+% Removed with vfield_strain rather than repaired: the surviving comparison is
+% vfield_divergence_fd against vfield_polar, and neither needs a router.
+% see PIV_PLAN.md 10.1
 
 %% 8.1 The window grid, coloured
 % plot_grid draws one flat square PER INTERROGATION WINDOW, at the step size.
 % plot_overlay would paint the same numbers per pixel and claim a resolution the
 % measurement never had; plot_contour would interpolate between windows
-[div_map, ~, div_info] = vfield_strain(piv_ensemble.endpoint.uv, method = 'fd', ...
+[div_map, div_mean, div_sum] = vfield_divergence_fd(piv_ensemble.endpoint.uv, ...
     exclmask = piv_ensemble.param.pivlab_mask);
+div_info = struct('div_mean', div_mean, 'div_sum', div_sum);
 grid_planes = piv_ensemble.endpoint.planes;
 grid_live   = ~isnan(piv_ensemble.endpoint.uv_grid(:,:,1));
 grid_value  = div_map(sub2ind(size(div_map), ...
@@ -279,8 +277,12 @@ fprintf('%d windows drawn | %s | mean %+.5f\n', nnz(grid_live), div_info.unit, d
 % Each triangle IS the cell whose gradient was computed, so painting it flat
 % shows the partition and nothing invented. Slivers and the bridges Delaunay
 % throws across the masked vessel are already dropped -- info.dropped counts them
-[~, ~, tri_info] = vfield_strain(piv_ensemble.endpoint.uv, method = 'tri', ...
+% the triangles themselves, not a binned map -- this cell draws the partition
+grid_xyuv = piv_ensemble.endpoint.xyuv;
+[tri_tbl, tri_info] = vfield_gradient_tri(grid_xyuv, ...
     exclmask = piv_ensemble.param.pivlab_mask);
+tri_info.tri = tri_tbl.conn;
+tri_info.div_tri = tri_tbl.divergence;
 T = showpiv(sprintf('ev%d divergence per triangle', ev), 5);
 T.update_figsize([7 5]);
 T.plot_background(piv_ensemble.endpoint.stack(:,:,1));
