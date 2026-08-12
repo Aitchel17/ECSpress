@@ -20,8 +20,8 @@ paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.f
 
 paxfwhm_state = state_linefwhm(state_integrate);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
-contents_types = {["thickness","eps","bv","totalpvs","dynamic_pvs","static_pvs"],...
-                ["displacement","dynamicpvs","staticpvs","dynamicbv","staticbv"]};
+contents_types = {["thickness","eps","bv","totalpvs","uppvs","downpvs"],...
+                ["displacement","uppvs","downpvs","upbv","downbv"]};
 %%
 
 

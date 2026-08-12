@@ -7,7 +7,9 @@ classdef line_fwhm < handle
         kymograph = struct()
         thickness = struct()
         displacement = struct()
-        updynamic
+        up_thicker      % bool   trapz(uppvs - downpvs) > 0. WHICH SIDE IS THICKER
+                        %        on average, nothing about which one moves. It
+                        %        was called updynamic; see CLAUDE_LOG.md
         mask
         idx
         t_axis
@@ -120,37 +122,36 @@ classdef line_fwhm < handle
 
         function getdiameter(obj)
             obj.thickness = struct();
+        % STORED ANATOMICALLY, on purpose. This used to sort the two sides by
+        % thickness and store them as dynamic_pvs / static_pvs, so a claim about
+        % MOTION was baked into the field names by a criterion that has no time
+        % in it -- trapz integrates the time axis away. Measured over 119
+        % sessions the label agreed with its own thickness rule 99.2% of the
+        % time and with a motion criterion 65.5%. See CLAUDE_LOG.md and
+        % FINDINGS.md. up_thicker still records which side is thicker, so any
+        % caller that wants the sorted view can build it and has to say so.
             obj.thickness.bv = obj.idx.clean_lowerBVboundary - obj.idx.clean_upperBVboundary;
-            uppvs_thickness = obj.idx.clean_upperBVboundary - obj.idx.clean_pvsupedge_idx;
-            downpvs_thickness = obj.idx.clean_pvsdownedge_idx - obj.idx.clean_lowerBVboundary;
-            obj.thickness.totalpvs = uppvs_thickness + downpvs_thickness;
+            obj.thickness.uppvs = obj.idx.clean_upperBVboundary - obj.idx.clean_pvsupedge_idx;
+            obj.thickness.downpvs = obj.idx.clean_pvsdownedge_idx - obj.idx.clean_lowerBVboundary;
+            obj.thickness.totalpvs = obj.thickness.uppvs + obj.thickness.downpvs;
             obj.thickness.eps = obj.thickness.totalpvs + obj.thickness.bv;
-            difference_pvs = uppvs_thickness - downpvs_thickness;
+
+            % which side is thicker, as its own recorded fact
+            difference_pvs = obj.thickness.uppvs - obj.thickness.downpvs;
             difference_pvs = medfilt1(difference_pvs,11); % smoothing the pvs thickness difference
-            % caclulate area under the curve of difference_pvs
-            difference_pvs = trapz(difference_pvs);
-            if difference_pvs > 0
-                disp('up pvs is dynamic')
-                obj.updynamic = true;
-                obj.thickness.dynamic_pvs = uppvs_thickness;
-                obj.thickness.static_pvs = downpvs_thickness;
-            else
-                disp('up pvs is static')
-                obj.updynamic = false;
-                obj.thickness.dynamic_pvs = downpvs_thickness;
-                obj.thickness.static_pvs = uppvs_thickness;
-            end
+            % area under the curve, so one frame cannot decide it
+            obj.up_thicker = trapz(difference_pvs) > 0;
 
             %%
             obj.thickness.median_totalpvs = median(obj.thickness.totalpvs);
-            obj.thickness.median_staticpvs = median(obj.thickness.static_pvs);
-            obj.thickness.median_dynamicpvs = median(obj.thickness.dynamic_pvs);
+            obj.thickness.median_uppvs = median(obj.thickness.uppvs);
+            obj.thickness.median_downpvs = median(obj.thickness.downpvs);
             %%
             obj.thickness.median_bv = median(obj.thickness.bv);
             obj.thickness.bvchanges = obj.thickness.bv - obj.thickness.median_bv;
             obj.thickness.pvschanges_total = obj.thickness.totalpvs - obj.thickness.median_totalpvs;
-            obj.thickness.pvschanges_dynamic = obj.thickness.dynamic_pvs - obj.thickness.median_dynamicpvs;
-            obj.thickness.pvschanges_static = obj.thickness.static_pvs - obj.thickness.median_staticpvs;
+            obj.thickness.pvschanges_up = obj.thickness.uppvs - obj.thickness.median_uppvs;
+            obj.thickness.pvschanges_down = obj.thickness.downpvs - obj.thickness.median_downpvs;
             %%
             obj.thickness.epschanges = obj.thickness.bvchanges + obj.thickness.pvschanges_total;
             %%
@@ -167,18 +168,19 @@ classdef line_fwhm < handle
             obj.displacement.slow_downpvs = medfilt1(obj.idx.clean_pvsdownedge_idx, 3000, 'truncate');
 
 
-            % 3. Calculate changes (High-pass)
-            if obj.updynamic
-                obj.displacement.dynamicpvs = -(obj.idx.clean_pvsupedge_idx - obj.displacement.slow_uppvs);
-                obj.displacement.staticpvs = obj.idx.clean_pvsdownedge_idx - obj.displacement.slow_downpvs;
-                obj.displacement.dynamicbv = -(obj.idx.clean_upperBVboundary - obj.displacement.slow_upbv);
-                obj.displacement.staticbv = obj.idx.clean_lowerBVboundary - obj.displacement.slow_downbv;
-            else
-                obj.displacement.staticpvs = -(obj.idx.clean_pvsupedge_idx - obj.displacement.slow_uppvs);
-                obj.displacement.dynamicpvs = obj.idx.clean_pvsdownedge_idx - obj.displacement.slow_downpvs;
-                obj.displacement.staticbv = -(obj.idx.clean_upperBVboundary - obj.displacement.slow_upbv);
-                obj.displacement.dynamicbv = obj.idx.clean_lowerBVboundary - obj.displacement.slow_downbv;
-            end
+            % 3. Calculate changes (High-pass). Sign convention: + is OUTWARD, so
+            %    the upper boundary is negated (its row index falls as it moves
+            %    out) and the lower one is not.
+            %    There used to be an if obj.updynamic here with the same four
+            %    lines written twice, swapping only the NAMES. The negation
+            %    follows the side, not the label, so the branch was pure
+            %    relabelling. Removing it is what lets displacement -- the only
+            %    quantity in this tree that measures motion -- be used to TEST
+            %    the thickness label instead of inheriting it. See CLAUDE_LOG.md
+            obj.displacement.uppvs = -(obj.idx.clean_pvsupedge_idx - obj.displacement.slow_uppvs);
+            obj.displacement.downpvs = obj.idx.clean_pvsdownedge_idx - obj.displacement.slow_downpvs;
+            obj.displacement.upbv = -(obj.idx.clean_upperBVboundary - obj.displacement.slow_upbv);
+            obj.displacement.downbv = obj.idx.clean_lowerBVboundary - obj.displacement.slow_downbv;
         end
 
         function maskstack = reconstruction(obj,kymomask)

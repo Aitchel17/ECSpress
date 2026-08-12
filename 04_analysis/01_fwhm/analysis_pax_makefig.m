@@ -192,45 +192,45 @@ fig.dspvs_changes.update_figsize([8 3]);
 fig.dspvs_changes.resolution = pixel2um;
 fig.dspvs_changes.loc.x = t_axis;
 fig.dspvs_changes.plot_line(pax_fwhm.thickness.bvchanges,clee.clist.magenta);
-fig.dspvs_changes.plot_line(pax_fwhm.thickness.pvschanges_dynamic,clee.clist.darkgreen,'none','-');
-fig.dspvs_changes.plot_line(pax_fwhm.thickness.pvschanges_static,clee.clist.lightgreen,'none','-');
-maxyrange = max([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.pvschanges_dynamic,pax_fwhm.thickness.pvschanges_static])*pixel2um;
-minyrange = min([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.pvschanges_dynamic,pax_fwhm.thickness.pvschanges_static])*pixel2um;
+fig.dspvs_changes.plot_line(pax_fwhm.thickness.pvschanges_up,clee.clist.darkgreen,'none','-');
+fig.dspvs_changes.plot_line(pax_fwhm.thickness.pvschanges_down,clee.clist.lightgreen,'none','-');
+maxyrange = max([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.pvschanges_up,pax_fwhm.thickness.pvschanges_down])*pixel2um;
+minyrange = min([pax_fwhm.thickness.bvchanges,pax_fwhm.thickness.pvschanges_up,pax_fwhm.thickness.pvschanges_down])*pixel2um;
 ylim(fig.dspvs_changes.ax,[minyrange,maxyrange])
 fig.dspvs_changes.put_yaxistitle('Thickness changes (um)');
 fig.dspvs_changes.put_xaxistitle('Time (sec)');
 fig.dspvs_changes.save2svg(save_dir);
 disp(['Saved paxPVS_figure to ', save_dir]);
 
-%% 7. Displacement of dynamic boundary
-fig.dynamicdisplacement = make_fig('pvsDynamicDisplacement_figure');
-fig.dynamicdisplacement.reset_axis
-fig.dynamicdisplacement.update_figsize([8 3]);
-fig.dynamicdisplacement.resolution = pixel2um;
-fig.dynamicdisplacement.loc.x = t_axis;
-hold(fig.dynamicdisplacement.ax)
-fig.dynamicdisplacement.plot_line(pax_fwhm.displacement.dynamicpvs,clee.clist.orange);
-fig.dynamicdisplacement.plot_line(pax_fwhm.displacement.dynamicbv,clee.clist.magenta);
-fig.dynamicdisplacement.put_yaxistitle('Length (\mum)');
-fig.dynamicdisplacement.put_xaxistitle('Time (sec)');
-fig.dynamicdisplacement.save2svg(save_dir);
+%% 7. Displacement of the UPPER boundary
+fig.updisplacement = make_fig('pvsUpDisplacement_figure');
+fig.updisplacement.reset_axis
+fig.updisplacement.update_figsize([8 3]);
+fig.updisplacement.resolution = pixel2um;
+fig.updisplacement.loc.x = t_axis;
+hold(fig.updisplacement.ax)
+fig.updisplacement.plot_line(pax_fwhm.displacement.uppvs,clee.clist.orange);
+fig.updisplacement.plot_line(pax_fwhm.displacement.upbv,clee.clist.magenta);
+fig.updisplacement.put_yaxistitle('Length (\mum)');
+fig.updisplacement.put_xaxistitle('Time (sec)');
+fig.updisplacement.save2svg(save_dir);
 disp(['Saved paxPVS_figure to ', save_dir]);
 
-%% 8. Displacement of static boundary
-fig.staticdisplacement = make_fig('pvsStaticDisplacement_figure');
+%% 8. Displacement of the LOWER boundary
+fig.downdisplacement = make_fig('pvsDownDisplacement_figure');
 
-fig.staticdisplacement.reset_axis
-fig.staticdisplacement.update_figsize([8 3]);
-fig.staticdisplacement.resolution = pixel2um;
-fig.staticdisplacement.loc.x = t_axis;
-hold(fig.staticdisplacement.ax)
-fig.staticdisplacement.plot_line(pax_fwhm.displacement.staticpvs,clee.clist.darkgreen);
-fig.staticdisplacement.plot_line(pax_fwhm.displacement.staticbv,clee.clist.magenta);
-fig.staticdisplacement.put_yaxistitle('Length (\mum)');
-fig.staticdisplacement.put_xaxistitle('Time (sec)');
-fig.staticdisplacement.save2svg(save_dir);
+fig.downdisplacement.reset_axis
+fig.downdisplacement.update_figsize([8 3]);
+fig.downdisplacement.resolution = pixel2um;
+fig.downdisplacement.loc.x = t_axis;
+hold(fig.downdisplacement.ax)
+fig.downdisplacement.plot_line(pax_fwhm.displacement.downpvs,clee.clist.darkgreen);
+fig.downdisplacement.plot_line(pax_fwhm.displacement.downbv,clee.clist.magenta);
+fig.downdisplacement.put_yaxistitle('Length (\mum)');
+fig.downdisplacement.put_xaxistitle('Time (sec)');
+fig.downdisplacement.save2svg(save_dir);
 disp(['Saved paxPVS_figure to ', save_dir]);
-%% 9. Comparison of static and dynamic pvs displacement
+%% 9. Comparison of the upper and lower pvs displacement
 fig.pvsdisplacement = make_fig('pvsDisplacement_figure');
 
 fig.pvsdisplacement.reset_axis
@@ -238,8 +238,8 @@ fig.pvsdisplacement.update_figsize([8 3]);
 fig.pvsdisplacement.resolution = pixel2um;
 fig.pvsdisplacement.loc.x = t_axis;
 hold(fig.pvsdisplacement.ax)
-fig.pvsdisplacement.plot_line(pax_fwhm.displacement.staticpvs,clee.clist.darkgreen);
-fig.pvsdisplacement.plot_line(pax_fwhm.displacement.dynamicpvs,clee.clist.orange);
+fig.pvsdisplacement.plot_line(pax_fwhm.displacement.downpvs,clee.clist.darkgreen);
+fig.pvsdisplacement.plot_line(pax_fwhm.displacement.uppvs,clee.clist.orange);
 fig.pvsdisplacement.put_yaxistitle('Length (\mum)');
 fig.pvsdisplacement.put_xaxistitle('Time (sec)');
 fig.pvsdisplacement.save2svg(save_dir);

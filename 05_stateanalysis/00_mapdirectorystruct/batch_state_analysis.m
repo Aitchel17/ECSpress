@@ -39,8 +39,8 @@ if isempty(target_rows)
 end
 
 % Contents to process (matches stateintegration_main.m)
-contents_types = {["thickness","eps","bv","totalpvs","dynamic_pvs","static_pvs"], ...
-    ["displacement","dynamicpvs","staticpvs","dynamicbv","staticbv"]};
+contents_types = {["thickness","eps","bv","totalpvs","uppvs","downpvs"], ...
+    ["displacement","uppvs","downpvs","upbv","downbv"]};
 
 for row_i = 1:numel(target_rows)
     sessiondir = char(dirstruct_table.Directory{target_rows(row_i)});
