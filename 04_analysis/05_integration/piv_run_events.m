@@ -14,8 +14,9 @@ function [piv_run, info] = piv_run_events(events, S, opt)
 %      save_planes  keep the per-pair correlation planes (large; default false)
 %      verbose  progress line per event (default true)
 % OUT  piv_run  1xN struct: id, state, pol, from, to, rise_s, diameter_change,
-%               nfr (pairs averaged, not a scale factor), uv (HxWx2, px),
-%               uv_ungated (HxWx2, px, the same vectors before piv_validate),
+%               nfr (pairs averaged, not a scale factor),
+%               xyuv (ny x nx x 4 px, [x y u v] on the interrogation grid),
+%               xyuv_ungated (the same vectors before piv_validate),
 %               planes
 %      info     halfwin, piv_opt, sel, nfr
 
@@ -43,7 +44,7 @@ popt = opt.piv_opt;
 if opt.save_planes; popt = [popt, {'save_corrmaps', true}]; end
 % 0.3 Output template
 piv_run = struct('id',{},'state',{},'pol',{},'from',{},'to',{},'rise_s',{}, ...
-                 'diameter_change',{},'nfr',{},'uv',{},'uv_ungated',{},'planes',{});
+                 'diameter_change',{},'nfr',{},'xyuv',{},'xyuv_ungated',{},'planes',{});
 
 % 1. One ensemble PIV run per selected event
 for n = 1:numel(sel)
@@ -64,12 +65,12 @@ for n = 1:numel(sel)
             E.state, E.pol, E.rise_s);
     end
     % 1.3 Interleave and run
-    [uv, uv_ungated, cp] = ens_interleave(S, w_from, w_to, popt);
+    [xyuv, xyuv_ungated, cp] = ens_interleave(S, w_from, w_to, popt);
     piv_run(n) = struct('id', e, 'state', E.state, 'pol', E.pol, ...
         'from', E.from, 'to', E.to, 'rise_s', E.rise_s, ...
         'diameter_change', E.diameter_change, ...
-        'nfr', min(numel(w_from), numel(w_to)), 'uv', uv, ...
-        'uv_ungated', uv_ungated, 'planes', cp);
+        'nfr', min(numel(w_from), numel(w_to)), 'xyuv', xyuv, ...
+        'xyuv_ungated', xyuv_ungated, 'planes', cp);
     if opt.verbose
         fprintf('| %+.2f um, %d pairs\n', E.diameter_change, piv_run(n).nfr);
     end
@@ -81,7 +82,7 @@ info = struct('halfwin', opt.halfwin, 'piv_opt', {popt}, 'sel', sel, ...
 end
 
 % ---------------------------------------------------------------------------
-function [uv, uv_ungated, cp] = ens_interleave(S, w_from, w_to, popt)
+function [xyuv, xyuv_ungated, cp] = ens_interleave(S, w_from, w_to, popt)
 %ENS_INTERLEAVE  Interleave the earlier and later framesets -> correlation ensemble.
 %   w_from must be the earlier frameset: the pair order sets the sign of uv. Pair p
 %   is (from_p, to_p), so the ensemble averages k measurements of one displacement
@@ -102,11 +103,27 @@ function [uv, uv_ungated, cp] = ens_interleave(S, w_from, w_to, popt)
     u_raw = cp.utable;
     v_raw = cp.vtable;
     [cp.utable, cp.vtable] = piv_validate(u_raw, v_raw, cp.corr);
-    xyuv       = cat(3, cp.xtable, cp.ytable, u_raw, v_raw);
+    xyuv_all   = cat(3, cp.xtable, cp.ytable, u_raw, v_raw);
     keep_raw   = (cp.typevector == 1) & ~isnan(u_raw) & ~isnan(v_raw);
     keep_gated = keep_raw & ~isnan(cp.utable) & ~isnan(cp.vtable);
-    uv         = piv_stamp(xyuv, cp.imsize, keep_gated);
-    uv_ungated = piv_stamp(xyuv, cp.imsize, keep_raw);
+    % the row carries the grid. The dense map is a view and piv_stamp makes it
+    % where one is wanted, which is the display path only
+    xyuv         = blank_unkept(xyuv_all, keep_gated);
+    xyuv_ungated = blank_unkept(xyuv_all, keep_raw);
     % 3. Relabel pairs with original stack indices
     cp.pair_frames = [a(:), b(:)];
+end
+
+% ---------------------------------------------------------------------------
+function out = blank_unkept(xyuv, keep)
+%BLANK_UNKEPT  NaN the displacement of the windows a mask excludes, keep the grid.
+%   The coordinates stay so the array still says where every window was, which is
+%   what lets a reader tell an empty window from one that was never there.
+    out = xyuv;
+    u = out(:,:,3);
+    v = out(:,:,4);
+    u(~keep) = NaN;
+    v(~keep) = NaN;
+    out(:,:,3) = u;
+    out(:,:,4) = v;
 end

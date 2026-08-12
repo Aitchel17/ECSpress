@@ -322,6 +322,7 @@ classdef analysis_pivensemble < handle
                 xyuv     = cat(3, planes.xtable, planes.ytable, u, v);
                 has_uv   = ~isnan(u) & ~isnan(v);
                 keep_raw = (planes.typevector == 1) & has_uv;
+                result.xyuv       = xyuv;
                 result.uv_ungated = piv_stamp(xyuv, planes.imsize, keep_raw) * result.scale;
                 if obj.param.verbose
                     fprintf('%-12s %4d raw | common mode (%+.3f, %+.3f) px out\n', ...
@@ -466,6 +467,11 @@ classdef analysis_pivensemble < handle
                 'pair_frames', pair_frames, ...  % P x 2 int        recording indices
                 'scale',       scale, ...        % int              onto uv -> event total
                 'planes',      [], ...           % struct           piv_corr_ensemble's
+                'xyuv',        [], ...           % ny x nx x 4 float  (:,:,1:2) [x y]
+                                ...              %   window centre px, (:,:,3:4) [u v]
+                                ...              %   UNSCALED, common mode out, UNGATED.
+                                ...              %   The record; uv and uv_ungated below
+                                ...              %   are views of it. See PIV_PLAN.md 5.2b
                 'uv_grid',     [], ...           % ny x nx x 2 float  working, UNSCALED
                 'common_mode', [0 0], ...        % 1 x 2 float      shift removed, scaled
                 'gates',       struct([]), ...   % 1 x 4 struct     table; see gate()

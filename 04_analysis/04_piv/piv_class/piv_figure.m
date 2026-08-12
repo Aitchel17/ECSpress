@@ -126,7 +126,9 @@ classdef piv_figure < handle
             R = obj.run(k);
             imshow(obj.bg(k), 'Parent', ax);
             hold(ax, 'on');
-            vfield_plotquiver(R.uv, obj.quiveropts{:});
+            % the row carries the grid; the quiver wants a frame-shaped field
+            % because its block averaging is in pixels. One view, made here
+            vfield_plotquiver(dense_view(R), obj.quiveropts{:});
             title(ax, obj.label(k));
         end
 
@@ -153,7 +155,7 @@ classdef piv_figure < handle
             if isfinite(cl) && cl > 0
                 clim(ax, [-cl cl]);
             end
-            vfield_plotquiver(obj.run(k).uv, obj.quiveropts{:});
+            vfield_plotquiver(dense_view(obj.run(k)), obj.quiveropts{:});
             title(ax, [ttl '   ' obj.label(k)]);
         end
 
@@ -451,4 +453,15 @@ classdef piv_figure < handle
             end
         end
     end
+
+    methods (Static, Access = private)
+        function uv = dense_view(R)
+        %DENSE_VIEW  The row's grid, stamped onto the frame, for drawing only.
+        %   No number is read off this -- vfield_plotquiver averages in pixel
+        %   blocks, so it needs frame coordinates. Measurements read R.xyuv
+            keep = ~isnan(R.xyuv(:,:,3)) & ~isnan(R.xyuv(:,:,4));
+            uv = piv_stamp(R.xyuv, R.planes.imsize, keep);
+        end
+    end
+
 end

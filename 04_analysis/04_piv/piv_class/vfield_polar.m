@@ -64,9 +64,10 @@ classdef vfield_polar < handle
         pixel2um       % float             microns per pixel
         n_wedge        % int               angular bins, equal angle
         bin_edges_um   % 1 x nB+1 float    radial bin edges, MICRONS from the wall
-        gated          % bool              was uv gated before it arrived here
+        gated          % bool              was xyuv gated before it arrived here
 
-        uv             % H x W x 2 float   displacement, PIXELS, as handed in
+        xyuv           % ny x nx x 4 float (:,:,1:2) = [x y] window centre px,
+                       %                   (:,:,3:4) = [u v] displacement px
         coremask       % H x W bool        true inside the vessel
         exclmask       % H x W bool        true = never interpolate here
         dist           % H x W float       px from the core wall
@@ -85,20 +86,22 @@ classdef vfield_polar < handle
     end
 
     methods
-        function obj = vfield_polar(uv, coremask, pixel2um, opt)
-        % IN  uv         H x W x 2 float displacement in PIXELS. H x W x N x 2 is
-        %                summed over N by the engine
+        function obj = vfield_polar(xyuv, coremask, pixel2um, opt)
+        % IN  xyuv       ny x nx x 4 float px, (:,:,1:2) = [x y] window centre,
+        %                (:,:,3:4) = [u v] displacement. ny x nx x N x 4 is summed
+        %                over N by the engine. The vectors stay on their own grid;
+        %                only the masks below live in frame coordinates
         %     coremask   H x W bool, true inside the vessel
         %     pixel2um   float, microns per pixel
         %     n_wedge    int, angular bins
         %     bin_edges_um  1 x nB+1 float, MICRONS from the wall
         %     exclmask   H x W bool, true = never interpolate
-        %     gated      bool, whether uv already went through the PIV gates.
+        %     gated      bool, whether xyuv already went through the PIV gates.
         %                Required, and carried into every result: the gates
         %                remove a radius-dependent share of the LARGER vectors,
         %                so a number is not comparable to one taken the other way
             arguments
-                uv       {mustBeNumeric, mustBeNonempty}
+                xyuv     {mustBeNumeric, mustBeNonempty}
                 coremask logical
                 pixel2um (1,1) double {mustBePositive}
                 opt.n_wedge      (1,1) double {mustBePositive, mustBeInteger} = 12
@@ -106,7 +109,7 @@ classdef vfield_polar < handle
                 opt.exclmask     logical = []
                 opt.gated        (1,1) logical
             end
-            obj.uv = uv;
+            obj.xyuv = xyuv;
             obj.coremask = coremask;
             obj.pixel2um = pixel2um;
             obj.n_wedge = opt.n_wedge;
@@ -158,7 +161,7 @@ classdef vfield_polar < handle
         %     strain_hoop  n_tri x 1 float  dimensionless, t' E t
         %   and obj.info: n_vector, n_tri_kept, max_edge_measured, dropped,
         %   wedge_center_rad, n_tri_placed
-            [t, gi] = vfield_gradient_tri(obj.uv, ...
+            [t, gi] = vfield_gradient_tri(obj.xyuv, ...
                 max_edge = obj.param.max_edge, ...
                 min_angle = obj.param.min_angle, ...
                 exclmask = obj.exclmask);
@@ -372,23 +375,29 @@ classdef vfield_polar < handle
             end
         end
 
-        function tbl = audit_gate(obj, uv_ungated)
+        function tbl = audit_gate(obj, xyuv_ungated)
         %AUDIT_GATE  What the PIV gates took, by radius, against what they left.
-        %   obj.uv is the gated field; uv_ungated is the same correlation with the
-        %   gates switched off. Paired by construction, so the difference is the
-        %   gates and nothing else.
+        %   obj.xyuv is the gated field; xyuv_ungated is the same correlation with
+        %   the gates switched off. Paired by construction, so the difference is
+        %   the gates and nothing else. Both are on the interrogation grid, so the
+        %   radius of each window is read out of obj.dist at its centre rather
+        %   than by indexing a dense map.
         % OUT tbl  n_bin x 5 table : r_um, n_all, rejected_pct, mag_kept_um,
         %          mag_cut_um. mag_cut > mag_kept means the gates are taking the
         %          LARGER displacements at that radius
             arguments
                 obj
-                uv_ungated {mustBeNumeric}
+                xyuv_ungated {mustBeNumeric}
             end
-            kept = ~isnan(obj.uv(:,:,1));
-            have = ~isnan(uv_ungated(:,:,1));
+            kept = ~isnan(obj.xyuv(:,:,3));
+            have = ~isnan(xyuv_ungated(:,:,3));
             cut = have & ~kept;
-            mag = hypot(uv_ungated(:,:,1), uv_ungated(:,:,2)) * obj.pixel2um;
-            r_um = obj.dist * obj.pixel2um;
+            mag = hypot(xyuv_ungated(:,:,3), xyuv_ungated(:,:,4)) * obj.pixel2um;
+            % each window's radius, read at its centre
+            frame_size = size(obj.dist);
+            wx = min(max(round(xyuv_ungated(:,:,1)), 1), frame_size(2));
+            wy = min(max(round(xyuv_ungated(:,:,2)), 1), frame_size(1));
+            r_um = obj.dist(sub2ind(frame_size, wy, wx)) * obj.pixel2um;
             bin = discretize(r_um, obj.bin_edges_um);
 
             nB = obj.n_bin;

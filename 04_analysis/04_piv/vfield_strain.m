@@ -117,6 +117,18 @@ else
     flow = squeeze(uv);
 end
 [H, W, ~] = size(flow);
+% vfield_gradient_tri works on the interrogation grid now, so the two tri
+% methods hand it the vectors with their own coordinates. This function's own
+% input is still the dense map, and rebuilding the grid from it recovers the
+% coordinates only to the pixel -- exactly what the dense form threw away. The
+% numbers therefore do not move, which is the point while this file is a
+% candidate for archiving; a caller that has the grid should use vfield_polar
+% see PIV_PLAN.md 5.2b
+[fy, fx] = find(~isnan(flow(:,:,1)) & ~isnan(flow(:,:,2)));
+grid_idx = sub2ind([H W], fy, fx);
+u_flat = flow(:,:,1);
+v_flat = flow(:,:,2);
+xyuv_from_dense = cat(3, fx(:), fy(:), u_flat(grid_idx), v_flat(grid_idx));
 is_polar = ismember(opt.method, ...
     {'plane','radial','radial_fit','hoop','divergence','radial_tri'});
 if is_polar && isempty(opt.coremask)
@@ -149,7 +161,7 @@ switch opt.method
         n_labels = max(sectormap(:));
         % vfield_gradient_tri returns the triangles and does not aggregate, so
         % the label per triangle and the area weighting are done here
-        [tri, tri_info] = vfield_gradient_tri(flow, ...
+        [tri, tri_info] = vfield_gradient_tri(xyuv_from_dense, ...
             max_edge = opt.max_edge, min_angle = opt.min_angle, ...
             exclmask = opt.exclmask);
         label_tri = tri_labels(sectormap, tri.cxy);
@@ -186,7 +198,7 @@ switch opt.method
         if ~isempty(opt.exclmask)
             wedges(opt.exclmask) = 0;
         end
-        [tri, tri_info] = vfield_gradient_tri(flow, ...
+        [tri, tri_info] = vfield_gradient_tri(xyuv_from_dense, ...
             max_edge = opt.max_edge, min_angle = opt.min_angle, ...
             exclmask = opt.exclmask);
         label_tri = tri_labels(wedges, tri.cxy);

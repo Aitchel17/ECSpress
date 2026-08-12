@@ -1,4 +1,4 @@
-function [tri, info] = vfield_gradient_tri(flow, opt)
+function [tri, info] = vfield_gradient_tri(xyuv, opt)
 %VFIELD_GRADIENT_TRI  Displacement gradient per triangle of the scattered vectors.
 %   Delaunay-triangulates the vectors and takes the exact gradient of the linear
 %   interpolant on each triangle. Returns the triangles; it does not aggregate.
@@ -33,9 +33,15 @@ function [tri, info] = vfield_gradient_tri(flow, opt)
 %   stops two recordings from pooling. vfield_polar bins these triangles on a
 %   fixed micron scale instead. See CLAUDE_LOG.md
 %
-% IN   flow       H x W x 2 float displacement, NaN off the vector grid.
-%                 H x W x N x 2 is summed over N first, as the other vfield_
-%                 readers do -- N consecutive intervals total to one displacement
+% IN   xyuv       ny x nx x 4 float px, (:,:,1:2) = [x y] window centre,
+%                 (:,:,3:4) = [u v] displacement. NaN in u or v drops that window.
+%                 ny x nx x N x 4 is N consecutive intervals: the displacement
+%                 sums over N, the grid does not move
+%                 The vectors arrive scattered and stay scattered. The dense
+%                 H x W form used to be the input, and the first thing this
+%                 function did was find(~isnan) to get these coordinates back --
+%                 at pixel resolution, because the stamp had rounded them.
+%                 See PIV_PLAN.md 5.2b
 %      max_edge   longest triangle edge kept (px). [] = 3x the median shortest
 %                 edge, which on a regular vector grid keeps the neighbours and
 %                 drops the bridges over holes
@@ -66,32 +72,33 @@ function [tri, info] = vfield_gradient_tri(flow, opt)
 %   see also VFIELD_POLAR, VFIELD_DIVERGENCE_FD
 
 arguments
-    flow          {mustBeNumeric, mustBeNonempty}
+    xyuv          {mustBeNumeric, mustBeNonempty}
     opt.max_edge  double = []
     opt.min_angle (1,1) double = 15
     opt.exclmask  logical = []
 end
 
 % 0. Setup
-% 0.1 Split the flow into u and v. Four dimensions is N consecutive intervals;
-%     summing them is the total displacement, matching vfield_divergence_fd
-if ndims(flow) == 4
-    u = sum(flow(:,:,:,1), 3);
-    v = sum(flow(:,:,:,2), 3);
+% 0.1 Split the four pages. Five dimensions is N consecutive intervals: the
+%     displacement sums over them, the grid does not move
+if ndims(xyuv) == 5
+    x = xyuv(:,:,1,1);
+    y = xyuv(:,:,1,2);
+    u = sum(xyuv(:,:,:,3), 3);
+    v = sum(xyuv(:,:,:,4), 3);
 else
-    f = squeeze(flow);
-    u = f(:,:,1);
-    v = f(:,:,2);
+    x = xyuv(:,:,1);
+    y = xyuv(:,:,2);
+    u = xyuv(:,:,3);
+    v = xyuv(:,:,4);
 end
-frame_size = size(u);
 
-% 0.2 The vectors, as scattered points
+% 0.2 The vectors, as scattered points. They arrive scattered -- the window
+%     centres are the coordinates, at whatever sub-pixel position PIVlab put them
 have = ~isnan(u) & ~isnan(v);
-[yi, xi] = find(have);
-idx = sub2ind(frame_size, yi, xi);
-xy = [xi, yi];
-uu = u(idx);
-vv = v(idx);
+xy = [x(have), y(have)];
+uu = u(have);
+vv = v(have);
 
 % 0.3 Too few to triangulate. Same field set as the normal path, so a caller
 %     never has to test which way it returned
@@ -143,7 +150,9 @@ keep_mask = true(size(cx));
 if ~isempty(opt.exclmask)
     vx = [P1(:,1) P2(:,1) P3(:,1)];
     vy = [P1(:,2) P2(:,2) P3(:,2)];
-    vi = sub2ind(frame_size, round(vy), round(vx));
+    % the mask is the only thing here that lives in frame coordinates, so it is
+    % also the only thing that knows the frame size
+    vi = sub2ind(size(opt.exclmask), round(vy), round(vx));
     on_mask = opt.exclmask(vi);
     keep_mask = ~any(on_mask, 2);
 end
