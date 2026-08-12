@@ -147,11 +147,18 @@ switch opt.method
             sectormap = box_partition(H, W, box);
         end
         n_labels = max(sectormap(:));
-        [strain_cells, tri_info] = vfield_divergence_tri(flow, sectormap, n_labels, ...
+        % vfield_gradient_tri returns the triangles and does not aggregate, so
+        % the label per triangle and the area weighting are done here
+        [tri, tri_info] = vfield_gradient_tri(flow, ...
             max_edge = opt.max_edge, min_angle = opt.min_angle, ...
             exclmask = opt.exclmask);
+        label_tri = tri_labels(sectormap, tri.cxy);
+        strain_cells = accumulate_tri(label_tri, tri.area, tri.divergence, n_labels);
         strain_map = sector_paint(sectormap, strain_cells);
         info = tri_info;
+        info.tri       = tri.conn;
+        info.div_tri   = tri.divergence;
+        info.label_tri = label_tri;
         info.sectormap = sectormap;
         info.n_labels  = n_labels;
 
@@ -164,8 +171,8 @@ switch opt.method
         %          the trace, so the noise averages down instead of amplifying
         %     err  eps_rr is a COMPONENT, not the trace. Using div_tri for it would
         %          silently answer eps_rr + eps_tt
-        % channel 1 is the fused label, which is what vfield_divergence_tri and
-        % sector_paint accumulate on. Channels 2-3 are not needed here
+        % channel 1 is the fused label, which is what tri_labels reads and
+        % sector_paint accumulates on. Channels 2-3 are not needed here
         [part, geo] = sector_polar(opt.coremask, opt.ring_width, opt.n_sectors);
         wedges  = part(:,:,1);
         ring_ch = part(:,:,2);
@@ -179,28 +186,30 @@ switch opt.method
         if ~isempty(opt.exclmask)
             wedges(opt.exclmask) = 0;
         end
-        [~, tri_info] = vfield_divergence_tri(flow, wedges, n_gridcell, ...
+        [tri, tri_info] = vfield_gradient_tri(flow, ...
             max_edge = opt.max_edge, min_angle = opt.min_angle, ...
             exclmask = opt.exclmask);
+        label_tri = tri_labels(wedges, tri.cxy);
         % 1.3.1 Radial unit vector at each triangle, from the core's centroid
-        rx = tri_info.cxy_tri(:,1) - geo.centroid(2);
-        ry = tri_info.cxy_tri(:,2) - geo.centroid(1);
+        rx = tri.cxy(:,1) - geo.centroid(2);
+        ry = tri.cxy(:,2) - geo.centroid(1);
         rn = max(hypot(rx, ry), eps);
         rx = rx ./ rn;   ry = ry ./ rn;
         % 1.3.2 eps_rr = r' * E * r, E the symmetric part of the gradient
-        g       = tri_info.grad_tri;                    % [du/dx du/dy dv/dx dv/dy]
+        g       = tri.grad;                             % [du/dx du/dy dv/dx dv/dy]
         shear   = (g(:,2) + g(:,3)) / 2;
         eps_rr  = g(:,1).*rx.^2 + 2*shear.*rx.*ry + g(:,4).*ry.^2;
         eps_tt  = g(:,1).*ry.^2 - 2*shear.*rx.*ry + g(:,4).*rx.^2;
         % 1.3.3 Area-weighted onto the wedges
-        strain_cells = accumulate_tri(tri_info.label_tri, tri_info.area_tri, ...
-            eps_rr, n_gridcell);
+        strain_cells = accumulate_tri(label_tri, tri.area, eps_rr, n_gridcell);
         strain_map   = sector_paint(wedges, strain_cells);
         info = tri_info;
+        info.tri        = tri.conn;
+        info.div_tri    = tri.divergence;
+        info.label_tri  = label_tri;
         info.eps_rr_tri = eps_rr;
         info.eps_tt_tri = eps_tt;
-        info.eps_tt     = accumulate_tri(tri_info.label_tri, tri_info.area_tri, ...
-            eps_tt, n_gridcell);
+        info.eps_tt     = accumulate_tri(label_tri, tri.area, eps_tt, n_gridcell);
         info.centroid   = geo.centroid;
         info.n_rings    = n_rings;
         info.sectormap  = part;
@@ -229,6 +238,23 @@ switch opt.method
     case 'hoop';                info.unit = 'eps_tt   (px per px, per event)';
     case 'divergence';          info.unit = 'eps_rr + eps_tt   (px per px, per event)';
 end
+end
+
+% ---------------------------------------------------------------------------
+function label = tri_labels(labelmap, cxy)
+%TRI_LABELS  Which partition cell each triangle falls in, read at its centroid.
+%   The linear interpolant's gradient is constant over a triangle, so the
+%   centroid is where that gradient applies and it is the point the label is
+%   read at. A triangle straddling two cells therefore lands wholly in one of
+%   them, which is the assumption the area weighting in accumulate_tri rests on.
+%
+%   vfield_divergence_tri used to do this internally. vfield_gradient_tri
+%   returns the triangles and stops there, so the labelling moved out to the
+%   caller that owns the partition. See CLAUDE_LOG.md
+    cx = round(cxy(:,1));
+    cy = round(cxy(:,2));
+    ci = sub2ind(size(labelmap), cy, cx);
+    label = labelmap(ci);
 end
 
 % ---------------------------------------------------------------------------

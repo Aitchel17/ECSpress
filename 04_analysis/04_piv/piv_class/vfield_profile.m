@@ -180,6 +180,12 @@ classdef vfield_profile < handle
         %   call site is how a magic number gets into a figure. This reports the
         %   longest one the data actually supports; a caller wanting a narrower
         %   one still passes it explicitly.
+        %
+        %   IT MAXIMISES THE SPAN, NOT THE WEDGE COUNT, so it is the right default
+        %   for a PLOT and the wrong one for a CLAIM. Asking a wedge to reach the
+        %   outer edge throws away wedges that stop sooner, and a claim about the
+        %   inner radii does not need them to. For a statement at radius r, pass
+        %   [1 bin(r)] and keep the wedges that reach only that far.
         % OUT bin_range 1 x 2 int, [first last]. [NaN NaN] if nothing is common
             arguments
                 obj
