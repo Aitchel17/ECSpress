@@ -14,7 +14,8 @@ function [piv_run, info] = piv_run_events(events, S, opt)
 %      save_planes  keep the per-pair correlation planes (large; default false)
 %      verbose  progress line per event (default true)
 % OUT  piv_run  1xN struct: id, state, pol, from, to, rise_s, diameter_change,
-%               nfr (pairs averaged, not a scale factor), uv (HxWx2, px), corr,
+%               nfr (pairs averaged, not a scale factor), uv (HxWx2, px),
+%               uv_ungated (HxWx2, px, the same vectors before piv_validate),
 %               planes
 %      info     halfwin, piv_opt, sel, nfr
 
@@ -42,7 +43,7 @@ popt = opt.piv_opt;
 if opt.save_planes; popt = [popt, {'save_corrmaps', true}]; end
 % 0.3 Output template
 piv_run = struct('id',{},'state',{},'pol',{},'from',{},'to',{},'rise_s',{}, ...
-                 'diameter_change',{},'nfr',{},'uv',{},'corr',{},'planes',{});
+                 'diameter_change',{},'nfr',{},'uv',{},'uv_ungated',{},'planes',{});
 
 % 1. One ensemble PIV run per selected event
 for n = 1:numel(sel)
@@ -63,11 +64,12 @@ for n = 1:numel(sel)
             E.state, E.pol, E.rise_s);
     end
     % 1.3 Interleave and run
-    [uv, cc, cp] = ens_interleave(S, w_from, w_to, popt);
+    [uv, uv_ungated, cp] = ens_interleave(S, w_from, w_to, popt);
     piv_run(n) = struct('id', e, 'state', E.state, 'pol', E.pol, ...
         'from', E.from, 'to', E.to, 'rise_s', E.rise_s, ...
         'diameter_change', E.diameter_change, ...
-        'nfr', min(numel(w_from), numel(w_to)), 'uv', uv, 'corr', cc, 'planes', cp);
+        'nfr', min(numel(w_from), numel(w_to)), 'uv', uv, ...
+        'uv_ungated', uv_ungated, 'planes', cp);
     if opt.verbose
         fprintf('| %+.2f um, %d pairs\n', E.diameter_change, piv_run(n).nfr);
     end
@@ -79,7 +81,7 @@ info = struct('halfwin', opt.halfwin, 'piv_opt', {popt}, 'sel', sel, ...
 end
 
 % ---------------------------------------------------------------------------
-function [uv, cc, cp] = ens_interleave(S, w_from, w_to, popt)
+function [uv, uv_ungated, cp] = ens_interleave(S, w_from, w_to, popt)
 %ENS_INTERLEAVE  Interleave the earlier and later framesets -> correlation ensemble.
 %   w_from must be the earlier frameset: the pair order sets the sign of uv. Pair p
 %   is (from_p, to_p), so the ensemble averages k measurements of one displacement
@@ -94,8 +96,17 @@ function [uv, cc, cp] = ens_interleave(S, w_from, w_to, popt)
     inter(:, :, 2:2:end) = S(:, :, b);
     % 2. Ensemble PIV. It correlates only, so the gating is explicit here
     cp = piv_corr_ensemble(inter, popt{:});
-    [cp.utable, cp.vtable] = piv_validate(cp.utable, cp.vtable, cp.corr);
-    [uv, cc] = vfield_stamp(cp);
+    % piv_validate answers by NaN-ing what it rejects, so the raw field is kept
+    % first and the verdict read back off the difference. Both maps then come off
+    % the SAME vectors and differ only in their mask
+    u_raw = cp.utable;
+    v_raw = cp.vtable;
+    [cp.utable, cp.vtable] = piv_validate(u_raw, v_raw, cp.corr);
+    xyuv       = cat(3, cp.xtable, cp.ytable, u_raw, v_raw);
+    keep_raw   = (cp.typevector == 1) & ~isnan(u_raw) & ~isnan(v_raw);
+    keep_gated = keep_raw & ~isnan(cp.utable) & ~isnan(cp.vtable);
+    uv         = piv_stamp(xyuv, cp.imsize, keep_gated);
+    uv_ungated = piv_stamp(xyuv, cp.imsize, keep_raw);
     % 3. Relabel pairs with original stack indices
     cp.pair_frames = [a(:), b(:)];
 end

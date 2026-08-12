@@ -38,7 +38,7 @@ function corr_planes = piv_corr_ensemble(imgstack, opt)
 %        .utable/.vtable  ny x nx displacement, px, RAW
 %        .corr            ny x nx corr2 of each window pair's final cuts
 %        .typevector      ny x nx, 1 = valid, 0 = fully masked by exclmask
-%        .imsize          [H W] of the stack, so vfield_stamp can place the grid
+%        .imsize          [H W] of the stack, so piv_stamp can place the grid
 %                         back on the image without being told twice
 %        .maps            IA x IA x ny x nx x nPair single, pair p's plane at
 %                         (r,c); sum(...,5) = the ensembled plane the peak was

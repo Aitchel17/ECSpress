@@ -17,7 +17,9 @@ mwin = 1:size(mpre,3);                       % e.g. 81:112 for a subrange
 m_cp = piv_corr_ensemble(mpre(:,:,mwin), ...
     window_sizes=[64 32; 32 16; 16 8], repeat=1, do_pad=1, use_gpu=false);
 [m_cp.utable, m_cp.vtable] = piv_validate(m_cp.utable, m_cp.vtable, m_cp.corr);
-[m_uv, m_corr] = vfield_stamp(m_cp);
+m_keep = (m_cp.typevector == 1) & ~isnan(m_cp.utable) & ~isnan(m_cp.vtable);
+m_uv   = piv_stamp(cat(3, m_cp.xtable, m_cp.ytable, m_cp.utable, m_cp.vtable), ...
+                   m_cp.imsize, m_keep);
 %% divergence + quiver view
 m_div = vfield_divergence_fd(m_uv);
 figure; imagesc(m_div); axis image; colormap turbo; colorbar; title('divergence')
@@ -90,7 +92,9 @@ of.cp = piv_corr_ensemble(of.input, ...
     'exclmask', of.exclmask, ...
     'use_gpu', true);
 [of.cp.utable, of.cp.vtable] = piv_validate(of.cp.utable, of.cp.vtable, of.cp.corr);
-[of.uv_ens, of.corr_ens] = vfield_stamp(of.cp);
+of.keep   = (of.cp.typevector == 1) & ~isnan(of.cp.utable) & ~isnan(of.cp.vtable);
+of.uv_ens = piv_stamp(cat(3, of.cp.xtable, of.cp.ytable, of.cp.utable, of.cp.vtable), ...
+                      of.cp.imsize, of.keep);
 
 %% ensemble piv plot
 figure()

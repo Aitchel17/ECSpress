@@ -316,7 +316,13 @@ classdef analysis_pivensemble < handle
                 %    see FINDINGS.md
                 [u, v, common_mode] = obj.remove_commonmode(planes, u, v);
                 result.common_mode  = common_mode * result.scale;
-                result.uv_ungated   = vfield_stamp(planes, u, v) * result.scale;
+                % 2.1 One field, carried with its own coordinates. u and v are not
+                %     written to again below -- every gate answers with a mask and
+                %     the masks are applied at the two stamps
+                xyuv     = cat(3, planes.xtable, planes.ytable, u, v);
+                has_uv   = ~isnan(u) & ~isnan(v);
+                keep_raw = (planes.typevector == 1) & has_uv;
+                result.uv_ungated = piv_stamp(xyuv, planes.imsize, keep_raw) * result.scale;
                 if obj.param.verbose
                     fprintf('%-12s %4d raw | common mode (%+.3f, %+.3f) px out\n', ...
                         name, nnz(~isnan(planes.utable)), result.common_mode);
@@ -328,25 +334,30 @@ classdef analysis_pivensemble < handle
                 %         their order cannot matter and their masks just stack
                 %    why  every gate answers even when switched off : gates(k).mask
                 %         then shows what it WOULD have taken
-                live_1 = ~isnan(u) & ~isnan(v);
+                live_1 = has_uv;
                 [mask_tomasi, info_tomasi] = obj.gate_tomasi(result, u, v);
                 [mask_floor,  info_floor]  = obj.gate_corr_floor(result, u, v);
 
-                % 3.1 Collect the switched-on ones, then ONE NaN pass
-                mask_out = false(size(u));
-                if opt.tomasi;     mask_out = mask_out | mask_tomasi; end
-                if opt.corr_floor; mask_out = mask_out | mask_floor;  end
-                u(mask_out) = NaN;
-                v(mask_out) = NaN;
+                % 3.1 Collect the switched-on ones. A verdict, nothing applied yet
+                rejected_1 = false(size(u));
+                if opt.tomasi;     rejected_1 = rejected_1 | mask_tomasi; end
+                if opt.corr_floor; rejected_1 = rejected_1 | mask_floor;  end
 
                 % 4. Stage 2 : the only gate that reads the vectors around it
                 %    err  on the uncleaned field, a vector the others rejected
                 %         still votes in its neighbour's median
-                live_2 = ~isnan(u) & ~isnan(v);
-                [mask_neighbour, info_neighbour] = obj.gate_neighbour(result, u, v);
+                %    why  stage 1 is applied to a COPY. u and v stay as the
+                %         correlation left them, so uv_ungated and uv come off the
+                %         same field and differ only in their mask
+                u_stage2 = u;
+                v_stage2 = v;
+                u_stage2(rejected_1) = NaN;
+                v_stage2(rejected_1) = NaN;
+                live_2 = ~isnan(u_stage2) & ~isnan(v_stage2);
+                [mask_neighbour, info_neighbour] = obj.gate_neighbour(result, u_stage2, v_stage2);
+                rejected = rejected_1;
                 if opt.neighbour
-                    u(mask_neighbour) = NaN;
-                    v(mask_neighbour) = NaN;
+                    rejected = rejected | mask_neighbour;
                 end
 
                 % 5. The table. stage NaN = the switch was off
@@ -367,10 +378,13 @@ classdef analysis_pivensemble < handle
 
                 % 6. Onto the image, scaled to the event total
                 %    caution  scale is applied HERE and only here
-                [uv_dense, corr_dense] = vfield_stamp(planes, u, v);
+                %    why  the same xyuv as step 2.1, a different mask. The gated
+                %         and ungated maps cannot disagree about which vector sat
+                %         where, because neither was ever written to
+                keep_gated     = keep_raw & ~rejected;
                 result.uv_grid = cat(3, u, v);
-                result.uv      = uv_dense * result.scale;
-                result.corr    = corr_dense;
+                result.uv_grid(cat(3, rejected, rejected)) = NaN;
+                result.uv      = piv_stamp(xyuv, planes.imsize, keep_gated) * result.scale;
                 obj.(name)     = result;
 
                 if obj.param.verbose
@@ -456,8 +470,10 @@ classdef analysis_pivensemble < handle
                 'common_mode', [0 0], ...        % 1 x 2 float      shift removed, scaled
                 'gates',       struct([]), ...   % 1 x 4 struct     table; see gate()
                 'uv_ungated',  [], ...           % H x W x 2 float  entering the gates
-                'uv',          [], ...           % H x W x 2 float  leaving them, scaled
-                'corr',        []);              % H x W float      corr2 where a vector is
+                'uv',          []);              % H x W x 2 float  leaving them, scaled
+        % note  the dense corr map is gone. It was written here and in three other
+        %       places and read in none; the corr that gets used is planes.corr,
+        %       one value per window, and it is consumed before the stamp
         end
     end
 
