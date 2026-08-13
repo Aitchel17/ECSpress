@@ -15,7 +15,7 @@ classdef showpiv < make_fig
 %     plot_grid     one flat square per interrogation window. The honest display
 %                   of PIV output: a vector belongs to a WINDOW, and this is the
 %                   only one that draws that window at its true size
-%     plot_tri      one flat triangle per Delaunay cell, for vfield_strain('tri')
+%     plot_tri      one flat triangle per Delaunay cell, for vfield_polar
 %     plot_contour  interpolates first, so it smooths. Reads well, and it is the
 %                   one that can show a boundary that is not in the data
 %   err  plot_overlay on a sector-painted map draws the PARTITION as if it were
@@ -245,7 +245,7 @@ classdef showpiv < make_fig
 
         function h = plot_tri(obj, xy, faces, val, lim)
         % IN   xy     nPoint x 2 [x y] vertex positions, px
-        %      faces  nTri x 3 vertex indices -- vfield_strain('tri') info.tri
+        %      faces  nTri x 3 vertex indices -- vfield_polar's obj.tri.conn
         %      val    nTri x 1 value per triangle, or nPoint x 1 per vertex
         %      lim    colour limit, axis runs -lim..+lim. [] = symmetric on val
         % OUT  h      the patch
