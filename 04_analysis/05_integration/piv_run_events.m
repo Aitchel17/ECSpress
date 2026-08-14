@@ -13,7 +13,7 @@ function [piv_run, info] = piv_run_events(events, S, opt)
 %      piv_opt  cell of name-values passed to piv_corr_ensemble; exclmask belongs here
 %      save_planes  keep the per-pair correlation planes (large; default false)
 %      verbose  progress line per event (default true)
-% OUT  piv_run  1xN struct: id, state, pol, from, to, rise_s, diameter_change,
+% OUT  piv_run  1xN struct: id, state, pol, bout, from, to, rise_s, diameter_change,
 %               nfr (pairs averaged, not a scale factor),
 %               xyuv (ny x nx x 4 px, [x y u v] on the interrogation grid),
 %               xyuv_ungated (the same vectors before piv_validate),
@@ -43,7 +43,10 @@ end
 popt = opt.piv_opt;
 if opt.save_planes; popt = [popt, {'save_corrmaps', true}]; end
 % 0.3 Output template
-piv_run = struct('id',{},'state',{},'pol',{},'from',{},'to',{},'rise_s',{}, ...
+% bout says which sleep bout the event sits in. Carried, not dropped: two
+% transitions of the same kind out of the SAME bout are less independent than
+% two out of different ones, and that is unrecoverable once the row is written
+piv_run = struct('id',{},'state',{},'pol',{},'bout',{},'from',{},'to',{},'rise_s',{}, ...
                  'diameter_change',{},'nfr',{},'xyuv',{},'xyuv_ungated',{},'planes',{});
 
 % 1. One ensemble PIV run per selected event
@@ -67,7 +70,7 @@ for n = 1:numel(sel)
     % 1.3 Interleave and run
     [xyuv, xyuv_ungated, cp] = ens_interleave(S, w_from, w_to, popt);
     piv_run(n) = struct('id', e, 'state', E.state, 'pol', E.pol, ...
-        'from', E.from, 'to', E.to, 'rise_s', E.rise_s, ...
+        'bout', E.bout, 'from', E.from, 'to', E.to, 'rise_s', E.rise_s, ...
         'diameter_change', E.diameter_change, ...
         'nfr', min(numel(w_from), numel(w_to)), 'xyuv', xyuv, ...
         'xyuv_ungated', xyuv_ungated, 'planes', cp);
@@ -108,22 +111,9 @@ function [xyuv, xyuv_ungated, cp] = ens_interleave(S, w_from, w_to, popt)
     keep_gated = keep_raw & ~isnan(cp.utable) & ~isnan(cp.vtable);
     % the row carries the grid. The dense map is a view and piv_stamp makes it
     % where one is wanted, which is the display path only
-    xyuv         = blank_unkept(xyuv_all, keep_gated);
-    xyuv_ungated = blank_unkept(xyuv_all, keep_raw);
+    xyuv         = piv_blank(xyuv_all, keep_gated);
+    xyuv_ungated = piv_blank(xyuv_all, keep_raw);
     % 3. Relabel pairs with original stack indices
     cp.pair_frames = [a(:), b(:)];
 end
 
-% ---------------------------------------------------------------------------
-function out = blank_unkept(xyuv, keep)
-%BLANK_UNKEPT  NaN the displacement of the windows a mask excludes, keep the grid.
-%   The coordinates stay so the array still says where every window was, which is
-%   what lets a reader tell an empty window from one that was never there.
-    out = xyuv;
-    u = out(:,:,3);
-    v = out(:,:,4);
-    u(~keep) = NaN;
-    v(~keep) = NaN;
-    out(:,:,3) = u;
-    out(:,:,4) = v;
-end
