@@ -39,10 +39,17 @@ classdef vfield_polar < handle
 %   a set whose membership changes with radius, which is the error that cost the
 %   most on this project. See CLAUDE_LOG.md
 %
-%   ORDER   measure -> gate_wedge -> accumulate. accumulate REQUIRES the verdict
-%           as an argument, so a gate cannot be formed and then forgotten.
+%   ORDER   applydelaunay -> trifilter -> placetri -> measure -> gate_wedge ->
+%           accumulate. Each refuses to run before the one it needs, and they split
+%           by what they depend on: applydelaunay on WHERE the vectors are,
+%           trifilter on the cells' shapes, placetri on the mask alone, measure on
+%           what the vectors SAY. Both filters return a verdict and measure is the
+%           one place either is applied.
+%           accumulate REQUIRES the verdict as an argument, so a gate cannot be
+%           formed and then forgotten.
 %
-%   see also VFIELD_PROFILE, VFIELD_GRADIENT_TRI, SECTOR_WEDGE
+%   see also VFIELD_PROFILE, VFIELD_APPLYDELAUNAY, VFIELD_TRIFILTER,
+%            VFIELD_PLACETRI, VFIELD_TRIGRADIENT, SECTOR_WEDGE
 
     properties
         param = struct( ...
@@ -76,8 +83,13 @@ classdef vfield_polar < handle
         centroid       % 1 x 2 float       [cy cx] px, the mask's centre of mass
         edge_rad       % 1 x n_wedge+1 float  wedge edges, rad
 
-        tri  = []      % struct of COLUMNS, set by measure(). See measure
-        info = []      % struct, set by measure(). See measure
+        mesh  = []     % struct, set by applydelaunay(). See applydelaunay
+        keep  = []     % n_tri x 1 logical, set by trifilter(). measure() is the
+                       % one place it is applied, so mesh keeps every cell
+        place = []     % struct of COLUMNS, set by placetri(). See placetri
+        tri   = []     % struct of COLUMNS, set by measure(). See measure
+        info = []      % struct; applydelaunay writes the mesh half, measure the
+                       % polar half. See both
     end
 
     properties (Dependent)
@@ -141,16 +153,93 @@ classdef vfield_polar < handle
             v = numel(obj.bin_edges_um) - 1;
         end
 
+        function applydelaunay(obj)
+        %APPLYDELAUNAY  Triangulate the vectors. Every cell, none judged yet.
+        %   Sets obj.mesh. Depends on WHERE the vectors are and not on what they
+        %   say, so two events over one gate set get the same cells.
+        %     mesh.xy   n_point x 2 float px  window centres that carried a vector
+        %     mesh.uv   n_point x 2 float px  their displacement, xy's own order
+        %     mesh.conn n_tri x 3 int         vertex indices into mesh.xy
+        %     mesh.cxy  n_tri x 2 float px    centroid, where the gradient applies
+        %     mesh.area n_tri x 1 float px^2  UNSCALED here; measure() converts
+        %
+        %   note  the cells Delaunay bridges across the masked vessel are IN here.
+        %         trifilter takes them out, and they can be seen because this stage
+        %         does not
+            [obj.mesh, mi] = vfield_applydelaunay(obj.xyuv);
+            obj.keep = true(size(obj.mesh.conn, 1), 1);
+            obj.info = struct('n_vector', mi.n_vector);
+            if obj.param.verbose
+                fprintf('%-12s %4d vectors -> %d cells, unjudged\n', ...
+                    'delaunay', mi.n_vector, size(obj.mesh.conn, 1));
+            end
+        end
+
+        function [keep, dropped] = trifilter(obj)
+        %TRIFILTER  Which cells are fit to differentiate on. A verdict, not a change.
+        %   Sets obj.keep and the dropped counts in obj.info, and returns both so a
+        %   caller can look at the verdict without reaching into the object. The
+        %   mesh is NOT edited: measure() is the one place the mask is applied, so
+        %   a figure can still draw what was thrown away.
+        % OUT keep     n_tri x 1 logical
+        %     dropped  long_edge / sliver / masked / kept / total, and
+        %              max_edge_measured px
+            if isempty(obj.mesh)
+                error('vfield_polar:notTriangulated', ...
+                    'call applydelaunay() first; trifilter() judges its cells.');
+            end
+            [keep, dropped] = vfield_trifilter(obj.mesh.xy, obj.mesh.conn, ...
+                max_edge = obj.param.max_edge, ...
+                min_angle = obj.param.min_angle, ...
+                exclmask = obj.exclmask);
+            obj.keep = keep;
+            obj.info.n_tri_kept        = dropped.kept;
+            obj.info.max_edge_measured = dropped.max_edge_measured;
+            obj.info.dropped           = dropped;
+            if obj.param.verbose
+                fprintf('%-12s %4d of %d cells kept | dropped %d long, %d sliver, %d masked\n', ...
+                    'trifilter', dropped.kept, dropped.total, dropped.long_edge, ...
+                    dropped.sliver, dropped.masked);
+            end
+        end
+
+        function placetri(obj)
+        %PLACETRI  Give every triangle its place in the wall's frame. Geometry only.
+        %   Sets obj.place. Nothing here reads a displacement, so two events over
+        %   one mask get identical output -- which is what lets a claim about a
+        %   wedge mean the same thing in both.
+        %     r      n_tri x 1 float  MICRONS from the wall
+        %     wedge  n_tri x 1 float  1..n_wedge, NaN where the triangle has none
+        %     bin    n_tri x 1 float  1..n_bin, NaN outside the bin range
+        %     nxy    n_tri x 2 float  [nx ny] outward unit wall normal
+            if isempty(obj.mesh)
+                error('vfield_polar:notTriangulated', ...
+                    'call applydelaunay() first; placetri() places its cells.');
+            end
+            obj.place = vfield_placetri(obj.mesh.cxy, obj.dist, obj.near_idx, ...
+                obj.wedgemap, obj.pixel2um, obj.bin_edges_um);
+            if obj.param.verbose
+                fprintf('%-12s %4d triangles | %d with a wedge, %d in the bin range\n', ...
+                    'placetri', size(obj.mesh.cxy, 1), ...
+                    nnz(isfinite(obj.place.wedge)), nnz(isfinite(obj.place.bin)));
+            end
+        end
+
         function measure(obj)
-        %MEASURE  Triangulate, then give every triangle its polar coordinates.
+        %MEASURE  Differentiate on the mesh and resolve against the wall normal.
+        %   The only stage that reads what the vectors SAY. applydelaunay decided
+        %   which cells exist and placetri decided where they are; this one decides
+        %   what they measured, and it is the only place a physical claim is made.
         %   Sets obj.tri, a struct of COLUMNS all n_tri x 1 (or x 2, x 4) so that
         %   one logical selection applies to every field at once -- which is what
         %   stops a subscript vector and a value vector being indexed differently.
+        %     conn         n_tri x 3 int    vertex indices into obj.mesh.xy
         %     divergence   n_tri x 1 float  dimensionless, trace of the gradient
         %     grad         n_tri x 4 float  [du/dx du/dy dv/dx dv/dy], per px
         %     area         n_tri x 1 float  MICRONS^2
         %     cxy          n_tri x 2 float  [x y] px, where it applies
-        %     nxy          n_tri x 2 float  [nx ny] outward unit wall normal
+        %     nxy          n_tri x 2 float  copied from obj.place, so one selection
+        %                  reaches the geometry and the measurement together
         %     r            n_tri x 1 float  MICRONS from the wall
         %     wedge        n_tri x 1 float  1..n_wedge, NaN outside
         %     bin          n_tri x 1 float  1..n_bin, NaN outside the bin range
@@ -159,80 +248,74 @@ classdef vfield_polar < handle
         %                  display only; no volume claim reads it
         %     strain_radial n_tri x 1 float dimensionless, n' E n
         %     strain_hoop  n_tri x 1 float  dimensionless, t' E t
-        %   and obj.info: n_vector, n_tri_kept, max_edge_measured, dropped,
-        %   wedge_center_rad, n_tri_placed
-            [t, gi] = vfield_gradient_tri(obj.xyuv, ...
-                max_edge = obj.param.max_edge, ...
-                min_angle = obj.param.min_angle, ...
-                exclmask = obj.exclmask);
+        %
+        %   note  strain_radial + strain_hoop = divergence identically, for any
+        %         unit n -- the cross terms cancel. Quoting both counts one result
+        %         twice
+            if isempty(obj.place)
+                error('vfield_polar:notPlaced', ...
+                    'call placetri() first; measure() resolves against its normals.');
+            end
+            % THE ONE PLACE the filter's verdict is applied. Every column below
+            % is subset by it together, so a subscript and a value cannot end up
+            % indexed differently
+            conn = obj.mesh.conn(obj.keep, :);
+            grad = vfield_trigradient(obj.mesh.xy, conn, obj.mesh.uv);
+
+            % The displacement AT the centroid. Exact rather than interpolated:
+            % the interpolant is linear, so the mean of the three vertices IS the
+            % value at the centroid, and it lands where the gradient applies
+            uvc = (obj.mesh.uv(conn(:,1), :) ...
+                 + obj.mesh.uv(conn(:,2), :) ...
+                 + obj.mesh.uv(conn(:,3), :)) / 3;
 
             p2u = obj.pixel2um;
-            frame_size = size(obj.dist);
+            nx = obj.place.nxy(obj.keep, 1);
+            ny = obj.place.nxy(obj.keep, 2);
 
-            % where each triangle sits, as a pixel
-            px = min(max(round(t.cxy(:,1)), 1), frame_size(2));
-            py = min(max(round(t.cxy(:,2)), 1), frame_size(1));
-            ci = sub2ind(frame_size, py, px);
-
-            r_px = obj.dist(ci);
-            r_um = r_px * p2u;
-            wedge = obj.wedgemap(ci);
-            bin = discretize(r_um, obj.bin_edges_um);
-
-            % 1. The outward wall normal, from bwdist's own nearest-pixel index.
-            %    No axis, no equivalent circle: the direction from the nearest
-            %    boundary pixel to here IS the outward normal at the wall
-            q = double(obj.near_idx(ci));
-            [qy, qx] = ind2sub(frame_size, q);
-            dx = t.cxy(:,1) - qx;
-            dy = t.cxy(:,2) - qy;
-            len = hypot(dx, dy);
-            % a centroid landing ON the boundary has no direction. Real, not
-            % hypothetical: the vector grid reaches the traced edge
-            len(len == 0) = NaN;
-            nx = dx ./ len;
-            ny = dy ./ len;
-
-            % 2. Resolve the gradient. tangential t is n turned a quarter turn
-            dudx = t.grad(:,1);
-            dudy = t.grad(:,2);
-            dvdx = t.grad(:,3);
-            dvdy = t.grad(:,4);
+            % Four projections of ONE tensor, taken together so the identity is
+            % visible: the trace and the two stretches, where radial + hoop = trace
+            % for any unit n. Rotation and the shear are the other two and are not
+            % kept -- see PIV_PLAN
+            dudx = grad(:,1);
+            dudy = grad(:,2);
+            dvdx = grad(:,3);
+            dvdy = grad(:,4);
+            divergence = dudx + dvdy;
             strain_radial = nx.*nx.*dudx + nx.*ny.*dudy + nx.*ny.*dvdx + ny.*ny.*dvdy;
             strain_hoop   = ny.*ny.*dudx - nx.*ny.*dudy - nx.*ny.*dvdx + nx.*nx.*dvdy;
-            disp_radial = (t.uvc(:,1).*nx + t.uvc(:,2).*ny) * p2u;
+            disp_radial = (uvc(:,1).*nx + uvc(:,2).*ny) * p2u;
             % the same displacement on the tangential axis. Carried because the
             % display layer had a tangential map before the class existed and
             % dropping a capability silently is worse than keeping a cheap column;
             % nothing in the volume argument reads it
-            disp_tangential = (-t.uvc(:,1).*ny + t.uvc(:,2).*nx) * p2u;
+            disp_tangential = (-uvc(:,1).*ny + uvc(:,2).*nx) * p2u;
 
             obj.tri = struct( ...
-                'divergence',    t.divergence, ...
-                'grad',          t.grad, ...
-                'area',          t.area * p2u^2, ...
-                'cxy',           t.cxy, ...
-                'nxy',           [nx, ny], ...
-                'r',             r_um, ...
-                'wedge',         wedge, ...
-                'bin',           bin, ...
+                'conn',            conn, ...
+                'divergence',      divergence, ...
+                'grad',            grad, ...
+                'area',            obj.mesh.area(obj.keep) * p2u^2, ...
+                'cxy',             obj.mesh.cxy(obj.keep, :), ...
+                'nxy',             obj.place.nxy(obj.keep, :), ...
+                'r',               obj.place.r(obj.keep), ...
+                'wedge',           obj.place.wedge(obj.keep), ...
+                'bin',             obj.place.bin(obj.keep), ...
                 'disp_radial',     disp_radial, ...
                 'disp_tangential', disp_tangential, ...
                 'strain_radial',   strain_radial, ...
                 'strain_hoop',     strain_hoop);
 
-            placed = isfinite(bin) & isfinite(wedge) & isfinite(t.divergence);
-            obj.info = struct( ...
-                'n_vector',          gi.n_vector, ...
-                'n_tri_kept',        gi.n_tri_kept, ...
-                'n_tri_placed',      nnz(placed), ...
-                'max_edge_measured', gi.max_edge_measured, ...
-                'dropped',           gi.dropped, ...
-                'wedge_center_rad',  obj.wedge_center_measured());
+            % info gains the polar half. applydelaunay set the mesh half and it is
+            % not rewritten here -- one field, one writer
+            placed = isfinite(obj.place.bin(obj.keep)) ...
+                     & isfinite(obj.place.wedge(obj.keep)) & isfinite(divergence);
+            obj.info.n_tri_placed     = nnz(placed);
+            obj.info.wedge_center_rad = obj.wedge_center_measured();
 
             if obj.param.verbose
-                fprintf('vfield_polar  %d vectors -> %d tri -> %d placed\n', ...
-                    gi.n_vector, gi.n_tri_kept, nnz(placed));
+                fprintf('%-12s %4d triangles -> %d placed in a bin and a wedge\n', ...
+                    'measure', obj.info.n_tri_kept, nnz(placed));
             end
         end
 
@@ -375,6 +458,70 @@ classdef vfield_polar < handle
             end
         end
 
+        function curve = collapse_wedges(obj, cells)
+        %COLLAPSE_WEDGES  The n_bin x n_wedge cells as one radial curve.
+        %   accumulate() deliberately stops at n_bin x n_wedge: which wedges to
+        %   combine and how is the caller's, not the partition's. This is that
+        %   step, done the way the project already treats an unmeasured cell --
+        %   NaN, never zero, and nothing invented between measurements.
+        %
+        %   ORDER IS THE WHOLE THING. Combining each wedge's CUMULATIVE curve is
+        %   wrong in both directions: fill a wedge's empty bin with zero and it
+        %   claims nothing happened at a radius it never reached, and its frozen
+        %   total then rides along in every bin outside; drop the wedge instead
+        %   and one interior gap costs its whole curve. Combining the PER-BIN
+        %   values first and accumulating after, a gap costs that wedge that bin
+        %   and nothing else.
+        % IN   cells   the struct accumulate() returned
+        % OUT  curve   volume_out    1 x n_bin  MICRONS^2 per micron of vessel,
+        %                            cumulative outward. NaN until the first bin
+        %                            any wedge measured
+        %              divergence    1 x n_bin  dimensionless, area-weighted over
+        %                            the wedges present in that bin
+        %              n_wedge_bin   1 x n_bin  int, how many wedges that bin had
+        %              area          1 x n_bin  MICRONS^2 actually measured there
+        %   caution  the per-bin total is scaled by n_wedge / n_wedge_bin, which
+        %            says the wedges that were not measured behave like the ones
+        %            that were. That is an assumption and it is the only one here;
+        %            n_wedge_bin is returned so a reader can see how hard it is
+        %            working, and it works hardest at the outer radii -- see
+        %            PIV_PLAN.md
+            arguments
+                obj
+                cells struct
+            end
+            nB = obj.n_bin;
+
+            % 1. What each cell contributed, in microns^2. divergence is an
+            %    area-weighted mean, so the volume it stands for is div * area
+            contrib = cells.divergence .* cells.area;
+            present = ~isnan(contrib);
+            n_wedge_bin = sum(present, 2)';
+
+            % 2. Per bin, across the wedges that measured it
+            total = sum(contrib, 2, 'omitnan')';
+            area  = sum(cells.area, 2, 'omitnan')';
+            scaled = total .* (obj.n_wedge ./ max(n_wedge_bin, 1));
+            scaled(n_wedge_bin == 0) = NaN;
+
+            div_bin = sum(contrib, 2, 'omitnan')' ./ area;
+            div_bin(n_wedge_bin == 0) = NaN;
+
+            % 3. Accumulate outward. A bin nobody measured contributes nothing to
+            %    the running total rather than voiding it, but the total stays NaN
+            %    until the first bin that WAS measured -- before that there is no
+            %    total, as opposed to a total of zero
+            running = cumsum(fillmissing(scaled, 'constant', 0));
+            running(cumsum(n_wedge_bin > 0) == 0) = NaN;
+
+            curve = struct('volume_out', running, 'divergence', div_bin, ...
+                'n_wedge_bin', n_wedge_bin, 'area', area);
+            if obj.param.verbose
+                fprintf('collapse      %d of %d bins measured | wedges per bin %d..%d\n', ...
+                    nnz(n_wedge_bin > 0), nB, min(n_wedge_bin), max(n_wedge_bin));
+            end
+        end
+
         function tbl = audit_gate(obj, xyuv_ungated)
         %AUDIT_GATE  What the PIV gates took, by radius, against what they left.
         %   obj.xyuv is the gated field; xyuv_ungated is the same correlation with
@@ -425,10 +572,17 @@ classdef vfield_polar < handle
                 'VariableNames', {'r_um','n_all','rejected_pct','mag_kept_um','mag_cut_um'});
         end
 
-        function map = paint(obj, values)
-        %PAINT  Spread per-wedge or per-cell values over the frame. DISPLAY ONLY.
+        function map = paint_cells(obj, values)
+        %PAINT_CELLS  Spread per-wedge or per-cell values over the frame. DISPLAY ONLY.
         %   Not an engine: nothing downstream reads this, it exists so a number
-        %   can be looked at in the place it came from.
+        %   can be looked at in the place it came from. Hand the result to
+        %   showpiv.plot_overlay, which is what draws it.
+        %
+        %   Not sector_paint. That one takes a FUSED label map and one value per
+        %   label; this takes the ring and wedge maps separately and a n_bin x
+        %   n_wedge matrix, which is how sector_polar's ordering trap is avoided
+        %   -- see its header. The two cannot be merged without choosing the
+        %   fused ordering that was deliberately not chosen.
         % IN  values  1 x n_wedge, or n_bin x n_wedge
         % OUT map     H x W float, NaN where no cell
             arguments

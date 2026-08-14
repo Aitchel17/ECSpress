@@ -75,6 +75,9 @@ for k = 1:n_event
 
     % measure -> gate_wedge -> accumulate. accumulate takes the verdict as a
     % required argument, so a gate cannot be formed here and then forgotten
+    vp.applydelaunay();
+    vp.trifilter();
+    vp.placetri();
     vp.measure();
     wedge_mask = vp.gate_wedge();
     cells = vp.accumulate(wedge_mask);
