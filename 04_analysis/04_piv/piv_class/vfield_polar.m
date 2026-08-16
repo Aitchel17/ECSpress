@@ -11,8 +11,15 @@ classdef vfield_polar < handle
 %   costs nothing. Every directional quantity here is a contraction against that
 %   n, never a division by a radius:
 %
+%     E = (J + J')/2      J = [du/dx du/dy; dv/dx dv/dy]   E is J's symmetric half
 %     strain_radial = n' E n        strain_hoop = t' E t        t = n rotated 90
+%     strain_shear  = n' E t        rotation = (J - J')/2, one number, no direction
 %
+%   E rather than J because the antisymmetric half is a rotation, and x'*Om*x = 0
+%   for any x -- so a contraction onto a direction cannot see it and building E
+%   changes no value here. It is built anyway, because the shear n' E t CAN see it
+%   and reads the same three components; taking that one off J would silently
+%   subtract the rotation.
 %   The two sum to trace(E) = divergence identically, for ANY unit n -- the cross
 %   terms cancel. So there is nothing to check and no residual to store.
 %   The axisymmetric form u_r/r would instead need r measured from an AXIS, and a
@@ -248,10 +255,20 @@ classdef vfield_polar < handle
         %                  display only; no volume claim reads it
         %     strain_radial n_tri x 1 float dimensionless, n' E n
         %     strain_hoop  n_tri x 1 float  dimensionless, t' E t
+        %     strain_shear n_tri x 1 float  dimensionless, n' E t
+        %     rotation     n_tri x 1 float  dimensionless, (dv/dx - du/dy)/2,
+        %                  + = counter-clockwise, the same sense as disp_tangential
         %
         %   note  strain_radial + strain_hoop = divergence identically, for any
         %         unit n -- the cross terms cancel. Quoting both counts one result
         %         twice
+        %   note  divergence and rotation are the two columns no choice of n can
+        %         change; rotation is the one the other four cannot see at all
+        %   note  strain_radial, strain_hoop and strain_shear are the three
+        %         components of E in the (n, t) basis, so they carry the whole
+        %         tensor. A caller wanting the principal strains reads those
+        %         three -- best from accumulate's area-weighted cells, since an
+        %         eigenvalue is not linear and must not be averaged itself
             if isempty(obj.place)
                 error('vfield_polar:notPlaced', ...
                     'call placetri() first; measure() resolves against its normals.');
@@ -260,31 +277,55 @@ classdef vfield_polar < handle
             % is subset by it together, so a subscript and a value cannot end up
             % indexed differently
             conn = obj.mesh.conn(obj.keep, :);
-            grad = vfield_trigradient(obj.mesh.xy, conn, obj.mesh.uv);
+            grad = vfield_trigradient(obj.mesh.xy, conn, obj.mesh.uv);   % J, per triangle
 
             % The displacement AT the centroid. Exact rather than interpolated:
             % the interpolant is linear, so the mean of the three vertices IS the
-            % value at the centroid, and it lands where the gradient applies
+            % value at the centroid, and it lands where the gradient applies.
+            % Six nodal numbers make an affine map: these are its 2 constants and
+            % vfield_trigradient returned the other 4
             uvc = (obj.mesh.uv(conn(:,1), :) ...
                  + obj.mesh.uv(conn(:,2), :) ...
                  + obj.mesh.uv(conn(:,3), :)) / 3;
 
             p2u = obj.pixel2um;
-            nx = obj.place.nxy(obj.keep, 1);
-            ny = obj.place.nxy(obj.keep, 2);
+            nx = obj.place.nxy(obj.keep, 1);         % outward wall normal, n
+            ny = obj.place.nxy(obj.keep, 2);         % t = (-ny, nx), n turned 90
 
-            % Four projections of ONE tensor, taken together so the identity is
-            % visible: the trace and the two stretches, where radial + hoop = trace
-            % for any unit n. Rotation and the shear are the other two and are not
-            % kept -- see PIV_PLAN
-            dudx = grad(:,1);
-            dudy = grad(:,2);
-            dvdx = grad(:,3);
-            dvdy = grad(:,4);
-            divergence = dudx + dvdy;
-            strain_radial = nx.*nx.*dudx + nx.*ny.*dudy + nx.*ny.*dvdx + ny.*ny.*dvdy;
-            strain_hoop   = ny.*ny.*dudx - nx.*ny.*dudy - nx.*ny.*dvdx + nx.*nx.*dvdy;
-            disp_radial = (uvc(:,1).*nx + uvc(:,2).*ny) * p2u;
+            % All five projections of ONE tensor, taken together so the identity is
+            % visible: the trace, the two stretches where radial + hoop = trace for
+            % any unit n, the shear that completes the (n, t) pair, and the rotation
+            % that none of the first four can see
+            dudx = grad(:,1);                       % J(1,1)
+            dudy = grad(:,2);                       % J(1,2)
+            dvdx = grad(:,3);                       % J(2,1)
+            dvdy = grad(:,4);                       % J(2,2)
+
+            % E = (J + J')/2, the three independent entries. Transposing averages
+            % the two off-diagonals into one number and leaves the diagonal alone,
+            % which is why only strain_xy does arithmetic
+            strain_xx = dudx;                       % E(1,1)
+            strain_xy = (dudy + dvdx) / 2;          % E(1,2) = E(2,1). Half of the
+                                                    % engineering shear gamma_xy a
+                                                    % finite element text prints
+            strain_yy = dvdy;                       % E(2,2)
+
+            divergence    = strain_xx + strain_yy;                                            % tr E, first invariant
+            strain_radial = nx.*nx.*strain_xx + 2*nx.*ny.*strain_xy + ny.*ny.*strain_yy;      % n' E n
+            strain_hoop   = ny.*ny.*strain_xx - 2*nx.*ny.*strain_xy + nx.*nx.*strain_yy;      % t' E t
+
+            % n' E t, the contraction the antisymmetric half reaches. Taking it off
+            % the raw gradient instead returns n' E t - rotation, and nothing in the
+            % number says a rotation was subtracted -- which is why E is built above
+            strain_shear = nx.*ny.*(strain_yy - strain_xx) + (nx.*nx - ny.*ny).*strain_xy;    % n' E t
+
+            % The antisymmetric half, which holds one number. It shares with
+            % divergence the property that no n appears, so neither moves if the
+            % wall normal is wrong; what makes this one different is that the
+            % other four projections cannot see it at all
+            rotation = (dvdx - dudy) / 2;           % Om(2,1), = half the curl
+
+            disp_radial = (uvc(:,1).*nx + uvc(:,2).*ny) * p2u;                                % u(centroid) . n
             % the same displacement on the tangential axis. Carried because the
             % display layer had a tangential map before the class existed and
             % dropping a capability silently is worse than keeping a cheap column;
@@ -304,7 +345,9 @@ classdef vfield_polar < handle
                 'disp_radial',     disp_radial, ...
                 'disp_tangential', disp_tangential, ...
                 'strain_radial',   strain_radial, ...
-                'strain_hoop',     strain_hoop);
+                'strain_hoop',     strain_hoop, ...
+                'strain_shear',    strain_shear, ...
+                'rotation',        rotation);
 
             % info gains the polar half. applydelaunay set the mesh half and it is
             % not rewritten here -- one field, one writer
@@ -388,6 +431,8 @@ classdef vfield_polar < handle
         %              disp_tangential MICRONS, + counter-clockwise. Display only
         %              strain_radial   dimensionless, n' E n
         %              strain_hoop     dimensionless, t' E t
+        %              strain_shear    dimensionless, n' E t
+        %              rotation        dimensionless, + counter-clockwise
         %              n_tri           int, triangles in the cell
         %              area            MICRONS^2
         %              first_bin       1 x n_wedge, where the run starts
@@ -405,6 +450,7 @@ classdef vfield_polar < handle
             cells = struct('volume_out', blank, 'divergence', blank, ...
                 'disp_radial', blank, 'disp_tangential', blank, ...
                 'strain_radial', blank, 'strain_hoop', blank, ...
+                'strain_shear', blank, 'rotation', blank, ...
                 'n_tri', zeros(nB, nW), 'area', blank, ...
                 'first_bin', nan(1, nW), 'reach_bin', nan(1, nW));
 
@@ -426,6 +472,8 @@ classdef vfield_polar < handle
                 dt = obj.tri.disp_tangential(sel);
                 sr = obj.tri.strain_radial(sel);
                 sh = obj.tri.strain_hoop(sel);
+                ss = obj.tri.strain_shear(sel);
+                rt = obj.tri.rotation(sel);
 
                 a_sum = accumarray(b, a, [nB 1]);
                 flux = accumarray(b, a .* dv, [nB 1]);
@@ -433,6 +481,8 @@ classdef vfield_polar < handle
                 dt_sum = accumarray(b, a .* dt, [nB 1]);
                 sr_sum = accumarray(b, a .* sr, [nB 1]);
                 sh_sum = accumarray(b, a .* sh, [nB 1]);
+                ss_sum = accumarray(b, a .* ss, [nB 1]);
+                rt_sum = accumarray(b, a .* rt, [nB 1]);
 
                 run = run_first:run_last;
                 cells.n_tri(:, w) = n_here;
@@ -448,6 +498,8 @@ classdef vfield_polar < handle
                 cells.disp_tangential(thick, w) = dt_sum(thick) ./ a_sum(thick);
                 cells.strain_radial(thick, w) = sr_sum(thick) ./ a_sum(thick);
                 cells.strain_hoop(thick, w) = sh_sum(thick) ./ a_sum(thick);
+                cells.strain_shear(thick, w) = ss_sum(thick) ./ a_sum(thick);
+                cells.rotation(thick, w) = rt_sum(thick) ./ a_sum(thick);
 
                 % The cumulative flux, over the RUN and not the column. Cumulating
                 % from bin 1 would put the mask's empty inner bins in front of it,

@@ -350,10 +350,10 @@ classdef showpiv < make_fig
     methods (Static)
         function label = axis_label(name)
         %AXIS_LABEL  What the colour bar or the y axis says for one per-cell quantity.
-        %   The single place that knows the six names vfield_polar emits. A name
-        %   that is not here THROWS -- a mistyped quantity would otherwise draw an
+        %   The single place that knows the names vfield_polar emits. A name that
+        %   is not here THROWS -- a mistyped quantity would otherwise draw an
         %   empty axis, and an empty axis reads as a measurement of zero.
-        % IN   name   char, one of the six
+        % IN   name   char, one of the known set
         % OUT  label  char, TeX
         %
         %   why  the label carries the SIGN CONVENTION, which is the part a
@@ -366,9 +366,15 @@ classdef showpiv < make_fig
                 name (1,:) char
             end
             % name | axis label. The names are the settled vocabulary; see BACKLOG.md
-            known = {'divergence',      'divergence  \DeltaA/A'; ...
+            % divergence is NOT \DeltaA/A. It is the flux density through a
+            % FIXED boundary, which is what volume_out cumulates and what the
+            % divergence theorem makes exact. The material area change is
+            % det(I+J)-1 = divergence + det(E) + rotation^2, a different number
+            known = {'divergence',      'divergence  \nabla\cdot u  (flux per area)'; ...
                      'strain_radial',   'strain_radial  n''En'; ...
                      'strain_hoop',     'strain_hoop  t''Et'; ...
+                     'strain_shear',    'strain_shear  n''Et'; ...
+                     'rotation',        'rotation  (+ CCW)'; ...
                      'disp_radial',     'disp_radial  (+ outward, \mum)'; ...
                      'disp_tangential', 'disp_tangential  (+ CCW, \mum)'; ...
                      'volume_out',      'volume_out  (cumulative, \mum^2)'};
