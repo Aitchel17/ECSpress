@@ -32,7 +32,6 @@ end
 
 % 0. Setup
 % 0.1 Event selection
-nT  = size(S, 3);
 sel = opt.sel;
 if isempty(sel); sel = 1:numel(events); end
 sel = reshape(sel, 1, []);
@@ -60,19 +59,16 @@ for n = 1:numel(sel)
             ['event %d spans %d frames (from %d to %d); halfwin=%d needs more ' ...
              'than %d.'], e, E.to - E.from, E.from, E.to, opt.halfwin, 2 * opt.halfwin);
     end
-    % 1.2 Framesets around each endpoint
-    w_from = max(1, E.from - opt.halfwin):min(nT, E.from + opt.halfwin);
-    w_to   = max(1, E.to   - opt.halfwin):min(nT, E.to   + opt.halfwin);
     if opt.verbose
         fprintf('[%d/%d] event %d  %-14s %-12s %5.1f s ', n, numel(sel), e, ...
             E.state, E.pol, E.rise_s);
     end
-    % 1.3 Interleave and run
-    [xyuv, xyuv_ungated, cp] = ens_interleave(S, w_from, w_to, popt);
+    % 1.2 Interleave and run
+    [xyuv, xyuv_ungated, cp] = ens_interleave(S, E.from, E.to, opt.halfwin, popt);
     piv_run(n) = struct('id', e, 'state', E.state, 'pol', E.pol, ...
         'bout', E.bout, 'from', E.from, 'to', E.to, 'rise_s', E.rise_s, ...
         'diameter_change', E.diameter_change, ...
-        'nfr', min(numel(w_from), numel(w_to)), 'xyuv', xyuv, ...
+        'nfr', size(cp.pair_frames, 1), 'xyuv', xyuv, ...
         'xyuv_ungated', xyuv_ungated, 'planes', cp);
     if opt.verbose
         fprintf('| %+.2f um, %d pairs\n', E.diameter_change, piv_run(n).nfr);
@@ -85,20 +81,14 @@ info = struct('halfwin', opt.halfwin, 'piv_opt', {popt}, 'sel', sel, ...
 end
 
 % ---------------------------------------------------------------------------
-function [xyuv, xyuv_ungated, cp] = ens_interleave(S, w_from, w_to, popt)
-%ENS_INTERLEAVE  Interleave the earlier and later framesets -> correlation ensemble.
-%   w_from must be the earlier frameset: the pair order sets the sign of uv. Pair p
-%   is (from_p, to_p), so the ensemble averages k measurements of one displacement
-%   rather than accumulating k steps.
-    % 0. Equal-length index lists for the two framesets
-    k = min(numel(w_from), numel(w_to));
-    a = round(linspace(w_from(1), w_from(end), k));
-    b = round(linspace(w_to(1),   w_to(end),   k));
-    % 1. Interleave into (from_1, to_1, from_2, to_2, ...)
-    inter = zeros(size(S, 1), size(S, 2), 2 * k);
-    inter(:, :, 1:2:end) = S(:, :, a);
-    inter(:, :, 2:2:end) = S(:, :, b);
-    % 2. Ensemble PIV. It correlates only, so the gating is explicit here
+function [xyuv, xyuv_ungated, cp] = ens_interleave(S, from, to, halfwin, popt)
+%ENS_INTERLEAVE  Correlate the pairs piv_interleave makes, then read the verdict.
+%   The interleave itself is piv_interleave, called and not copied: a second copy
+%   of that arithmetic would decide which frames a result came from, and drift in
+%   it would make "the frames PIV used" a false statement with nothing to catch it.
+    % 0. The pairs
+    [inter, pair_frames] = piv_interleave(S, from, to, halfwin);
+    % 1. Ensemble PIV. It correlates only, so the gating is explicit here
     cp = piv_corr_ensemble(inter, popt{:});
     % piv_validate answers by NaN-ing what it rejects, so the raw field is kept
     % first and the verdict read back off the difference. Both maps then come off
@@ -114,6 +104,6 @@ function [xyuv, xyuv_ungated, cp] = ens_interleave(S, w_from, w_to, popt)
     xyuv         = piv_blank(xyuv_all, keep_gated);
     xyuv_ungated = piv_blank(xyuv_all, keep_raw);
     % 3. Relabel pairs with original stack indices
-    cp.pair_frames = [a(:), b(:)];
+    cp.pair_frames = pair_frames;
 end
 
