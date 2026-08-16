@@ -2,14 +2,14 @@
 %   FWHM diameter -> merge bouts -> pick excursions -> review -> per-event
 %   ensemble PIV -> gating -> strain. Cell 0 loads the session itself; run
 %   analysis_main through FWHM and setup_rois first, because this reads
-%   .pax_fwhm and the 'pax' / 'manual_dilated_pvs' ROIs. Only 'piv_include' is
-%   drawn here.
+%   .pax_fwhm and the 'pax' ROI. 'piv_include' and 'manual_dilated_pvs' are drawn
+%   here when the roilist has not got them; re-tracing is a command you type.
 %
 %   TWO PATHS, and they do not share an API. Know which one you are in.
 %     cells 0-9   ONE event, through the analysis_pivensemble CLASS. Current.
 %                 Everything written since 260806 targets this.
-%     cells 10-14 EVERY event, through piv_run_events / piv_polar_events /
-%                 piv_figure. Older, function-based, still runs.
+%     cells 10-14 EVERY event, through piv_run_events / piv_polar_events, and
+%                 then plain functions. Older, function-based, still runs.
 %   caution  cell 10 is the batch path's cell 0 : it builds S, param.windows, exclmask,
 %            halfwin and piv_ch, which cells 11-14 need and cells 0-9 never make.
 %            Running cell 11 straight after cell 9 fails on an undefined S
@@ -43,16 +43,10 @@ session.stackch2 = session.loadstack('ch2');
 % 0.4 FPS matching + preprocessing
 twophoton_processed = twophoton_preprocess(session);
 
-% 0.5 Shorthands used throughout
-tp     = twophoton_processed;
-fps    = tp.outfps;
-p2u    = tp.pixel2um;
-t_axis = tp.t_axis;
-
 % 0.6 Load sleep state and put the bouts on the imaging frame axis
 sleep_integrate = state_integration(sessiondir);
 img_state = state_image(sleep_integrate);
-img_state.get_state_indices(t_axis, fps);     
+img_state.get_state_indices(twophoton_processed.t_axis, twophoton_processed.outfps);     
 
 %% 1. Event detection on the FWHM diameter
 % analysis_event owns this stage. It is handed a trace and the bout tables and
@@ -62,23 +56,13 @@ img_state.get_state_indices(t_axis, fps);
 %   amplitude with no caliber in it.
 %   PX throughout, as every analysis class here stores; the figure layer converts.
 
-param.merge = { ...
-%    earlier(A)    later(B)      label             polarity
-    'nrem',       'rem',        'nrem2rem',       'dilation'     ; ...
-    'uarousal',   'nrem',       'uarousal2nrem',  'dilation'     ; ...
-    'roughawake', 'nrem',       'awake2nrem',     'dilation'     ; ...
-    'rem',        'roughawake', 'rem2awake',      'constriction' ; ...
-    'nrem',       'roughawake', 'nrem2awake',     'constriction' ; ...
-    'nrem',       'uarousal',   'nrem2uarousal',  'constriction' };
-
-param.focus  = param.merge(:, 3)';                         % labels to run PIV on
-param.states = {'roughnrem', 'rem', 'roughawake'};   % the merge partition: the states a
-                                               % bout is scored into, so also the
-                                               % ones a stable window lives inside
-
-caliber   = session.pax_fwhm.thickness.bv;
-event_det = analysis_event(double(caliber(:).'), session.pax_fwhm.t_axis);
-event_det.arousaltransition(img_state.state_idx, param.merge);
+% The partition is analysis_event.param -- six transitions and the three states the
+% controls search, defaulted in the class. It is not repeated here because control()
+% requires the SAME one arousaltransition was given, and a table written at two call
+% sites cannot show whether the two agree. Override with event_det.param.merge for a
+% different design; event_det.focus is derived from its column 3 and is never set
+event_det = analysis_event(session.pax_fwhm.thickness.bv, session.pax_fwhm.t_axis);
+event_det.arousaltransition(img_state.state_idx);
 
 % The controls, into the same list. A row is (state, pol): a transition is
 % ('nrem2rem','dilation'), a stable stretch is ('nrem','none') -- two axes, so a
@@ -87,68 +71,75 @@ event_det.arousaltransition(img_state.state_idx, param.merge);
 % and range vs rise_s across these rows is how that gets measured. See FINDINGS.md
 %   a long stable window is the FLATTEST available, not flat -- its range can be
 %   wider than the median transition, which is what the per-row range field is for
-event_det.control(img_state.state_idx, states = param.states);
+event_det.control(img_state.state_idx);
 
-% Shorthands the PIV cells below read. Both traces are PX
-events = event_det.eventlist;
-dtrace = event_det.diameter;
-dsg    = event_det.smooth_diameter;   % picking trace, what every figure marks on
-disp(struct2table(rmfield(events, {'search_from','search_to'})));
+% Both traces on the object are PX; the figure layer converts
+disp(struct2table(rmfield(event_det.eventlist, {'search_from','search_to'})));
 
 %% 1.1 Review the picked events
 % The gate before PIV: a mis-picked endpoint shows up here. The figure layer is
 % where px becomes um, so pixel2um is passed here and nowhere upstream
-event_review(events, dtrace, dsg, event_det.info.P.sg_win_s, t_axis, ...
-    'pixel2um',    p2u, ...
+event_review(event_det.eventlist, event_det.diameter, event_det.smooth_diameter, ...
+    event_det.info.P.sg_win_s, twophoton_processed.t_axis, ...
+    'pixel2um',    twophoton_processed.pixel2um, ...
     'sleep_score', sleep_integrate.sleep_score, ...
     'state_idx',   img_state.state_idx, ...
-    'states',      param.states);
+    'states',      event_det.param.states);
 %% 2. Pick the event
 % events is chronological, so ask by label + id rather than by index
-ev = find(strcmp({events.state}, 'nrem2rem'), 1);  % first nrem2rem = id 2
+ev = find(strcmp({event_det.eventlist.state}, 'nrem2rem'), 1);  % first nrem2rem = id 2
 fprintf('ev%d  %s  %s  dD %+.2f um  rise %.1f s  frames %d -> %d\n', ...
-    ev, events(ev).state, events(ev).pol, events(ev).diameter_change * p2u, ...
-    events(ev).rise_s, events(ev).from, events(ev).to);
+    ev, event_det.eventlist(ev).state, event_det.eventlist(ev).pol, ...
+    event_det.eventlist(ev).diameter_change * twophoton_processed.pixel2um, ...
+    event_det.eventlist(ev).rise_s, event_det.eventlist(ev).from, event_det.eventlist(ev).to);
 
 %% 3. Make the ensemble object
 % Whole recording plus the two endpoints; the margin, the cut and the filtering
 % are the object's business. Only the frames it correlates survive
 piv_ensemble = analysis_pivensemble(twophoton_processed.ch1, ...
-    [events(ev).from, events(ev).to], ...
+    [event_det.eventlist(ev).from, event_det.eventlist(ev).to], ...
     twophoton_processed.fps, twophoton_processed.pixel2um, halfwin = 2);
 
-%% 3.1 PIV masks
-% piv_include is drawn here when the roilist has not got it; the PVS boundary
-% comes from setup_rois. Analyse inside piv_include and outside the PVS, which is
-% one mask in PIVlab's polarity
-if ~any(strcmp(session.roilist.list(), 'piv_include'))
+% 3.1 PIV masks
+% Analyse inside piv_include and outside the PVS, which is one mask in PIVlab's
+% polarity. Both ROIs are drawn when the roilist has not got them, and neither is
+% reopened on a re-run -- addormodifyroi opens an editor, and a cell that does that
+% every time it runs cannot be re-run.
+%   TO RE-TRACE the wall, paste this at the prompt and re-run the cell. It is
+%   written out rather than using a variable, so it works whatever has been run:
+%     session.roilist.modifyroi( ...
+%         twophoton_processed.(session.pax_fwhm.param.channel_pvs), ...
+%         'manual_dilated_pvs', ...
+%         twophoton_processed.(session.pax_fwhm.param.channel_lumen))
+%     session.roilist.save2disk(session.dir_struct.primary_analysis)
+%   Deliberate, and it leaves nothing behind. A redraw flag would have to be set,
+%   run, and then remembered back to false
+%   caution  the channel is not ch1/ch2 by fiat -- the two can be swapped between
+%            datasets, and pax_fwhm.param is the only thing that says which is
+%            which. setup_rois draws this ROI on the PVS channel with the lumen
+%            channel as the second view, and this matches that
+if ~has_roi(session.roilist, 'piv_include')
     session.roilist.addormodifyroi(twophoton_processed.ch1, 'piv_include', ...
         'rectangle', twophoton_processed.ch2);
     session.roilist.save2disk(session.dir_struct.primary_analysis);
 end
+if ~has_roi(session.roilist, 'manual_dilated_pvs')
+    session.roilist.addormodifyroi( ...
+        twophoton_processed.(session.pax_fwhm.param.channel_pvs), ...
+        'manual_dilated_pvs', 'polygon', ...
+        twophoton_processed.(session.pax_fwhm.param.channel_lumen));
+    session.roilist.save2disk(session.dir_struct.primary_analysis);
+end
 
-piv_ensemble.param.pivlab_mask = ~session.roilist.getmask('piv_include') | ...
-                                  session.roilist.getmask('manual_dilated_pvs');
+coremask = session.roilist.getmask('manual_dilated_pvs');   % H x W bool, the wall
+piv_ensemble.param.pivlab_mask = ~session.roilist.getmask('piv_include') | coremask;
 
-%% 4. Correlate
+% 4. Correlate
 % The expensive half, tens of seconds. endpoint gives the displacement,
 % consecutive says whether it accumulated; name one to skip the other's cost
-piv_ensemble.correlate();                % or correlate("endpoint")
+piv_ensemble.correlate("endpoint", window_sizes = [30 15; 20 10]);
 
-%% 4.1 Gate
-% Cheap and repeatable, so this cell can be re-run on its own after changing
-% param or switching a gate off. gate() always restarts from the correlation, so
-% calls do not stack. It prints one line per gate; when a line looks wrong,
-% piv_ensemble.endpoint.gates is a 1x3 table of them --
-%   struct2table(rmfield(piv_ensemble.endpoint.gates, {'mask','info'}))
-% and gates(k).info holds the thresholds that gate was given and what it measured
-%   piv_ensemble.gate(tomasi = false)     lambda2 gate off, threshold kept
-%   piv_ensemble.gate(neighbour = true)   put the local median back for one call
-%   piv_ensemble.gate("endpoint")         gate one result only
-%   piv_ensemble.param.verbose = false    silence
-% note  neighbour runs OFF : stage NaN in the table, but gates(3).mask still holds
-%       the verdict it would have carried out
-piv_ensemble.gate();
+piv_ensemble.gate(corr_floor = false); % gate
 
 %% 5. Confirmation of the displacement field
 % Vectors over the FROM frame. showpiv fixes the scale instead of autoscaling,
@@ -165,65 +156,6 @@ P.put_xaxistitle('x (px)');  P.put_yaxistitle('y (px)');
 figure('Name', sprintf('ev%d blink  odd = FROM, even = TO', ev));
 sliceViewer(piv_ensemble.endpoint.stack);
 
-%% 6. Strain on polar wedges
-% eps_rr, eps_tt and their trace all come out of one call now; info carries the
-% components whatever method is asked for. Near the PVS wall the trace is
-% POSITIVE -- tangential stretch beats radial compression there, which is the
-% regime Causemann et al. (PNAS 2026) attribute to a stiff PVS. Beyond ~30 px it
-% flips to mild compression. Read the two bands separately, the pooled number
-% averages the sign away
-coremask = session.roilist.getmask('manual_dilated_pvs');
-[~, ~, pol2] = vfield_divergence_polar(piv_ensemble.endpoint.uv, coremask, ...
-    ring_width = 10, n_sectors = 12, min_valid = 1, method = 'divergence');
-near = false(size(pol2.eps_rr));  near(1:3,:) = true;
-kk   = ~isnan(pol2.eps_rr) & ~isnan(pol2.eps_tt);
-for band = {near & kk, ~near & kk, kk}
-    m = band{1};
-    fprintf(['%-10s n %3d | eps_rr %+.5f | eps_tt %+.5f | div %+.5f | ' ...
-             'eps_tt/|eps_rr| %5.2f | expanding %3.0f%%\n'], ...
-        "", nnz(m), median(pol2.eps_rr(m)), median(pol2.eps_tt(m)), ...
-        median(pol2.divergence(m)), ...
-        median(pol2.eps_tt(m))/abs(median(pol2.eps_rr(m))), ...
-        100*mean(pol2.divergence(m) > 0));
-end
-
-%% 6.1 Radial strain map
-% Wedges exist to isolate the RADIAL term. Each pixel is projected onto the
-% radial direction first, then averaged per wedge, then differenced between rings
-% along the same wedge -- so tangential stretch never enters. That is the
-% 'radial' method; 'plane' fits du/dx+dv/dy per wedge and mixes the two, which is
-% what the square boxes are for. r = 0 is the PVS wall, not the centroid
-coremask = session.roilist.getmask('manual_dilated_pvs');
-% min_valid is a wedge's vector count. Four is the rank the PLANE fit needs; the
-% radial method only averages a scalar, so it can go lower, but the CENTRED
-% DIFFERENCE that follows cannot -- measured, 40% of its gradient cells lean on a
-% wedge holding one or two vectors, and those cells came out at +0.002 against
-% -0.008 for the rest. 'radial_fit' fits the vectors in a radial window instead
-% and carries its own conditioning, so it does not need this knob
-[dvrdr_map, dvrdr, pol] = vfield_divergence_polar(piv_ensemble.endpoint.uv, ...
-    coremask, ring_width = 10, n_sectors = 12, min_valid = 5, method = 'radial');
-
-fprintf('%d rings x %d wedges | %d wedges carried a v_r | %d carried a gradient\n', ...
-    pol.n_rings, pol.n_sectors, nnz(~isnan(pol.vr_cells)), nnz(~isnan(dvrdr)));
-fprintf('mean v_r %+.3f px | dv_r/dr p50 %+.5f | compressed (dv_r/dr<0) %.0f%%\n', ...
-    mean(pol.vr_cells(:),'omitnan'), median(dvrdr(~isnan(dvrdr))), ...
-    100*mean(dvrdr(~isnan(dvrdr)) < 0));
-
-fprintf('\n ring  r from wall   v_r(px)   dv_r/dr    wedges\n');
-for k = 1:pol.n_rings
-    if all(isnan(pol.vr_cells(k,:))); continue; end
-    fprintf('  %2d   %3.0f-%3.0f px    %+7.3f  %+9.5f   %2d\n', k, ...
-        pol.ring_edges(k), pol.ring_edges(k+1), mean(pol.vr_cells(k,:),'omitnan'), ...
-        mean(dvrdr(k,:),'omitnan'), nnz(~isnan(pol.vr_cells(k,:))));
-end
-
-D = showpiv(sprintf('ev%d dv_r/dr', ev), 5);
-D.update_figsize([7 5]);
-D.plot_background(piv_ensemble.endpoint.stack(:,:,1));
-D.plot_overlay(dvrdr_map, prctile(abs(dvrdr(~isnan(dvrdr))), 95));
-D.plot_quiver(piv_ensemble.endpoint.uv);
-D.put_xaxistitle('x (px)');  D.put_yaxistitle('y (px)');
-
 %% 7. One correlation plane
 % Planes are captured before any gating, so a window the gates rejected still
 % has one. Centre cell = zero displacement; the offset is the final-pass residual.
@@ -236,64 +168,128 @@ imagesc(plane - min(plane(:)));   axis image;   colorbar
 title(sprintf('%s, %d pair(s) | uv (%+.2f, %+.2f) px | valid %d', ...
     info.which, numel(info.pairs), info.uv(1), info.uv(2), info.valid));
 
-%% 8. (removed) Divergence four ways
-% The cell drove vfield_strain's `method` router over fd / tri / plane /
-% radial_fit and printed one table, calling the agreement a cross-validation.
-% Its own header already warned that radial_fit is eps_rr, one component, not the
-% trace -- so two of the four rows were a different quantity from the other two.
-%
-% PIV_PLAN 10.1 measured what that costs. On one event the fd and tri routes give
-% divergence that is isequaln, and the radial route differs by a median 7.6%
-% because it takes `outward` from the core centroid while vfield_polar takes it
-% from the nearest wall pixel -- a median 3.9 deg apart, worst at the wall. The
-% table was pooling two conventions and reading the spread as noise.
-%
-% Removed with vfield_strain rather than repaired: the surviving comparison is
-% vfield_divergence_fd against vfield_polar, and neither needs a router.
-% see PIV_PLAN.md 10.1
+%% 8.1 What the gates were reading, one square per interrogation window
+% lambda2 and peak/rms are the two numbers analysis_pivensemble judges a window by,
+% and both are PER WINDOW. plot_grid is the layer for that: it draws the window at
+% its own size, where plot_overlay would paint it as a pixel and plot_contour would
+% interpolate between windows -- either one claiming a resolution never measured.
+%   the colour axis runs 0..2*cut on a diverging map, so the THRESHOLD is the white
+%   line: below it the gate rejects, above it the gate keeps. That is the question
+%   this figure exists to answer, and a 98th-percentile axis would not answer it
+%   caution  the squares are the STEP, not the interrogation area. Windows overlap
+%            2:1 here, so neighbours touch while the data behind them share half
+%            their pixels
+%   note     a gate whose SWITCH is off still measures: info.on follows the
+%            threshold in param, not the switch. So corr_floor is drawn even though
+%            cell 4.1 leaves it out, and this is what it would have cut
+for q = 1:numel(piv_ensemble.endpoint.gates)
+    g = piv_ensemble.endpoint.gates(q);
+    if ~g.info.on
+        continue
+    end
+    switch g.name
+        case 'tomasi'
+            val = min(g.info.lambda2, [], 3);   % the weaker end; the gate reads that
+            axis_name = '\lambda_2, weaker end';
+        case 'corr_floor'
+            val = g.info.peak_floor;
+            axis_name = 'peak / rms';
+        otherwise
+            continue                            % neighbour keeps no per-window number
+    end
 
-%% 8.1 The window grid, coloured
-% plot_grid draws one flat square PER INTERROGATION WINDOW, at the step size.
-% plot_overlay would paint the same numbers per pixel and claim a resolution the
-% measurement never had; plot_contour would interpolate between windows
-[div_map, div_mean, div_sum] = vfield_divergence_fd(piv_ensemble.endpoint.uv, ...
-    exclmask = piv_ensemble.param.pivlab_mask);
-div_info = struct('div_mean', div_mean, 'div_sum', div_sum);
-grid_planes = piv_ensemble.endpoint.planes;
-grid_live   = ~isnan(piv_ensemble.endpoint.uv_grid(:,:,1));
-grid_value  = div_map(sub2ind(size(div_map), ...
-    round(grid_planes.ytable(grid_live)), round(grid_planes.xtable(grid_live))));
+    G = showpiv(sprintf('ev%d %s', ev, g.name), 5);
+    G.update_figsize([7 5]);
+    G.plot_background(piv_ensemble.endpoint.stack(:,:,1));
+    G.plot_grid(piv_ensemble.endpoint.planes.xtable, ...
+        piv_ensemble.endpoint.planes.ytable, val, [0 2*g.info.cut]);
+    G.put_xaxistitle('x (px)');  G.put_yaxistitle('y (px)');
+    title(G.ax, sprintf('%s   cut %.4g = %.2f x median   %d of %d rejected', ...
+        axis_name, g.info.cut, g.info.cut / g.info.median, ...
+        nnz(g.mask), numel(g.mask)));
+end
 
-G = showpiv(sprintf('ev%d divergence per window', ev), 5);
-G.update_figsize([7 5]);
-G.plot_background(piv_ensemble.endpoint.stack(:,:,1));
-G.plot_grid(grid_planes.xtable(grid_live), grid_planes.ytable(grid_live), ...
-    grid_value, prctile(abs(grid_value), 95));
-G.plot_quiver(piv_ensemble.endpoint.uv);
-G.put_xaxistitle('x (px)');  G.put_yaxistitle('y (px)');
-fprintf('%d windows drawn | %s | mean %+.5f\n', nnz(grid_live), div_info.unit, div_info.mean);
 
-%% 8.2 The triangles the divergence theorem ran on
-% Each triangle IS the cell whose gradient was computed, so painting it flat
-% shows the partition and nothing invented. Slivers and the bridges Delaunay
-% throws across the masked vessel are already dropped -- info.dropped counts them
-% the triangles themselves, not a binned map -- this cell draws the partition
-grid_xyuv = piv_ensemble.endpoint.xyuv;
-[tri_tbl, tri_info] = vfield_gradient_tri(grid_xyuv, ...
-    exclmask = piv_ensemble.param.pivlab_mask);
-tri_info.tri = tri_tbl.conn;
-tri_info.div_tri = tri_tbl.divergence;
+%% 8.2 The mesh the divergence theorem will run on
+% One object for both this cell and 8.3, so the field is triangulated ONCE. Two
+% calls, because the two halves answer different questions: applydelaunay depends
+% on WHERE the vectors are, measure on what they say.
+%   Each triangle IS the cell whose gradient gets computed, so painting it flat
+%   draws the partition the number came from and nothing invented. Slivers, and the
+%   bridges Delaunay throws across the masked vessel, are dropped before the
+%   gradient runs; info.dropped counts them
+grid_xyuv = piv_ensemble.endpoint.xyuv;   % gated, on the interrogation grid
+vp = vfield_polar(grid_xyuv, coremask, twophoton_processed.pixel2um, ...
+    exclmask = piv_ensemble.param.pivlab_mask, gated = true);
+vp.applydelaunay();   % every cell Delaunay makes, none judged
+vp.trifilter();       % long edges, slivers, cells on the mask -- a verdict
+vp.placetri();        % each triangle's radius, wedge, bin and wall normal
+vp.measure();         % the gradient, resolved against that normal
+
 T = showpiv(sprintf('ev%d divergence per triangle', ev), 5);
 T.update_figsize([7 5]);
 T.plot_background(piv_ensemble.endpoint.stack(:,:,1));
-T.plot_tri(tri_info.xy, tri_info.tri, tri_info.div_tri, ...
-    prctile(abs(tri_info.div_tri), 95));
+% tri.conn, not mesh.conn : measure() is the one place trifilter's verdict is
+% applied, so every tri.* column is the KEPT subset while mesh.conn is every cell
+% Delaunay made. Passing the two together is a size mismatch plot_tri refuses
+T.plot_tri(vp.mesh.xy, vp.tri.conn, vp.tri.divergence, ...
+    prctile(abs(vp.tri.divergence), 95));
 T.put_xaxistitle('x (px)');  T.put_yaxistitle('y (px)');
-fprintf('%d of %d triangles kept | long edge %d, sliver %d, masked %d\n', ...
-    tri_info.dropped.kept, tri_info.dropped.total, tri_info.dropped.long_edge, ...
-    tri_info.dropped.sliver, tri_info.dropped.masked);
 
-%% 8.3 What the gates took
+
+%% 8.3 Every other quantity those same triangles carry, one figure each
+% The same object, already measured in 8.2 -- vfield_polar put those triangles into
+% polar coordinates about the wall, and that is what turns four gradient components
+% into a radial and a hoop part. Five more numbers on one partition, not a second
+% measurement. Divergence is not repeated here; 8.2 has it.
+%
+% One object is one panel, and nothing tiles: the panels are arranged outside
+% MATLAB. Every signed panel takes the same colour rule, symmetric on the 98th
+% percentile, because a panel that self-normalises cannot be held against another
+frame_from = piv_ensemble.endpoint.stack(:,:,1);
+clee       = color_lee;
+disp_mag   = hypot(vp.tri.disp_radial, vp.tri.disp_tangential);
+mag_lim    = prctile(disp_mag, 98);
+
+% name | one value per triangle | colour limit ([] = symmetric on the data) | label
+tri_panel = { ...
+    'disp_radial',     vp.tri.disp_radial,     [],          'disp radial  (+ outward, \mum)'; ...
+    'disp_tangential', vp.tri.disp_tangential, [],          'disp tangential  (+ CCW, \mum)'; ...
+    'disp_magnitude',  disp_mag,               [0 mag_lim], 'disp magnitude  (\mum)'; ...
+    'strain_radial',   vp.tri.strain_radial,   [],          'strain radial  n''En'; ...
+    'strain_hoop',     vp.tri.strain_hoop,     [],          'strain hoop  t''Et'};
+
+for q = 1:size(tri_panel, 1)
+    name  = tri_panel{q, 1};
+    val   = tri_panel{q, 2};
+    lim   = tri_panel{q, 3};
+    label = tri_panel{q, 4};
+    fig_name = sprintf('ev%d %s tri', ev, name);
+
+    Q = showpiv(fig_name, 5);
+    Q.update_figsize([7 5]);
+    Q.alpha = 0.9;                      % triangles tile with no gaps; 0.55 washes out
+    if isempty(lim)
+        lim = prctile(abs(val), 98);
+    else
+        % a magnitude has no negative half, so a diverging map would spend half
+        % its range on values that cannot occur
+        Q.cmap = clee.gradient.inferno;
+    end
+    Q.plot_background(frame_from);
+    Q.plot_tri(vp.mesh.xy, vp.tri.conn, val, lim);
+    Q.plot_pivwall(coremask);        % radial and hoop are defined against it
+    Q.put_xaxistitle('x (px)');  Q.put_yaxistitle('y (px)');
+    title(Q.ax, label);
+    % Q.save2svg(fig_dir);   one panel, one SVG. Left off because it writes five
+    %                        files per event and the destination is not this
+    %                        script's to pick
+end
+fprintf('%d of %d triangles, %d panels | wedges %d, radial bins %d\n', ...
+    size(vp.tri.conn, 1), size(vp.mesh.conn, 1), size(tri_panel, 1), ...
+    vp.n_wedge, vp.n_bin);
+
+%% 8.4 What the gates took
 % Two calls, two colours. uv_ungated is every vector after the common mode came
 % out; uv is what survived, so the difference is the three gates' whole verdict
 uv_removed = piv_ensemble.endpoint.uv_ungated;
@@ -326,18 +322,14 @@ piv_validation_testbed
 %                      dropped from the PIV field and is the blob the polar rings
 %                      are measured from.
 piv_ch  = 'ch1';                                     % PIV channel -- set per dataset
-halfwin = round(0.5 * fps);                          % frames either side of from/to
+halfwin = round(0.5 * twophoton_processed.outfps);   % frames either side of from/to
 param.windows = [40 20; 20 10; 12 6];                      % [window step] per pass, coarse to fine
-S       = piv_preprocess(tp.(piv_ch));       % motion-preserving preprocess
+S       = piv_preprocess(twophoton_processed.(piv_ch));       % motion-preserving preprocess
 
-% 5.1 piv_include is the only ROI drawn here; the vessel comes from setup_rois
-redraw_rois = false;
-if redraw_rois || ~has_roi(session.roilist, 'piv_include')
-    session.roilist.addormodifyroi(twophoton_processed.ch1, 'piv_include', 'rectangle', twophoton_processed.ch2);
-    session.roilist.save2disk(session.dir_struct.primary_analysis);
-    fprintf('piv_include drawn and saved to %s\n', session.dir_struct.primary_analysis);
-else
-    fprintf('piv_include already present -- reusing (set redraw_rois=true to redraw)\n');
+% 5.1 piv_include and the traced wall are cell 3.1's; this path only reads them
+if ~has_roi(session.roilist, 'piv_include') || ~has_roi(session.roilist, 'manual_dilated_pvs')
+    error('piv_integration_testbed:noRois', ...
+        'run cell 3.1 first -- it draws piv_include and manual_dilated_pvs.');
 end
 
 % 5.2 Combine into the two masks the rest of the pipeline uses
@@ -365,22 +357,39 @@ coremask = excl;
 
 %% 11. Run PIV over every event
 % ~20 s per event, so review cell 4 first
-pick    = param.focus;                                     % subset of the labels, or {} for all
-ev_list = 1:numel(events);
-if ~isempty(pick); ev_list = find(ismember({events.state}, pick)); end
+% THE CONTROLS GO THROUGH PIV TOO. event_det.focus is the transition labels only,
+% and running that alone leaves the profile with zero pol=="none" rows -- at which
+% point difference() returns a table of NaN without erroring, and every published
+% number from this pipeline was a difference against those rows. {} = all of them.
+%   caution  it is ~2x the events and ~2x the PIV time. Narrowing to the
+%            transitions is a tuning shortcut, not a setting to leave behind
+pick    = {};
+ev_list = 1:numel(event_det.eventlist);
+if ~isempty(pick)
+    ev_list = find(ismember({event_det.eventlist.state}, pick));
+end
+fprintf('PIV on %d of %d events | %d controls\n', numel(ev_list), ...
+    numel(event_det.eventlist), ...
+    nnz(strcmp({event_det.eventlist(ev_list).pol}, 'none')));
 
-piv_run = piv_run_events(events, S, 'halfwin', halfwin, 'sel', ev_list, ...
+piv_run = piv_run_events(event_det.eventlist, S, 'halfwin', halfwin, 'sel', ev_list, ...
     'piv_opt', {'window_sizes', param.windows, 'repeat', 1, 'do_pad', 1, ...
                 'exclmask', exclmask, 'use_gpu', true});
 
 %% 12. Perivascular divergence, every event
 % test_label narrows to one transition while tuning; '' = every event in piv_run
-test_label = 'nrem2rem';
+%   caution  a label here drops the CONTROLS along with everything else, and the
+%            profile then has nothing to difference against. Leave it '' for any
+%            number that gets quoted
+test_label = '';
 sel = 1:numel(piv_run);
-if ~isempty(test_label); sel = find(strcmp({piv_run.state}, test_label)); end
+if ~isempty(test_label)
+    sel = find(strcmp({piv_run.state}, test_label));
+end
 piv_sel = piv_run(sel);
-fprintf('divergence on %d of %d events (%s)\n', numel(sel), numel(piv_run), ...
-    strjoin(unique({piv_sel.state}), ', '));
+fprintf('divergence on %d of %d events (%s) | %d controls\n', ...
+    numel(sel), numel(piv_run), strjoin(unique({piv_sel.state}), ', '), ...
+    nnz(strcmp({piv_sel.pol}, 'none')));
 
 % gated = anything was applied to the field after the correlation. TRUE here
 % because piv_run_events calls piv_validate at ens_interleave:97 -- PIVlab's
@@ -389,32 +398,147 @@ fprintf('divergence on %d of %d events (%s)\n', numel(sel), numel(piv_run), ...
 % were filtered differently, and vfield_profile.append refuses a mixed set.
 % Whether either kind of filtering belongs here is a separate question with a
 % measured answer -- see CLAUDE_LOG.md, the gates remove the larger vectors
-[vprofile, vfields] = piv_polar_events(piv_sel, coremask, p2u, ...
+[vprofile, vfields] = piv_polar_events(piv_sel, coremask, twophoton_processed.pixel2um, ...
     exclmask = exclmask, n_wedge = 12, bin_edges_um = 0:1.5:40, ...
     min_tri_wedge = 10, gated = true, verbose = true);
 
-%% 13. Batch figures
-% ctx carries everything the figures need; piv_figure holds the shared quiver scale
-% and colour limits
-ctx = struct('S', S, 'coremask', coremask, 'exclmask', exclmask, 't_axis', t_axis, ...
-             'dtrace', dtrace, 'dsg', dsg, 'fps', fps, 'p2u', p2u, ...
-             'halfwin', halfwin, 'events', events, 'state_idx', img_state.state_idx);
-F = piv_figure(piv_sel, vfields, vprofile, ctx);
-T = F.summary();
+%% 13. Batch figures -- shared decisions first
+% Two things must be the same across every panel or the panels cannot be read
+% against each other: the quiver scale and the colour limits. They are computed
+% HERE, once, and passed in. There is no figure class holding them any more --
+% a class that owns a shared setting hides it, and the setting is the part a
+% reader has to see
+fig_style = struct('scale', 5, 'alpha', 0.55, 'cmap', 'turbo', ...
+                   'head', 5, 'linew', 1, 'arrow', 'green');
+lim_dr = vprofile.peak('disp_radial');     % one limit per quantity, over ALL rows
+lim_dv = vprofile.peak('divergence');      % pass a per-event limit and each map
+lim_vo = vprofile.peak('volume_out');      % self-normalises -- showpiv says so too
 
-%% 13.1 Sign and radial-profile overview
-F.signcheck();                 % dD vs measured direction -- the polarities must split
-F.radprofile();                % volume_out vs distance, ONE wedge set for every row
+% the two per-event numbers the checks below read. One value per event, every
+% cell of that event one sample; the wedge-membership question does not arise
+% here the way it does for a radial profile
+mean_dr = arrayfun(@(r) mean(r.cells.disp_radial(:), 'omitnan'), vprofile.rows)';
+mean_dv = arrayfun(@(r) mean(r.cells.divergence(:),  'omitnan'), vprofile.rows)';
+pol_all = string({piv_sel.pol});
+dD_all  = [piv_sel.diameter_change];
 
-%% 13.2 One event in full
-F.panel(1);                    % disp_radial | divergence | volume_out | diameter
+%% 13.1 Sign check -- the two polarities must land in opposite half-planes
+% One quantity per axis. disp_radial is a CHECK (the wall has to follow dD or
+% something is wrong upstream); divergence is a RESULT and the count is
+% reported, not asserted -- see DIVERGENCE_RESULT.md.
+% Drawn here rather than in a function: it is a scatter with two reference
+% lines, and wrapping that would hide the one thing worth sharing, which is the
+% colour convention -- that is color_lee.polarity
+co = color_lee.polarity(pol_all);
+figure('Name', 'sign check', 'Position', [200 200 950 400]);
+tiledlayout(1, 2, 'TileSpacing', 'compact');
+for q = {'disp_radial', mean_dr, 'wall motion follows \DeltaD'; ...
+         'divergence',  mean_dv, 'divergence follows polarity'}'
+    nexttile;
+    hold on
+    grid on
+    scatter(gca, dD_all, q{2}, 70, co, 'filled');
+    xline(gca, 0, 'k--');
+    yline(gca, 0, 'k--');
+    xlabel(gca, '\DeltaD (\mum)');
+    ylabel(gca, showpiv.axis_label(q{1}));
+    [n_ok, n_tot] = event_validatesign(pol_all, q{2});
+    title(gca, sprintf('%s   (%d/%d consistent)', q{3}, n_ok, n_tot));
+end
 
-%% 13.3 All events of one polarity
-F.tiles('dilation');           % shared colour limits
-F.tiles('constriction');
+%% 13.2 Radial profile -- ONE wedge set for every row
+% The wedge set is fixed BEFORE the curves are built. A mean over whatever
+% wedges reach each ring averages more of them near the wall than far from it,
+% and the slope that comes out is partly the change in membership
+quantity = 'volume_out';
+allrows  = true(1, vprofile.n_row);
+[bin_range, wedge_ok] = vprofile.widest_common(allrows, quantity);
+if any(isnan(bin_range))
+    warning('piv_integration_testbed:noCommonSupport', ...
+        'no wedge spans any interval for every row; nothing to plot');
+else
+    curves = vprofile.curve_rows(allrows, bin_range, quantity = quantity);
+    r      = vprofile.bin_center_um;
+    figure('Name', 'radial profile', 'Position', [120 80 1000 460]);
+    hold on
+    grid on
+    % the quiet rows are on the SAME axes. They are the only thing that says
+    % whether a curve is a measurement or the pipeline's own floor
+    for k = 1:vprofile.n_row
+        plot(r, curves(k, :), '-o', 'Color', co(k, :), 'LineWidth', 1.1, ...
+            'MarkerSize', 4, 'HandleVisibility', 'off');
+    end
+    yline(0, 'k--', 'HandleVisibility', 'off');
+    xlabel('\mum from the vessel wall');
+    ylabel(showpiv.axis_label(quantity));
+    title(sprintf(['red = dilation, blue = constriction, grey = quiet   |   ' ...
+        '%d/%d wedges over %.1f-%.1f \mum'], nnz(wedge_ok), vprofile.n_wedge, ...
+        r(bin_range(1)), r(bin_range(2))));
+end
 
-%% 13.4 Raw frames PIV used (blink comparator)
-F.slices(1);
+%% 13.3 One event, one quantity, one figure
+% Nothing tiles. The deliverable is a representative event per transition, and
+% the panels are placed next to each other in Illustrator -- a figure that bakes
+% in an arrangement is a figure that has to be taken apart again.
+% The maps are PAINTED, not measured: vfield_polar bins triangles and keeps no
+% dense map; paint_cells spreads a per-cell value back over the frame so it can
+% be looked at where it came from. Nothing downstream reads a painted map
+k = 1;
+R = piv_sel(k);
+bg   = mat2gray(S(:, :, R.from));                       % the EARLIER state
+keep = ~isnan(R.xyuv(:,:,3)) & ~isnan(R.xyuv(:,:,4));
+uv   = piv_stamp(R.xyuv, R.planes.imsize, keep);        % drawing only
+cap  = [sprintf('ev%d  %s bout %d  %s  %.1f s  ', R.id, R.state, R.bout, ...
+        R.pol, R.rise_s) '\DeltaD=' sprintf('%+.2f', R.diameter_change) ' \mum'];
+
+for q = {'disp_radial', lim_dr; 'divergence', lim_dv; 'volume_out', lim_vo}'
+    which = q{1};
+    lim   = q{2};
+    P = showpiv(sprintf('%s ev%d %s %s', which, R.id, R.state, R.pol), fig_style.scale);
+    P.alpha      = fig_style.alpha;
+    P.linew      = fig_style.linew;
+    P.head_len   = fig_style.head;
+    P.head_width = fig_style.head;
+    P.cmap       = fig_style.cmap;
+    % one colour for shaft and head: showpiv's two-colour default marks a second
+    % population, and there is only one here
+    P.fill_color = fig_style.arrow;
+    P.line_color = fig_style.arrow;
+    % the wall goes down AFTER the overlay and BEFORE the arrows -- the overlay
+    % is opaque enough to swallow it, and the arrows stay on top of both
+    P.plot_background(bg);
+    P.plot_overlay(vfields{k}.paint_cells(vprofile.rows(k).cells.(which)), lim);
+    P.plot_pivwall(coremask);
+    P.plot_quiver(uv);
+    title(P.ax, [showpiv.axis_label(which) '   ' cap]);
+end
+
+%% 13.4 One event's diameter trace, zoomed
+% event_review OWNS this picture -- raw trace, the smoothed one the picking saw,
+% the state bands and the from/to markers. A second copy lived on the old figure
+% class purely to zoom to one event, and a zoom is xlim, not a function.
+% Same call as cell 1.1 so the two figures are the same picture
+k = 1;
+ax_tr = event_review(event_det.eventlist, event_det.diameter, ...
+    event_det.smooth_diameter, event_det.info.P.sg_win_s, twophoton_processed.t_axis, ...
+    'pixel2um',    twophoton_processed.pixel2um, ...
+    'sleep_score', sleep_integrate.sleep_score, ...
+    'state_idx',   img_state.state_idx, ...
+    'states',      event_det.param.states);
+w  = [event_det.eventlist(piv_sel(k).id).start_f, event_det.eventlist(piv_sel(k).id).end_f];
+rg = max(1, w(1) - 60):min(numel(event_det.diameter), w(2) + 60);
+xlim(ax_tr, twophoton_processed.t_axis([rg(1) rg(end)]));
+
+%% 13.5 Raw frames PIV used (blink comparator)
+% Odd slice = FROM, even = TO, so stepping one slice at a time separates wall
+% motion from a whole-field drift. piv_interleave is the SAME function the
+% correlator ran, not a copy of it, so these really are the frames PIV used
+[inter, pair_frames] = piv_interleave(S, piv_sel(1).from, piv_sel(1).to, halfwin);
+figure('Name', sprintf('ev%d %s %s  PIV frames (odd=from, even=to)', ...
+    piv_sel(1).id, piv_sel(1).state, piv_sel(1).pol));
+sliceViewer(inter);
+fprintf('pair_frames matches the stored run: %d\n', ...
+    isequal(pair_frames, piv_sel(1).planes.pair_frames));
 
 %% 14. Assemble piv_events / piv_result  (not saved -- inspect only)
 % 9.1 Polar frame from the pax axis and the vessel centroid
@@ -424,13 +548,14 @@ pax_angle = atan2d(paxv(2,2) - paxv(1,2), paxv(2,1) - paxv(1,1));
 azframe   = polar_frame(size(coremask), center, 'pax_angle', pax_angle, 'n_sectors', 8);
 
 % 9.2 Detection record
-piv_events = struct('source_ref', 'fwhm', 'events', events, 'focus', {param.focus}, ...
+piv_events = struct('source_ref', 'fwhm', ...
+    'events', event_det.eventlist, 'focus', {event_det.focus}, ...
     'detect', struct('params', det.P, 'sign_ok', det.sign_ok, ...
                      'clipped', det.clipped, 'dropped', det.dropped));
 
 % 9.3 PIV record
 piv_result = struct();
-piv_result.meta    = struct('pixel2um', p2u, 'outfps', fps, 'halfwin', halfwin, ...
+piv_result.meta    = struct('pixel2um', twophoton_processed.pixel2um, 'outfps', twophoton_processed.outfps, 'halfwin', halfwin, ...
     'channel', piv_ch);
 piv_result.frame   = struct('center', center, 'pax_angle', pax_angle, 'n_sectors', 8, ...
     'ring_edges', polar{1}.info.ring_edges);
