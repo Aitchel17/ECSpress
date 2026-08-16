@@ -137,6 +137,41 @@ classdef vfield_profile < handle
             end
         end
 
+        function v = peak(obj, quantity, rowsel)
+        %PEAK  The largest magnitude one quantity reaches anywhere in the cohort.
+        %   A cohort number, which is why it is here: max over ROWS is the same
+        %   shape of question as wedges_over and widest_common, and a single row
+        %   cannot answer it.
+        % IN  quantity  char, which field of cells to look at
+        %     rowsel    1 x n_row bool, default every row
+        % OUT v         1 x 1 float, max |value| over the selected rows. 1 when
+        %               nothing finite was found, so a caller can divide by it
+        %
+        %   why  the display layer wants ONE limit across every panel -- pass a
+        %        per-event limit and each map self-normalises, so a weak event
+        %        and a strong one come out looking the same
+        %        (showpiv.plot_overlay says the same thing from its side)
+        %   note named for what it measures, not for what it is for. This class
+        %        does not know that the number becomes a colour axis, and it
+        %        should not -- see CLAUDE.md, engines stay pure
+            arguments
+                obj
+                quantity (1,:) char
+                rowsel   (1,:) logical = true(1, obj.n_row)
+            end
+            v = 0;
+            for k = find(rowsel)
+                M = obj.rows(k).cells.(quantity);
+                m = max(abs(M(:)), [], 'omitnan');
+                if isfinite(m)
+                    v = max(v, m);
+                end
+            end
+            if v <= 0
+                v = 1;
+            end
+        end
+
         function support = gate_support(obj, rowsel, quantity)
         %GATE_SUPPORT  Which cells every row in the comparison actually has.
         %   n_bin x n_wedge, NOT n_bin x n_wedge x n_row. There is one partition,
@@ -252,6 +287,14 @@ classdef vfield_profile < handle
                 opt.fold (1,1) logical = false
             end
             isq = obj.quiet_rows();
+            % A difference against nothing is not a difference. Without this the
+            % table comes back all NaN and only the verbose line says why, which is
+            % how a whole run of transitions-only ended up looking like a result
+            if ~any(isq)
+                error('vfield_profile:noQuietRows', ...
+                    ['no pol=="none" rows in this profile. The controls have to go ' ...
+                     'through PIV too -- see piv_integration_testbed cell 11.']);
+            end
             both = rowsel | isq;
             wedge_ok = obj.wedges_over(both, bin_range, opt.quantity);
             if ~any(wedge_ok)

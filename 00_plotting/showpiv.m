@@ -21,9 +21,13 @@ classdef showpiv < make_fig
 %   err  plot_overlay on a sector-painted map draws the PARTITION as if it were
 %        resolution -- flat inside every cell, hard edge at every wall
 %
+%   plot_pivwall is not one of the four: it draws no value. It is the reference
+%   the polar quantities are defined against, and every panel showing one needs it.
+%
 %   USAGE
 %     P = showpiv('ev2 vectors');
 %     P.plot_background(S(:,:,706));
+%     P.plot_pivwall(coremask);
 %     P.plot_quiver(piv.uv);
 %     P.plot_overlay(vrmap, 2);          % symmetric limits at +/- 2
 %     P.plot_grid(pl.xtable, pl.ytable, div_grid, 0.05);
@@ -71,6 +75,50 @@ classdef showpiv < make_fig
             axis(obj.ax, 'image');
             hold(obj.ax, 'on');
             obj.preset_axis
+        end
+
+        function h = plot_pivwall(obj, mask, wall_color)
+        % IN   mask        H x W bool  the region whose boundary is drawn
+        %      wall_color  char        a color_lee.clist field name
+        % OUT  h           the line, one object however many regions there are
+        %
+        %   The wall is not a measurement, it is the reference the polar
+        %   quantities are DEFINED against: radial and hoop are components along
+        %   and across it, so a panel carrying either is unreadable without it.
+        %   Any mask goes in -- the lumen, the exclusion mask, whatever the panel
+        %   is making a claim about.
+        %
+        %   Traced as a boundary rather than drawn from bwperim. Perimeter pixels
+        %   plot as one marker each, which thins to a dashed ring the moment the
+        %   axis is not at full resolution; a traced loop stays a closed curve at
+        %   any zoom. One line object with NaN between regions, the same way
+        %   plot_quiver draws its shafts.
+        %
+        %   Green by default because obj.cmap runs blue to red, and an outline in
+        %   either of those reads as a value.
+            arguments
+                obj
+                mask       (:,:) logical
+                wall_color (1,:) char = 'green'
+            end
+            outlines = bwboundaries(mask);
+            if isempty(outlines)
+                h = gobjects(0);
+                return
+            end
+            % bwboundaries closes each loop itself, so the NaN separates one
+            % region from the next and nothing else
+            segments = cell(numel(outlines), 1);
+            for k = 1:numel(outlines)
+                loop = outlines{k};
+                xy_loop = [loop(:,2), loop(:,1)];        % [row col] -> [x y]
+                segments{k} = [xy_loop; NaN, NaN];
+            end
+            xy = vertcat(segments{:});
+            edge = color_lee.clist.(wall_color);
+            hold(obj.ax, 'on');
+            h = line(obj.ax, xy(:,1), xy(:,2), 'Color', edge, 'LineWidth', obj.linew);
+            axis(obj.ax, 'image');
         end
 
         function plot_quiver(obj, uv, fill_color, line_color)
@@ -179,21 +227,24 @@ classdef showpiv < make_fig
 
         function plot_overlay(obj, M, lim)
         % IN   M    H x W scalar field, NaN where it does not apply
-        %      lim  colour limit; the axis runs -lim..+lim, [] = symmetric on M
+        %      lim  scalar = axis runs -lim..+lim | [lo hi] = as given, for a
+        %           quantity with no negative half | [] = symmetric on M
         %
         %   Pass the same lim across events, or each map self-normalises and
         %   amplitude differences between events stop being visible.
             arguments
                 obj
                 M double
-                lim = []
+                lim (1,:) double = []
             end
-            if isempty(lim); lim = max(abs(M(:)), [], 'omitnan'); end
             hold(obj.ax, 'on');
             h = imagesc(obj.ax, M);
             set(h, 'AlphaData', obj.alpha * ~isnan(M));
             colormap(obj.ax, obj.cmap);
-            if isfinite(lim) && lim > 0; clim(obj.ax, [-lim lim]); end
+            range = showpiv.clim_from(lim, M);
+            if ~isempty(range)
+                clim(obj.ax, range);
+            end
             colorbar(obj.ax);
             axis(obj.ax, 'image');
         end
@@ -201,7 +252,7 @@ classdef showpiv < make_fig
         function h = plot_grid(obj, x, y, val, lim, cell_px)
         % IN   x, y     window centres in px, any matching shape
         %      val      one value per window, same shape
-        %      lim      colour limit, axis runs -lim..+lim. [] = symmetric on val
+        %      lim      scalar = -lim..+lim | [lo hi] = as given | [] = symmetric
         %      cell_px  square side in px. [] = the vector spacing, read off x and y
         % OUT  h        the patch, one object however many windows there are
         %
@@ -219,14 +270,20 @@ classdef showpiv < make_fig
                 x       double
                 y       double
                 val     double
-                lim     = []
+                lim     (1,:) double = []
                 cell_px = []
             end
             keep = isfinite(x) & isfinite(y) & isfinite(val);
-            x = x(keep);  y = y(keep);  val = val(keep);
-            if isempty(x); h = gobjects(0); return; end
-            if isempty(cell_px); cell_px = obj.spacing_of(x, y); end
-            if isempty(lim);     lim = max(abs(val), [], 'omitnan'); end
+            x = x(keep);
+            y = y(keep);
+            val = val(keep);
+            if isempty(x)
+                h = gobjects(0);
+                return
+            end
+            if isempty(cell_px)
+                cell_px = showpiv.spacing_of(x, y);
+            end
 
             % 1. Four corners per window, one patch for the lot
             half = cell_px / 2;
@@ -238,7 +295,10 @@ classdef showpiv < make_fig
                 'Vertices', [vx(:), vy(:)], 'FaceVertexCData', val(:), ...
                 'FaceColor', 'flat', 'EdgeColor', 'none', 'FaceAlpha', obj.alpha);
             colormap(obj.ax, obj.cmap);
-            if isfinite(lim) && lim > 0; clim(obj.ax, [-lim lim]); end
+            range = showpiv.clim_from(lim, val);
+            if ~isempty(range)
+                clim(obj.ax, range);
+            end
             colorbar(obj.ax);
             axis(obj.ax, 'image');
         end
@@ -247,7 +307,7 @@ classdef showpiv < make_fig
         % IN   xy     nPoint x 2 [x y] vertex positions, px
         %      faces  nTri x 3 vertex indices -- vfield_polar's obj.tri.conn
         %      val    nTri x 1 value per triangle, or nPoint x 1 per vertex
-        %      lim    colour limit, axis runs -lim..+lim. [] = symmetric on val
+        %      lim    scalar = -lim..+lim | [lo hi] = as given | [] = symmetric
         % OUT  h      the patch
         %
         %   The display that matches the divergence-theorem route: each triangle
@@ -260,9 +320,8 @@ classdef showpiv < make_fig
                 xy    double
                 faces double
                 val   double
-                lim   = []
+                lim   (1,:) double = []
             end
-            if isempty(lim); lim = max(abs(val(:)), [], 'omitnan'); end
             % caution  faces first : nTri and nPoint can coincide, and a per-face
             %          value silently interpolated is a smoothing nobody asked for
             if numel(val) == size(faces, 1)
@@ -279,13 +338,73 @@ classdef showpiv < make_fig
                 'FaceVertexCData', val(:), 'FaceColor', shading_mode, ...
                 'EdgeColor', 'none', 'FaceAlpha', obj.alpha);
             colormap(obj.ax, obj.cmap);
-            if isfinite(lim) && lim > 0; clim(obj.ax, [-lim lim]); end
+            range = showpiv.clim_from(lim, val);
+            if ~isempty(range)
+                clim(obj.ax, range);
+            end
             colorbar(obj.ax);
             axis(obj.ax, 'image');
         end
     end
 
+    methods (Static)
+        function label = axis_label(name)
+        %AXIS_LABEL  What the colour bar or the y axis says for one per-cell quantity.
+        %   The single place that knows the six names vfield_polar emits. A name
+        %   that is not here THROWS -- a mistyped quantity would otherwise draw an
+        %   empty axis, and an empty axis reads as a measurement of zero.
+        % IN   name   char, one of the six
+        % OUT  label  char, TeX
+        %
+        %   why  the label carries the SIGN CONVENTION, which is the part a
+        %        reader cannot recover from the number. disp_radial is + outward
+        %        and disp_tangential is + counter-clockwise, both set in
+        %        vfield_polar.measure, and this is where they become visible
+        %   note volume_out is cumulative: a bin's value is the integral out to
+        %        that radius, not the value at it
+            arguments
+                name (1,:) char
+            end
+            % name | axis label. The names are the settled vocabulary; see BACKLOG.md
+            known = {'divergence',      'divergence  \DeltaA/A'; ...
+                     'strain_radial',   'strain_radial  n''En'; ...
+                     'strain_hoop',     'strain_hoop  t''Et'; ...
+                     'disp_radial',     'disp_radial  (+ outward, \mum)'; ...
+                     'disp_tangential', 'disp_tangential  (+ CCW, \mum)'; ...
+                     'volume_out',      'volume_out  (cumulative, \mum^2)'};
+            hit = strcmp(known(:, 1), name);
+            if ~any(hit)
+                error('showpiv:unknownQuantity', '%s is not one of: %s', ...
+                    name, strjoin(known(:, 1)', ', '));
+            end
+            label = known{hit, 2};
+        end
+    end
+
     methods (Static, Access = private)
+        function range = clim_from(lim, val)
+        %CLIM_FROM  Colour axis from the lim argument the three scalar layers take.
+        % IN   lim    [] = symmetric on val | scalar = -lim..+lim | [lo hi] = as given
+        %      val    the data, read only when lim is empty
+        % OUT  range  1 x 2, or [] when there is nothing worth setting
+        %
+        %   A scalar says the quantity is read against zero, which is why it was
+        %   the only form for a long time. A magnitude has no negative half, and
+        %   on a symmetric axis it spends half the colormap on values it cannot
+        %   take -- so two values are passed straight through.
+            if isempty(lim)
+                peak = max(abs(val(:)), [], 'omitnan');
+                range = [-peak, peak];
+            elseif isscalar(lim)
+                range = [-lim, lim];
+            else
+                range = reshape(lim, 1, []);
+            end
+            if ~all(isfinite(range)) || range(end) <= range(1)
+                range = [];
+            end
+        end
+
         function step = spacing_of(x, y)
         %SPACING_OF  Vector spacing in px, from the positions alone.
         %   The gap between occupied columns and rows, median of both. Same

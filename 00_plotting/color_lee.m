@@ -77,6 +77,27 @@ classdef color_lee
     end
     
     methods (Static)
+        function rgb = polarity(pol)
+        % polarity  One colour per event polarity, so every figure agrees.
+        %   IN   pol  1 x N string or cellstr: "dilation" / "constriction" /
+        %             anything else, which is a control
+        %   OUT  rgb  N x 3, one row per entry
+        %
+        %   The vocabulary is analysis_event's, not PIV's -- the same three
+        %   labels reach the FWHM figures. It lives here because two figures
+        %   that colour the same category differently are misread, and there is
+        %   nowhere else both of them look.
+        %   Controls are grey and deliberately dull: they carry no prescribed
+        %   direction, and a saturated colour would invite reading one.
+            arguments
+                pol (1,:)
+            end
+            pol = string(pol);
+            rgb = repmat([.55 .55 .55], numel(pol), 1);
+            rgb(pol == "dilation",     :) = repmat([.85 .25 .25], nnz(pol == "dilation"), 1);
+            rgb(pol == "constriction", :) = repmat([.20 .40 .85], nnz(pol == "constriction"), 1);
+        end
+
         function rgb = lch(L, C, H)
             % lch Converts LCH(uv) color to sRGB.
             % L: Lightness 0-100, C: Chroma, H: Hue 0-360 degrees
