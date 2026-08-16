@@ -27,6 +27,36 @@ classdef analysis_event < handle
         smooth_diameter (1,:) double  % 1 x T float   what the picking ran on; set by arousaltransition
         eventlist                     % 1 x N struct  every event and control, chronological
         info            struct        % what each stage measured, see below
+        param = struct( ...           % the partition. Both stages read it
+            'merge', {{ ...           % N x 4 cell  {earlier, later, label, polarity}
+        %    earlier(A)    later(B)      label             polarity
+            'nrem',       'rem',        'nrem2rem',       'dilation'     ; ...
+            'uarousal',   'nrem',       'uarousal2nrem',  'dilation'     ; ...
+            'roughawake', 'nrem',       'awake2nrem',     'dilation'     ; ...
+            'rem',        'roughawake', 'rem2awake',      'constriction' ; ...
+            'nrem',       'roughawake', 'nrem2awake',     'constriction' ; ...
+            'nrem',       'uarousal',   'nrem2uarousal',  'constriction' }}, ...
+            'states', {{'roughnrem', 'rem', 'roughawake'}})
+                                      % 1 x K cell  state_bout fields the controls search
+    end
+    %   why param and not two arguments : control's own header requires the SAME
+    %   partition arousaltransition was given -- it finds boundaries BETWEEN states
+    %   and control searches INSIDE them, so a different partition makes the
+    %   avoidance meaningless. Passed separately at two call sites, nothing shows
+    %   whether they agree. Held here, one object answers it
+    %   caution  THIS IS THE ONE PLACE THE CLASS NAMES SLEEP STATES. Everything
+    %            else about scoring stays outside -- the bout tables come in as an
+    %            argument, and nothing here interprets them. The default is this
+    %            project's standard six transitions; a design with different states
+    %            sets param.merge and param.states and the class does not care
+    %   note  merge and states do not have to name the same fields, and by default
+    %         they do not: merge names nrem / uarousal, states names roughnrem.
+    %         Transitions are found on the fine bouts and controls searched inside
+    %         the coarse ones
+
+    properties (Dependent)
+        focus   % 1 x N cell  the transition labels, column 3 of param.merge. The
+                % subset of eventlist a PIV run walks; derived, never set
     end
     %   info, field for field. Nothing here is an echo of an argument.
     %     dropped    struct   empty_band / out_of_range, per event_pick_excursions
@@ -56,6 +86,14 @@ classdef analysis_event < handle
             obj.t_axis   = t_axis;
         end
 
+        function v = get.focus(obj)
+            if isempty(obj.param.merge)
+                v = {};
+                return
+            end
+            v = obj.param.merge(:, 3)';
+        end
+
         function arousaltransition(obj, state_bout, merge, opt)
         % AROUSALTRANSITION  Find the endpoints of every state-transition excursion.
         %   Fills smooth_diameter, eventlist and info.
@@ -63,7 +101,10 @@ classdef analysis_event < handle
         % IN   state_bout struct       [nBout x 2] frame-index tables per state, from
         %                              state_image.state_idx. This class knows nothing
         %                              about sleep scoring, so they come in
-        %      merge      N x 4 cell   {earlierState, laterState, label, polarity}
+        %      merge      N x 4 cell   {earlierState, laterState, label, polarity}.
+        %                              Omitted = obj.param.merge; given, it is
+        %                              WRITTEN there, so the object and the run
+        %                              cannot disagree about which partition ran
         %      search_s   float s      search window each side of a transition
         %      sg_win_s   float s      Savitzky-Golay window of the picking trace
         %      peaktol    float 0..1   band level, median toward the extreme
@@ -75,14 +116,22 @@ classdef analysis_event < handle
             arguments
                 obj
                 state_bout     struct
-                merge          cell
+                merge          cell = {}
                 opt.search_s   (1,1) double = 30
                 opt.sg_win_s   (1,1) double = 3
                 opt.peaktol    (1,1) double = 0.80
             end
+            if ~isempty(merge)
+                obj.param.merge = merge;
+            end
+            if isempty(obj.param.merge)
+                error('analysis_event:noMerge', ...
+                    ['no transition table. Pass one, or set param.merge -- ' ...
+                     '{earlier, later, label, polarity}, one row per transition.']);
+            end
 
             % 1. Structural: which stretches to search and what polarity to expect
-            pairs = event_merge_bouts(state_bout, merge, obj.t_axis, opt.search_s);
+            pairs = event_merge_bouts(state_bout, obj.param.merge, obj.t_axis, opt.search_s);
 
             % 2. Where on the trace each endpoint actually lands
             [obj.eventlist, pickinfo] = event_pick_excursions( ...
@@ -142,6 +191,7 @@ classdef analysis_event < handle
                 obj
                 state_bout      struct
                 opt.states      cell = {}
+                                     % omitted = obj.param.states; given, written there
                 opt.search_frac (1,2) double = [1/3 2/3]
                 opt.dd_frac     (1,1) double {mustBePositive} = 0.1
                 opt.range_frac  (1,1) double {mustBePositive} = Inf
@@ -149,6 +199,9 @@ classdef analysis_event < handle
                 opt.len_min_s   (1,1) double = 2
                 opt.margin      (1,1) double = 2
                 opt.seed        (1,1) double = 0
+            end
+            if ~isempty(opt.states)
+                obj.param.states = opt.states;
             end
             if isempty(obj.eventlist) || isempty(obj.smooth_diameter)
                 error('analysis_event:noTransitions', ...
@@ -178,7 +231,7 @@ classdef analysis_event < handle
 
             % 4. The stable stretches
             [quietrow, quietinfo] = event_findquiet(obj.diameter, obj.t_axis, ...
-                state_bout, states = opt.states, ...
+                state_bout, states = obj.param.states, ...
                 search_frac = opt.search_frac, max_dd = max_dd, ...
                 max_range = max_range, len_frac = opt.len_frac, ...
                 len_min_s = opt.len_min_s, exclude = excluded, dsg = dsg, ...
