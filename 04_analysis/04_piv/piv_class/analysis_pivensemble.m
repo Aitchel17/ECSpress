@@ -216,9 +216,18 @@ classdef analysis_pivensemble < handle
                 span([lead(:), trail(:)]), 1);
         end
 
-        function correlate(obj, which)
-        % IN   which  str   "endpoint", "consecutive", or both (default)
-        % OUT  none; fills planes and seeds uv_grid for each named result
+        function correlate(obj, which, opt)
+        % IN   which         str     "endpoint", "consecutive", or both (default)
+        %      window_sizes  P x 2 int  one ROW PER PASS, coarse to fine, each row
+        %                    [window step]. [40 20; 20 10] is two passes,
+        %                    [40 20; 20 10; 12 6] is three. Omitted = obj.param
+        %                    caution  only row 1's STEP is used. piv_corr_ensemble
+        %                    passes one step_size to PIVlab and derives the later
+        %                    passes from the interrogation areas, so writing
+        %                    [40 20; 20 5] does not give pass 2 a step of 5
+        % OUT  none; fills planes. xyuv stays [] until gate() runs -- it means the
+        %      GATED grid and nothing else, so there is no window in which it
+        %      means the raw one
         %
         % why      the expensive half and the only irreversible one
         % why      gate() separate : it is the half worth repeating, and doing it
@@ -226,11 +235,19 @@ classdef analysis_pivensemble < handle
         % why      piv_corr_ensemble gates nothing : every judgement is in gate(),
         %          in an order this class chose
         % why      planes always kept : that is what makes gate() cheap
+        % why      a ladder given here is WRITTEN INTO obj.param before it runs.
+        %          The planes are the only record of what was correlated, so an
+        %          argument that left the property saying something else would
+        %          make the object disagree with its own contents
         % caution  name one result to skip the other, which is most of the cost
             arguments
                 obj
                 which (1,:) string {mustBeMember(which, ...
                     ["endpoint", "consecutive"])} = ["endpoint", "consecutive"]
+                opt.window_sizes (:,2) double {mustBeInteger, mustBePositive} = zeros(0,2)
+            end
+            if ~isempty(opt.window_sizes)
+                obj.param.pivlab_windows = opt.window_sizes;
             end
             settings = obj.param;
             for name = which
@@ -250,7 +267,6 @@ classdef analysis_pivensemble < handle
                 %          measures a vector against its own peak half-width, and
                 %          a consecutive field already x54 clears that bar for
                 %          nothing
-                result.uv_grid = cat(3, planes.utable, planes.vtable);
                 obj.(name)     = result;
             end
         end
@@ -261,7 +277,7 @@ classdef analysis_pivensemble < handle
         %      neighbour             bool, default FALSE -- it rejects labelled-good
         %              vectors 3x more often than labelled-bad ones; see param
         %              a switched-off gate still forms its verdict into gates(k).mask
-        % OUT  none; fills uv, uv_grid, uv_ungated, common_mode, corr, gates
+        % OUT  none; fills xyuv, xyuv_ungated, uv, uv_ungated, common_mode, gates
         %
         % why      switch vs param = [] : the switch keeps the THRESHOLD, so the
         %          field without a gate can be seen without losing the number
@@ -300,13 +316,24 @@ classdef analysis_pivensemble < handle
                 opt.corr_floor (1,1) logical = true
                 opt.neighbour  (1,1) logical = false
             end
+            % Gate what has actually been correlated. correlate() takes a name to
+            % skip the other half's cost, and making the caller repeat that name
+            % here is a duplication that drifts -- correlate one and gate both is
+            % the trap the pairing sets. Skipped is reported, never silent
+            skipped = which(arrayfun(@(n) isempty(obj.(n).planes), which));
+            which   = setdiff(which, skipped, 'stable');
+            if isempty(which)
+                error('analysis_pivensemble:noPlanes', ...
+                    'nothing has been correlated; call correlate() first.');
+            end
+            if ~isempty(skipped) && obj.param.verbose
+                fprintf('gate          skipping %s, not correlated\n', ...
+                    strjoin(skipped, ', '));
+            end
+
             for name = which
                 result = obj.(name);
                 planes = result.planes;
-                if isempty(planes)
-                    error('analysis_pivensemble:noPlanes', ...
-                        '%s has not been correlated; call correlate("%s").', name, name);
-                end
                 % 1. From the correlation, unscaled : the gates work in
                 %    correlation px, see step 6
                 u = planes.utable;
@@ -322,8 +349,8 @@ classdef analysis_pivensemble < handle
                 xyuv     = cat(3, planes.xtable, planes.ytable, u, v);
                 has_uv   = ~isnan(u) & ~isnan(v);
                 keep_raw = (planes.typevector == 1) & has_uv;
-                result.xyuv       = xyuv;
-                result.uv_ungated = piv_stamp(xyuv, planes.imsize, keep_raw) * result.scale;
+                result.xyuv_ungated = piv_blank(xyuv, keep_raw);
+                result.uv_ungated   = piv_stamp(xyuv, planes.imsize, keep_raw) * result.scale;
                 if obj.param.verbose
                     fprintf('%-12s %4d raw | common mode (%+.3f, %+.3f) px out\n', ...
                         name, nnz(~isnan(planes.utable)), result.common_mode);
@@ -382,11 +409,10 @@ classdef analysis_pivensemble < handle
                 %    why  the same xyuv as step 2.1, a different mask. The gated
                 %         and ungated maps cannot disagree about which vector sat
                 %         where, because neither was ever written to
-                keep_gated     = keep_raw & ~rejected;
-                result.uv_grid = cat(3, u, v);
-                result.uv_grid(cat(3, rejected, rejected)) = NaN;
-                result.uv      = piv_stamp(xyuv, planes.imsize, keep_gated) * result.scale;
-                obj.(name)     = result;
+                keep_gated   = keep_raw & ~rejected;
+                result.xyuv  = piv_blank(xyuv, keep_gated);
+                result.uv    = piv_stamp(xyuv, planes.imsize, keep_gated) * result.scale;
+                obj.(name)   = result;
 
                 if obj.param.verbose
                     for g = result.gates
@@ -469,10 +495,12 @@ classdef analysis_pivensemble < handle
                 'planes',      [], ...           % struct           piv_corr_ensemble's
                 'xyuv',        [], ...           % ny x nx x 4 float  (:,:,1:2) [x y]
                                 ...              %   window centre px, (:,:,3:4) [u v]
-                                ...              %   UNSCALED, common mode out, UNGATED.
-                                ...              %   The record; uv and uv_ungated below
-                                ...              %   are views of it. See PIV_PLAN.md 5.2b
-                'uv_grid',     [], ...           % ny x nx x 2 float  working, UNSCALED
+                                ...              %   UNSCALED, common mode out, GATED.
+                                ...              %   The record; uv is the dense view
+                                ...              %   of it. [] until gate() has run
+                'xyuv_ungated',[], ...           % ny x nx x 4 float  the same windows
+                                ...              %   before the gates. Same name and
+                                ...              %   same meaning as piv_run_events'''s
                 'common_mode', [0 0], ...        % 1 x 2 float      shift removed, scaled
                 'gates',       struct([]), ...   % 1 x 4 struct     table; see gate()
                 'uv_ungated',  [], ...           % H x W x 2 float  entering the gates
