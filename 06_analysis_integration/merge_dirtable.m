@@ -99,6 +99,11 @@ mtable_FWHMsleep.parseParams();
 mtable_FWHMsleep.aggregateData("State_PaxFWHM");
 mtable_FWHMsleep.addnest2subtable(param.nest_names);
 mtable_FWHMsleep.save2disk("mtable_FWHMsleep.mat");
+% save2disk empties subTables before writing -- they are derived from
+% aggregatedTable and load2disk rebuilds them. tableManager is a handle class, so
+% the object left in the workspace is emptied too and everything after this line
+% would read []. see CLAUDE_LOG.md
+mtable_FWHMsleep.addnest2subtable(param.nest_names);
 
 %% 4. What came out
 fprintf('\nrefTable %d rows | mice %s\n', height(mtable_FWHMsleep.refTable), ...
