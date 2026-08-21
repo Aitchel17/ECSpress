@@ -15,6 +15,9 @@
 
 %% settings
 param.dataset      = "merged_igkl_igkltdt";
+% The columns the output table carries as its identity. util_sessionkey defines
+% what a session IS and builds the lookup string; this is only which of those
+% columns get written out beside the result, so the two are read together.
 param.key_columns  = ["MouseID", "Date", "SessionType", "SessionID"];
 param.rebuild      = false;         % bool  true recomputes every session
 
@@ -62,9 +65,9 @@ end
 fprintf('paxfwhm %d rows, sleep_score %d, analysis_analog %d\n', ...
     height(pax_table), height(score_table), height(analog_table));
 
-key_pax = table_keys(pax_table, param.key_columns);
-key_score = table_keys(score_table, param.key_columns);
-key_analog = table_keys(analog_table, param.key_columns);
+key_pax = util_sessionkey(pax_table);
+key_score = util_sessionkey(score_table);
+key_analog = util_sessionkey(analog_table);
 
 %% what is already computed
 out_path = fullfile(dirs.central, "centralized_paxfwhm_state.mat");
@@ -78,7 +81,10 @@ if isfile(out_path) && ~param.rebuild
     end
     clear stored
 end
-key_previous = table_keys(previous, param.key_columns);
+key_previous = strings(0, 1);
+if ~isempty(previous)
+    key_previous = util_sessionkey(previous);
+end
 
 %% one session at a time
 n_session = height(pax_table);
@@ -207,17 +213,6 @@ for k = 1:numel(failed)
 end
 
 %% ---------------------------------------------------------------- helpers
-function keys = table_keys(row_table, key_columns)
-    keys = strings(height(row_table), 1);
-    for k = 1:height(row_table)
-        parts = strings(1, numel(key_columns));
-        for c = 1:numel(key_columns)
-            parts(c) = string(row_table.(key_columns(c))(k));
-        end
-        keys(k) = strjoin(parts, "|");
-    end
-end
-
 function value = parse_leadnumber(text_column)
     % The number at the FRONT of each entry, whatever follows it. Splitting on the
     % unit instead needs the unit spelled the way the file spells it, and

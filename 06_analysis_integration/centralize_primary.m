@@ -12,7 +12,14 @@
 %   the one thing that would otherwise have to reopen the originals. Anything
 %   dropped is still in the session folder, untouched.
 %
-%   READ ONLY under the data tree. Writes only under dirs.central.
+%   IT REFRESHES THE SESSION LIST FIRST. A session enters the pipeline only if the
+%   merged sheet has a row for its Directory, so a recording added since the last
+%   scan would be invisible here and nothing would say so. merge_dirtable rescans
+%   both cohorts and rebuilds the sheet, which is about a second with the metadata
+%   cache warm, and it does not overwrite anything corrected by hand.
+%
+%   READ ONLY under the data tree. Writes only under dirs.secondary_root -- the
+%   centralized files, and the sheets merge_dirtable rebuilds.
 %
 %   THESE FILES ARE A CACHE, with one exception. paxfwhm, polarcluster and roilist
 %   are regenerable, so no backup is kept: losing centralized_*.mat costs the
@@ -34,8 +41,11 @@ param.products    = [ ...            % Px2 str  <file stem>, <folder under the s
     "roilist",      "primary_analysis"; ...
     "sleep_score",  "peripheral"; ...
     "analysis_analog", "peripheral"];
-param.key_columns = ["MouseID", "Date", "SessionType", "SessionID"];
 param.rebuild     = false;          % bool     true reads every source again
+
+% Which cohorts go into the dataset. This is the only place it is decided --
+% merge_dirtable takes it as an argument rather than keeping a second copy.
+param.cohorts     = ["00_igkl", "01_igkltdt"];
 
 % Bump this by hand whenever strip_pax or strip_polar changes which fields it
 % takes. The sources are untouched by such a change, so no timestamp can see it,
@@ -48,8 +58,8 @@ schema_version = 1;
 
 dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
     '2023ecspress\02_secondary_analysis'];
+dirs.working_root = 'G:\tmp';        % the live data tree, read but never written
 dirs.central = fullfile(dirs.secondary_root, 'centralized');
-dirs.dirtable = fullfile(dirs.secondary_root, param.dataset, param.dataset + "_dirtable.xlsx");
 
 % analysis_analog.mat holds an object of a class that lives in 02_othersignal, and
 % ECSSession needs mdfExtractLoader out of 00_mdfExtractor, so both sibling repos
@@ -59,10 +69,22 @@ dirs.dirtable = fullfile(dirs.secondary_root, param.dataset, param.dataset + "_d
 addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
 util_ecspath;                                     % three roots, minus zz_notinuse
 
-%% the session list, from the sheet every other stage keys on
-dir_table = readtable(dirs.dirtable, 'VariableNamingRule', 'preserve');
+%% refresh the session list, then read it
+% merge_dirtable rescans both cohorts, rewrites their sheets and joins them. It is
+% the only thing that can notice a recording added since the last scan, and this
+% file finds a session only if the sheet has a row for its Directory.
+%   note  the sheet is read back rather than taken as a table, because writetable
+%        and readtable round-trip through Excel and every other reader of this
+%        dataset sees the round-tripped version
+sheet_info = merge_dirtable(dirs.working_root, dirs.secondary_root, ...
+    param.cohorts, param.dataset);
+if ~isempty(sheet_info.collision)
+    fprintf('%d session key(s) name more than one live folder -- see the lines above\n', ...
+        numel(sheet_info.collision));
+end
+dir_table = readtable(sheet_info.sheet_path, 'VariableNamingRule', 'preserve');
 n_session = height(dir_table);
-fprintf('dirtable %s\n   %d rows\n', dirs.dirtable, n_session);
+fprintf('dirtable %s\n   %d rows\n', sheet_info.sheet_path, n_session);
 
 % The sheet keeps a row for folders that were later renamed -- a suffix gets added
 % (_piv, _macrophage, _notanalyzable, ...) and both rows survive the rescan, and
@@ -76,10 +98,8 @@ end
 fprintf('   %d rows point at a folder, %d do not\n', sum(alive), sum(~alive));
 
 live_row = find(alive);
-key_value = strings(numel(live_row), 1);
-for k = 1:numel(live_row)
-    key_value(k) = make_key(dir_table, live_row(k), param.key_columns);
-end
+live_table = dir_table(live_row, :);
+key_value = util_sessionkey(live_table);
 
 if ~isfolder(dirs.central)
     mkdir(dirs.central);
@@ -109,9 +129,9 @@ for p = 1:size(param.products, 1)
         end
         clear stored
     end
-    key_previous = strings(height(previous), 1);
-    for k = 1:height(previous)
-        key_previous(k) = make_key(previous, k, param.key_columns);
+    key_previous = strings(0, 1);
+    if ~isempty(previous)
+        key_previous = util_sessionkey(previous);
     end
 
     n_live = numel(live_row);
@@ -149,6 +169,19 @@ for p = 1:size(param.products, 1)
                 content = loaded.(field_list{1});
             else
                 content = loaded;
+            end
+            % err  a .mat holding an object whose CLASS is not on the path does
+            %      not fail to load. MATLAB warns and hands back the raw
+            %      serialised bytes as a uint32, or an empty double when the
+            %      object was nested inside another load -- either way the row
+            %      goes on and reads later as data. One HQL080 roilist saved
+            %      under the retired roi class came through as a uint32 blob.
+            %      Every one of these five products is a struct or an object, so
+            %      a bare numeric array IS the failure. see CLAUDE_LOG.md
+            if isnumeric(content) || isempty(content)
+                error('centralize_primary:classMissing', ...
+                    'loaded as %s %s, not an object -- its class is not on the path: %s', ...
+                    mat2str(size(content)), class(content), source_path);
             end
             switch product
                 case "paxfwhm"
@@ -232,14 +265,6 @@ for p = 1:size(param.products, 1)
 end
 
 %% ---------------------------------------------------------------- helpers
-function key = make_key(row_table, k, key_columns)
-    parts = strings(1, numel(key_columns));
-    for c = 1:numel(key_columns)
-        parts(c) = string(row_table.(key_columns(c))(k));
-    end
-    key = strjoin(parts, "|");
-end
-
 function out = strip_pax(pax_fwhm)
     % The one-dimensional series, and the two RAW kymographs.
     % Left behind: rotatecrop and mask, which are bulk nobody downstream reads,
