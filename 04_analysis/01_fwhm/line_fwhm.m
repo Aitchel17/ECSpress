@@ -161,7 +161,10 @@ classdef line_fwhm < handle
             % GETDISPLACEMENT Calculates displacement and subtracts slow component
             obj.displacement = struct();
             % 2. Calculate and subtract slow component (using large window median filter)
-            % "entire length of data" implies a very slow trend. Using 500 pts (~15-50s depending on Hz)
+            % 3000 frames, which at the 3 Hz these stacks are resampled to is 1000 s --
+            % a near-global baseline, not the tens of seconds an earlier comment claimed.
+            % 'truncate' also means the first and last 500 s use a shorter, asymmetric
+            % window, so displacement.* is not one convention across the record
             obj.displacement.slow_uppvs = medfilt1(obj.idx.clean_pvsupedge_idx, 3000, 'truncate');
             obj.displacement.slow_upbv = medfilt1(obj.idx.clean_upperBVboundary, 3000, 'truncate');
             obj.displacement.slow_downbv = medfilt1(obj.idx.clean_lowerBVboundary, 3000, 'truncate');

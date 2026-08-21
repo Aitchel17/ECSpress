@@ -169,6 +169,9 @@ classdef vfield_polar < handle
         %     mesh.conn n_tri x 3 int         vertex indices into mesh.xy
         %     mesh.cxy  n_tri x 2 float px    centroid, where the gradient applies
         %     mesh.area n_tri x 1 float px^2  UNSCALED here; measure() converts
+        %     mesh.grid_idx n_point x 1 int    linear index into the ny x nx
+        %               interrogation grid, so a vertex can be read back against
+        %               anything the gates recorded there
         %
         %   note  the cells Delaunay bridges across the masked vessel are IN here.
         %         trifilter takes them out, and they can be seen because this stage

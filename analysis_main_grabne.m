@@ -19,7 +19,8 @@
 % 1. Line full width halfmaximum (position-time)
 
 % Path setup
-addpath(genpath(pwd));
+addpath(fullfile(pwd, 'functions'));                    % where util_ecspath lives
+util_ecspath;                                          % three roots, minus zz_notinuse
 
 % Directory setup
 sessiondir = 'G:\tmp\Mike_pvs\260302_forHyunseok_Grabmut_REM\260302_forHyunseok_Grabmut_REM\260301_009';

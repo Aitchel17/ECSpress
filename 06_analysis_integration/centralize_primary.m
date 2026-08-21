@@ -51,12 +51,13 @@ dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
 dirs.central = fullfile(dirs.secondary_root, 'centralized');
 dirs.dirtable = fullfile(dirs.secondary_root, param.dataset, param.dataset + "_dirtable.xlsx");
 
-% analysis_analog.mat holds an object of a class that lives in neither repo root
-% below, so it loads as a bare uint32 without this. Only loading needs it: what is
-% written out is a plain struct.
-addpath([genpath('g:\03_program\00_mdfExtractor') ...
-    genpath('g:\03_program\01_ecspress') ...
-    genpath('g:\03_program\02_othersignal')]);
+% analysis_analog.mat holds an object of a class that lives in 02_othersignal, and
+% ECSSession needs mdfExtractLoader out of 00_mdfExtractor, so both sibling repos
+% have to be on the path or the file loads as a bare uint32. util_ecspath finds
+% all three and says which is missing. Only LOADING needs them; what is written
+% out is a plain struct.
+addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
+util_ecspath;                                     % three roots, minus zz_notinuse
 
 %% the session list, from the sheet every other stage keys on
 dir_table = readtable(dirs.dirtable, 'VariableNamingRule', 'preserve');

@@ -26,6 +26,8 @@ classdef analysis_event < handle
         t_axis          (1,:) double  % 1 x T float   frame times (s); fps derives from this
         smooth_diameter (1,:) double  % 1 x T float   what the picking ran on; set by arousaltransition
         eventlist                     % 1 x N struct  every event and control, chronological
+        excursion       table         % every diameter excursion, enumerated ONCE.
+                                      % see design/EXCURSION_DESIGN.md
         info            struct        % what each stage measured, see below
         param = struct( ...           % the partition. Both stages read it
             'merge', {{ ...           % N x 4 cell  {earlier, later, label, polarity}
@@ -266,9 +268,236 @@ classdef analysis_event < handle
             end
         end
 
+        function findexcursions(obj, state_bout, opt)
+        % FINDEXCURSIONS  Every diameter excursion inside every state bout, once.
+        %   Fills obj.excursion. It SELECTS NOTHING -- a row is any pair of
+        %   consecutive turning points, and the properties a selection would key
+        %   on are columns. A rule that would have been a re-run is a filter:
+        %
+        %     T(T.state=="nrem" & T.pol=="dilation" & T.med2max_px > 0, :)
+        %     T(T.prom_min_px >= 2 & T.dur_s >= 10, :)
+        %     T(isnan(T.contained_by), :)
+        %
+        %   so two results that disagree differ by a filter that is written down.
+        %   see design/EXCURSION_DESIGN.md for why, and CLAUDE_LOG.md for the day
+        %   that produced five incomparable event sets from five re-runs.
+        %
+        % IN   state_bout   struct       [nBout x 2] frame-index bout tables per state
+        %      states       cell         which state_bout fields to walk. {} = all
+        %      prom_px      1 x P float  MinPeakProminence values to sweep, in the
+        %                   unit of diameter. A long rise split by a ripple is one
+        %                   row at high prominence and several at low, and both are
+        %                   kept -- prom_min_px says which
+        %      edge_margin  int frames   clearance an endpoint keeps from the bout
+        %                   edge. Required: it must cover whatever half-window a
+        %                   later stage puts around the endpoints, and this class
+        %                   cannot know that number
+        %      min_frame    int          shortest span kept, in frames
+        %      upper_edge   1 x T float  the vessel's two wall positions, for
+        %      lower_edge                edge_r. [] = leave edge_r NaN
+        % OUT  obj.excursion, height x 17 table
+        %
+        %   MED2MIN AND MED2MAX ARE THE CLASSIFICATION. They are the two extremes
+        %   of the excursion measured from the bout's median calibre, so a rise
+        %   from 3 px below rest to 5 px above is (-3, +5) and a fall over the same
+        %   ground is also (-3, +5) with pol reversed. Direction lives in pol and
+        %   geometry lives in these two, and neither contaminates the other. There
+        %   is no category column: med2min >= 0 is an excursion that stayed above
+        %   rest, med2max <= 0 one that stayed below, and anything else crosses.
+            arguments
+                obj
+                state_bout       struct
+                opt.states       cell = {}
+                opt.prom_px      (1,:) double {mustBeNonnegative} = [0 1 2 3]
+                opt.edge_margin  (1,1) double {mustBeInteger, mustBeNonnegative}
+                opt.min_frame    (1,1) double {mustBeInteger, mustBePositive} = 3
+                opt.upper_edge   (1,:) double = []
+                opt.lower_edge   (1,:) double = []
+                opt.verbose      (1,1) logical = true
+            end
+            if isempty(obj.smooth_diameter)
+                error('analysis_event:noSmooth', ...
+                    ['smooth_diameter is empty; run arousaltransition first. The ' ...
+                     'excursions have to be picked off the SAME trace the ' ...
+                     'transitions were, or the two are not comparable.']);
+            end
+            n_sample = numel(obj.diameter);
+            states = opt.states;
+            if isempty(states)
+                states = fieldnames(state_bout)';
+            end
+
+            % 1. Walk every bout at every prominence. Duplicates are expected and
+            %    are resolved afterwards, because the same rise found at two
+            %    prominences is one excursion with two witnesses
+            raw = zeros(0, 8);   % from to state_i base med2min med2max prom bout
+            for s = 1:numel(states)
+                name = states{s};
+                if ~isfield(state_bout, name)
+                    continue
+                end
+                bouts = state_bout.(name);
+                for i = 1:size(bouts, 1)
+                    b1 = max(1, bouts(i,1));
+                    b2 = min(n_sample, bouts(i,2));
+                    s1 = b1 + opt.edge_margin;
+                    s2 = b2 - opt.edge_margin;
+                    if s2 - s1 < opt.min_frame
+                        continue
+                    end
+                    base = median(obj.diameter(b1:b2));
+                    seg  = obj.smooth_diameter(s1:s2);
+                    for p = opt.prom_px
+                        [loc, ~] = local_turningpoints(seg, p);
+                        loc = loc + s1 - 1;
+                        for k = 1:numel(loc) - 1
+                            f = loc(k);
+                            t = loc(k+1);
+                            if t - f < opt.min_frame
+                                continue
+                            end
+                            span = f:t;
+                            raw(end+1,:) = [f, t, s, base, ...
+                                min(obj.diameter(span)) - base, ...
+                                max(obj.diameter(span)) - base, p, i]; %#ok<AGROW>
+                        end
+                    end
+                end
+            end
+            if isempty(raw)
+                obj.excursion = table();
+                return
+            end
+
+            % 2. One row per (from, to), carrying BOTH ends of the prominence range
+            %    it was found over. The two say different things and one alone
+            %    conflates two kinds of excursion:
+            %      prom_min 0, prom_max 0      a ripple; asking for 1 removes it
+            %      prom_min 0, prom_max high   a clean rise with no ripple inside it,
+            %                                  so the same two turning points at
+            %                                  every scale
+            %      prom_min high               a coarse rise that EXISTS only once
+            %                                  the ripples inside it are ignored
+            [~, ord] = sortrows(raw, [1 2 7]);
+            raw = raw(ord, :);
+            [pairs, keep] = unique(raw(:, [1 2]), 'rows', 'first');
+            prom_max = zeros(size(pairs, 1), 1);
+            for a = 1:size(pairs, 1)
+                same = raw(:,1) == pairs(a,1) & raw(:,2) == pairs(a,2);
+                prom_max(a) = max(raw(same, 7));
+            end
+            [keep, back] = sort(keep);
+            prom_max = prom_max(back);
+            raw = raw(keep, :);
+            n = size(raw, 1);
+
+            % 3. Containment and overlap. Without these the table cannot say what
+            %    a count of its rows is a count OF
+            contained_by = nan(n, 1);
+            overlaps_n   = zeros(n, 1);
+            for a = 1:n
+                for b = 1:n
+                    if a == b
+                        continue
+                    end
+                    inside = raw(b,1) <= raw(a,1) && raw(b,2) >= raw(a,2);
+                    if inside
+                        wider = (raw(b,2) - raw(b,1)) > (raw(a,2) - raw(a,1));
+                        if wider && (isnan(contained_by(a)) || ...
+                                (raw(b,2)-raw(b,1)) < (raw(contained_by(a),2)-raw(contained_by(a),1)))
+                            contained_by(a) = b;      % the TIGHTEST container
+                        end
+                    end
+                    if ~(raw(b,2) <= raw(a,1) || raw(b,1) >= raw(a,2))
+                        overlaps_n(a) = overlaps_n(a) + 1;
+                    end
+                end
+            end
+
+            % 4. Per-row quantities the walk did not need
+            from   = raw(:,1);
+            to     = raw(:,2);
+            state  = string(states(raw(:,3))');
+            pol    = repmat("constriction", n, 1);
+            dD_px  = obj.smooth_diameter(to)' - obj.smooth_diameter(from)';
+            pol(dD_px > 0) = "dilation";
+            dD_raw_px = obj.diameter(to)' - obj.diameter(from)';
+            dur_s  = obj.t_axis(to)' - obj.t_axis(from)';
+            range_px = nan(n,1);
+            sd_px    = nan(n,1);
+            edge_r   = nan(n,1);
+            has_edge = ~isempty(opt.upper_edge) && ~isempty(opt.lower_edge);
+            for a = 1:n
+                span = from(a):to(a);
+                range_px(a) = max(obj.smooth_diameter(span)) - min(obj.smooth_diameter(span));
+                sd_px(a)    = std(obj.smooth_diameter(span));
+                if has_edge
+                    u = opt.upper_edge(span);
+                    v = opt.lower_edge(span);
+                    if std(u) > 0 && std(v) > 0
+                        edge_r(a) = corr(u(:), v(:));
+                    end
+                end
+            end
+
+            obj.excursion = table(from, to, dur_s, state, pol, ...
+                raw(:,8), raw(:,4), raw(:,5), raw(:,6), ...
+                dD_px, dD_raw_px, range_px, sd_px, ...
+                raw(:,7), prom_max, contained_by, overlaps_n, edge_r, ...
+                'VariableNames', {'from','to','dur_s','state','pol', ...
+                    'bout_idx','base_px','med2min_px','med2max_px', ...
+                    'dD_px','dD_raw_px','range_px','sd_px', ...
+                    'prom_min_px','prom_max_px','contained_by','overlaps_n','edge_r'});
+            obj.excursion.Properties.VariableUnits = { ...
+                'frame','frame','s','','','','px','px','px', ...
+                'px','px','px','px','px','px','','',''};
+            obj.excursion = sortrows(obj.excursion, 'from');
+            % contained_by held indices into the pre-sort order; carry them over
+            obj.excursion.contained_by = repoint(contained_by, from, obj.excursion.from);
+
+            obj.info.excursion = struct('states', {states}, 'prom_px', opt.prom_px, ...
+                'edge_margin', opt.edge_margin, 'min_frame', opt.min_frame, ...
+                'n_maximal', nnz(isnan(contained_by)));
+            if opt.verbose
+                fprintf(['excursion  %d rows from %d bouts | %d maximal, ' ...
+                         '%d contained | prominence %s\n'], n, ...
+                    size(unique(raw(:,[3 8]), 'rows'), 1), nnz(isnan(contained_by)), ...
+                    nnz(~isnan(contained_by)), mat2str(opt.prom_px));
+            end
+        end
+
         function save2disk(obj, name, savepath)
             analysis_event = obj;
             save(fullfile(savepath, [name, '.mat']), 'analysis_event')
         end
     end
+end
+
+% ---------------------------------------------------------------------------
+function [loc, is_max] = local_turningpoints(y, prom)
+%LOCAL_TURNINGPOINTS  Maxima and minima of y, interleaved, in y's own indices.
+%   prom = 0 asks findpeaks for every local extremum; above 0 it ignores a bump
+%   that never gets that far from its neighbours, which is what stops a ripple
+%   partway up a long rise from ending it.
+    if prom > 0
+        [~, lmax] = findpeaks(y,  'MinPeakProminence', prom);
+        [~, lmin] = findpeaks(-y, 'MinPeakProminence', prom);
+    else
+        [~, lmax] = findpeaks(y);
+        [~, lmin] = findpeaks(-y);
+    end
+    loc    = [lmax(:).', lmin(:).'];
+    is_max = [true(1, numel(lmax)), false(1, numel(lmin))];
+    [loc, ord] = sort(loc);
+    is_max = is_max(ord);
+end
+
+% ---------------------------------------------------------------------------
+function out = repoint(idx, from_old, from_new)
+%REPOINT  Carry a column of row indices through a re-sort of the rows.
+    out = nan(size(idx));
+    have = ~isnan(idx);
+    target = from_old(idx(have));
+    [~, out(have)] = ismember(target, from_new);
+    out(out == 0) = NaN;
 end

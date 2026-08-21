@@ -19,7 +19,8 @@
 % 1. Line full width halfmaximum (position-time) 3,4,5,7
 
 % Path setup
-addpath(genpath(pwd));
+addpath(fullfile(pwd, 'functions'));                    % where util_ecspath lives
+util_ecspath;                                          % three roots, minus zz_notinuse
 %close all
 % Directory setup
 % sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';

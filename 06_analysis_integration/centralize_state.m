@@ -41,9 +41,8 @@ dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
     '2023ecspress\02_secondary_analysis'];
 dirs.central = fullfile(dirs.secondary_root, 'centralized');
 
-addpath([genpath('g:\03_program\00_mdfExtractor') ...
-    genpath('g:\03_program\01_ecspress') ...
-    genpath('g:\03_program\02_othersignal')]);
+addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
+util_ecspath;                                     % three roots, minus zz_notinuse
 
 %% the inputs
 in_path = fullfile(dirs.central, "centralized_" + ["paxfwhm", "sleep_score", "analysis_analog"] + ".mat");

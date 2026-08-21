@@ -62,7 +62,8 @@ param.peripheral_map = { ...
     'SleepScore',       'sleep_score.mat'};
 param.stateanalysis_map = {'paxfwhm_state', 'paxfwhm_state.mat'};
 
-addpath(genpath('g:\03_program\01_ecspress'));
+addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
+util_ecspath;                                     % three roots, minus zz_notinuse
 setenv('ECSPRESS_ROOT',    dirs.secondary_root);
 setenv('ECSPRESS_DATASET', param.dataset);
 

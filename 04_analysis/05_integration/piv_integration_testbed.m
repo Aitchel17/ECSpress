@@ -26,10 +26,11 @@
 %% 0. Load session, stack and sleep state
 
 % 0.1 Paths
-% The repo root, not pwd. genpath(pwd) from g:\03_program pulled in a second copy
+% The repo roots, not pwd. genpath(pwd) from g:\03_program pulled in a second copy
 % of this whole tree that used to sit in ECSpress_py, and MATLAB resolves by
 % filename, so which copy ran depended on path order. See CLAUDE.md.
-addpath(genpath('g:\03_program\01_ecspress'));
+addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
+util_ecspath;                                     % three roots, minus zz_notinuse
 close all
 % 0.2 Session directory
 % sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';
@@ -44,7 +45,8 @@ session.stackch2 = session.loadstack('ch2');
 twophoton_processed = twophoton_preprocess(session);
 
 % 0.6 Load sleep state and put the bouts on the imaging frame axis
-sleep_integrate = state_integration(sessiondir);
+score = load(fullfile(sessiondir, 'peripheral', 'sleep_score.mat'));
+sleep_integrate = state_integration(score);
 img_state = state_image(sleep_integrate);
 img_state.get_state_indices(twophoton_processed.t_axis, twophoton_processed.outfps);     
 

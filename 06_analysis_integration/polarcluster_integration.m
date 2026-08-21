@@ -17,7 +17,8 @@
 %            polar_ave.mat under dirs.save_dir
 
 clc, clear
-addpath(genpath('g:\03_program\01_ecspress'));
+addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
+util_ecspath;                                     % three roots, minus zz_notinuse
 
 dirs.data_root = 'G:\tmp';
 dirs.save_dir  = ['E:\OneDrive - The Pennsylvania State University\2023ecspress' ...

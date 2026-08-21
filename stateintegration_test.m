@@ -1,7 +1,8 @@
 % PIV good list
 % 'G:\tmp\01_igkltdt\hql086\250909_hql086_sleep\HQL086_sleep250909_005'
 % G:\tmp\01_igkltdt\hql086\250909_hql086_sleep\HQL086_sleep250909_007
-addpath(genpath(pwd));
+addpath(fullfile(pwd, 'functions'));                    % where util_ecspath lives
+util_ecspath;                                          % three roots, minus zz_notinuse
 clc, clear
 % for i = [2,3,4,5,6,7,8]
 % sessiondir = strcat('G:\tmp\00_igkl\hql090\251020_hql090_whiskerb\HQL090_whiskerb251020_00',string(i));

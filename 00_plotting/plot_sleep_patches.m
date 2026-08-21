@@ -35,13 +35,10 @@ force_ylim = p.Results.YLim;
 alpha_val = p.Results.FaceAlpha;
 tag_val = p.Results.Tag;
 
-% Define Colors (Internal Standard)
-cols.nrem = [0.00 0.45 0.90];     % Blue
-cols.rem = [0.85 0.10 0.10];      % Red
-cols.awake = [0.10 0.10 0.10];    % Black
-cols.drowsy = [0.20 0.65 0.20];   % Green
-cols.uarousal = [0.93 0.49 0.19]; % Orange
-cols.trans = [0.50 0.10 0.70];    % Purple
+% Colours come from color_lee, which is where every figure looks. They used to
+% be written out here, so a second figure drawing the same states could disagree
+% with this one and nothing said so.
+cols = color_lee.clist;
 
 % Determine Y-Limits
 if isempty(force_ylim)
