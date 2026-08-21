@@ -20,14 +20,21 @@
 
 % Path setup
 addpath(genpath(pwd));
-close all
+%close all
 % Directory setup
 % sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';
-sessiondir ='G:\tmp\01_igkltdt\hql080\250619_hql080_sleep\HQL080_sleep250619_002';
+sessiondir ='G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_005';
 
 % 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(sessiondir);
 session = session.load_primary_results;
+
+if isfile(fullfile(sessiondir,"peripheral/sleep_score.mat"))
+    disp('Loading sleepscore file')
+    sleepscore = load(fullfile(sessiondir,"peripheral/sleep_score.mat"));
+else
+    disp('no sleep_socre.mat')
+end
 %%
 
 
@@ -47,48 +54,45 @@ session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 session.pax_fwhm.param.fs = twophoton_processed.outfps;
 session.pax_fwhm.t_axis = twophoton_processed.t_axis;
 % Lumen (vessel) processing
-bvch = 'ch2';                                   % BV/lumen channel (recordings may swap ch1/ch2)
+bvch = 'ch1';                                   % BV/lumen channel (recordings may swap ch1/ch2)
 session.pax_fwhm.param.channel_lumen = bvch;    % single source: data + record both from bvch
-session.pax_fwhm.addkymograph("lumen", twophoton_processed.(bvch),"max")
+session.pax_fwhm.addkymograph("lumen", twophoton_processed.(bvch),"mean")
 session.pax_fwhm.kymograph_afterprocess('lumen',[1 5])
 session.pax_fwhm.fwhm("lumen");
 
 %% 4.1.3 PVS Analysis
 % PVS processing (using channel 2)
-csfch = 'ch1';                                  % CSF/PVS channel
+csfch = 'ch2';                                  % CSF/PVS channel
 session.pax_fwhm.param.channel_pvs = csfch;     % single source: data + record both from csfch
 session.pax_fwhm.addkymograph("pvs", twophoton_processed.(csfch),"mean")
 session.pax_fwhm.kymograph_afterprocess('pvs',[1 5])
 %%
-session.pax_fwhm.pvsanalysis_inverted();
+session.pax_fwhm.pvsanalysis();
 %%
 session.pax_fwhm.clean_outlier(true)
 session.pax_fwhm.getdiameter;
 session.pax_fwhm.getdisplacement;
 session.pax_fwhm.save2disk('paxfwhm',session.dir_struct.primary_analysis);
 session.roilist.save2disk(session.dir_struct.primary_analysis)
+%% 4.1.4 FWHM analysis figure generation
+close all
+pax_fig = analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis,...
+    twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
+
+
 
 %% 4.1.5 Manual ROI setup  (needs pax_fwhm; everything downstream reads these)
 setup_rois(session.roilist, twophoton_processed, session.pax_fwhm, session.dir_struct.primary_analysis);
 setup_rois_makefig(session.roilist, twophoton_processed, session.pax_fwhm, session.dir_struct.figures_roi);
 
-%% 4.1.4 FWHM analysis figure generation
-close all
-pax_fig = analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis,...
-    twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
+
 %% Opt Output for FWHM boundary overlay video
 session.pax_fwhm.reconstruction_overlay(twophoton_processed.ch1,twophoton_processed.ch2,...
     "SavePath",fullfile(session.dir_struct.primary_analysis,"overlay.tif"),"BlankBoundary",false);
 
+
 %%
-if isfile(fullfile(sessiondir,"peripheral/sleep_score.mat"))
-    disp('Loading sleepscore file')
-    sleepscore = load(fullfile(sessiondir,"peripheral/sleep_score.mat"));
-else
-    disp('no sleep_socre.mat')
-end
 fwhm = session.pax_fwhm.thickness;
-%%
 clee = color_lee;
 fig = figure();
 sgolayax = axes(fig);

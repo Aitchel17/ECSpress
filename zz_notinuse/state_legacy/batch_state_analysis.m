@@ -53,8 +53,23 @@ for row_i = 1:numel(target_rows)
         session = session.load_primary_results();
         pax_fwhm = session.pax_fwhm;
 
-        %% 2. Build state_integration (auto-finds sleep_score.mat in peripheral/)
-        state_integrate = state_integration(sessiondir);
+        %% 2. Build state_integration from the scoring, whichever kind this is
+        % the constructor no longer takes a path, so what it reads is visible here
+        score = [];
+        primary_analog = [];
+        score_path = fullfile(sessiondir, 'peripheral', 'sleep_score.mat');
+        analog_path = fullfile(sessiondir, 'peripheral', 'analysis_analog.mat');
+        if isfile(score_path)
+            score = load(score_path);
+        elseif isfile(analog_path)
+            loaded_analog = load(analog_path);
+            primary_analog = loaded_analog.primary_analog;
+        end
+        state_integrate = state_integration(score, primary_analog);
+        state_integrate.dir_struct.stateanalysis = fullfile(sessiondir, 'state_analysis');
+        if ~isfolder(state_integrate.dir_struct.stateanalysis)
+            mkdir(state_integrate.dir_struct.stateanalysis);
+        end
 
         % 이미징 중단으로 pax_fwhm이 sleep_score보다 짧을 수 있음
         % -> 짧은 쪽(이미징 끝시간)에 맞춰 time_table 클립

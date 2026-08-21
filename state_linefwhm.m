@@ -16,7 +16,18 @@ classdef state_linefwhm < handle
         band_decomposition % Struct to store band decomposition analysis
         transition          % Struct to store transition analysis
         peak_trough        % struct to store peak and trough analysis from decomposed data
+        eventlist          % 1 x N struct  the detected events, ALL contents share them
+        event              % struct        one table per content name, rows = events
     end
+    %   transition and event are not the same thing. transition splits each
+    %   *_trans scoring window at its centre and compares the halves, so its rows
+    %   are fixed windows the scoring drew. event's rows are places the diameter
+    %   actually moved, found by analysis_event, and a row is (state, pol):
+    %     'nrem2rem', 'dilation'   a state transition
+    %     'nrem',     'none'       a stable stretch, the control
+    %     'nrem',     'dilation'   a swing inside one state
+    %   eventlist is held once and every event.<name> table reads it, so the nine
+    %   contents cannot end up describing different events.
 
     methods
         function obj = state_linefwhm(state_integrate)
@@ -28,6 +39,136 @@ classdef state_linefwhm < handle
             obj.state_idx =  obj.sleep_obj.add_taxis(t_axis); % from time axis (indice-time) get state indices
             obj.t_axis = t_axis; % copy time axis
             obj.param.fs = fs; % copy sampling rate
+        end
+
+        function obj = get_events(obj, eventlist, event_info)
+        %GET_EVENTS  Hold the event list every event.<name> table will be built on.
+        %   Called ONCE, before get_eventsummary. analysis_event finds the events
+        %   on the caliber trace; every other content is measured over the SAME
+        %   windows, so the nine tables can be read side by side.
+        % IN   eventlist   1 x N struct, analysis_event's eventlist
+        %      event_info  struct, its info. [] = do not record one
+            arguments
+                obj
+                eventlist  (1,:) struct
+                event_info = []
+            end
+            obj.eventlist = eventlist;
+            if ~isempty(event_info)
+                obj.param.event = event_info;
+            end
+        end
+
+        function obj = get_eventsummary(obj, name, data1d, opt)
+        %GET_EVENTSUMMARY  What one content did over each event, as a table.
+        %   Row = event, in the order eventlist holds them. One table per content,
+        %   so a row can carry the ALIGNED SEGMENT as well as the scalars, and
+        %   groupsummary(T, 'polarity', 'mean', 'seg_px') is the polarity-averaged
+        %   trace with nothing to join.
+        %
+        %   THE FIVE THICKNESSES ARE THREE MEASUREMENTS. line_fwhm builds them from
+        %   four boundary positions, so totalpvs = uppvs + downpvs and eps =
+        %   totalpvs + bv are definitions. Reading bv, totalpvs and eps as three
+        %   findings counts one of them twice; bv, uppvs and downpvs are the
+        %   independent set.
+        %
+        % IN   name     char, the content's name, as get_summary uses it
+        %      data1d   1 x T float px, that content's trace
+        %      pre_s    float s, segment reach BEFORE the event start. Default 10
+        %      post_s   float s, segment reach AFTER it. Default 30
+        % OUT  obj.event.(name), a height x 10 table. The segment's time axis and
+        %      the anchor sit in its Properties.UserData
+            arguments
+                obj
+                name   (1,:) char
+                data1d (1,:) double
+                opt.pre_s  (1,1) double {mustBeNonnegative} = 10
+                opt.post_s (1,1) double {mustBePositive}    = 30
+            end
+            if isempty(obj.eventlist)
+                error('state_linefwhm:noEvents', ...
+                    'call get_events first; the tables are built on its list.');
+            end
+            n_row = numel(obj.eventlist);
+            n_sample = numel(data1d);
+            fs = obj.param.fs;
+            % The segment window, in samples either side of the event's start
+            n_pre  = round(opt.pre_s  * fs);
+            n_post = round(opt.post_s * fs);
+            n_seg  = n_pre + n_post + 1;
+            seg_offset = -n_pre:n_post;
+
+            state         = strings(n_row, 1);
+            bout_idx      = zeros(n_row, 1);
+            bout_duration = zeros(n_row, 1);
+            total_bout    = zeros(n_row, 1);
+            polarity      = strings(n_row, 1);
+            from          = zeros(n_row, 1);
+            to            = zeros(n_row, 1);
+            rise_s        = zeros(n_row, 1);
+            d_px     = nan(n_row, 1);
+            range_px = nan(n_row, 1);
+            sd_px    = nan(n_row, 1);
+            mean_px  = nan(n_row, 1);
+            seg_px   = nan(n_row, n_seg);
+
+            % How many bouts each state has, so total_bout means the same thing
+            % here as in state_summary and powerdensity
+            n_bout_of = struct();
+            for f = string(fieldnames(obj.state_idx))'
+                n_bout_of.(f) = size(obj.state_idx.(f), 1);
+            end
+
+            for k = 1:n_row
+                row = obj.eventlist(k);
+                state(k)         = string(row.state);
+                polarity(k)      = string(row.pol);
+                bout_idx(k)      = row.bout;
+                bout_duration(k) = row.end_sec - row.start_sec;
+                if isfield(n_bout_of, row.state)
+                    total_bout(k) = n_bout_of.(row.state);
+                else
+                    total_bout(k) = NaN;
+                end
+                from(k)     = row.from;
+                to(k)       = row.to;
+                rise_s(k)   = row.rise_s;
+                span        = row.from:row.to;
+                span        = span(span >= 1 & span <= n_sample);
+                if isempty(span)
+                    continue
+                end
+                d_px(k)     = data1d(span(end)) - data1d(span(1));
+                range_px(k) = max(data1d(span)) - min(data1d(span));
+                sd_px(k)    = std(data1d(span));
+                mean_px(k)  = mean(data1d(span));
+                % The aligned segment. A window reaching past either end of the
+                % recording stays NaN there rather than being shifted inward,
+                % which would put a different lag in that row than in its
+                % neighbours and average two things together
+                idx  = row.from + seg_offset;
+                have = idx >= 1 & idx <= n_sample;
+                seg_px(k, have) = data1d(idx(have));
+            end
+
+            % state_name is deliberately NOT the name used here. In the bout
+            % tables that column is a state; this one holds a transition label on
+            % a transition row and a state name on the others, so giving it the
+            % same name would stack two vocabularies into one column
+            tbl = table(state, bout_idx, bout_duration, total_bout, ...
+                polarity, from, to, rise_s, ...
+                d_px, range_px, sd_px, mean_px);
+            tbl.seg_px = seg_px;
+            tbl.Properties.VariableUnits = {'', '', 's', '', ...
+                '', 'frame', 'frame', 's', ...
+                'px', 'px', 'px', 'px', 'px'};
+            tbl.Properties.UserData = struct( ...
+                'seg_time_s', seg_offset / fs, ...   % 1 x n_seg, 0 = the anchor
+                'seg_anchor', 'from', ...            % which endpoint index 0 is
+                'pre_s',  opt.pre_s, ...
+                'post_s', opt.post_s, ...
+                'fs',     fs);
+            obj.event.(name) = tbl;
         end
 
         function obj = get_powerdensity(obj, name, data1d)

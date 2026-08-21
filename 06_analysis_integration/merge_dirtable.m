@@ -1,16 +1,11 @@
-%MERGE_DIRTABLE  Two cohort dirtables -> one merged sheet -> one mtable.
-%   Stage 3 of the FWHM table chain. map_directory writes a dirtable per cohort
-%   and batch_state_analysis writes paxfwhm_state.mat per session; this joins the
-%   cohorts and runs the secondary_main chain on the join. tablegeneration_main
-%   then reads what this leaves behind.
+%MERGE_DIRTABLE  Two cohort dirtables -> one merged sheet.
+%   map_directory writes a dirtable per cohort; this joins them into the one sheet
+%   centralize_primary walks. That is all it does now -- it used to go on and build
+%   mtable_FWHMsleep.mat by opening every session's paxfwhm_state.mat, and that job
+%   moved to centralize_primary and centralize_state, which are incremental.
 %
-%   why  merging at the DIRTABLE level and not at the mtable : explode_nest
-%        stamps SessionIndex as the row number of the sheet it walked
-%        (explode_nest line 39). One merged sheet therefore gives a consistent
-%        SessionIndex for free and no class has to change. Merging two mtables
-%        would leave two independent 1..N indices pointing at different rows
-%   why  a script and not a function : it is the same shape as secondary_main and
-%        is read as a record of which cohorts went into a dataset
+%   why  a script and not a function : it is read as a record of which cohorts went
+%        into a dataset
 %   caution  this is the ONLY place the merged dataset comes from. It lived in a
 %        scratch folder until 2026-08-08, which meant the 32-session result could
 %        not be rebuilt from the repo
@@ -31,8 +26,6 @@ if param.dataset == ""
 end
 param.sources      = ["00_igkl", "01_igkltdt"];   % cohort folders, each holding <name>_dirtable.xlsx
 dirs.working_root = "G:\tmp";                    % the live data tree
-param.nest_names   = ["state_summary", "transition", "band_decomposition", ...
-                "powerdensity", "peak_trough"];
 
 %% 1. Join the cohort sheets
 % err  E:\ is a BACKUP drive, not a second data tree. write_dirtable merges an old
@@ -67,10 +60,13 @@ fprintf('\nmerged %d rows | %d distinct Directory | mice %s\n', ...
     height(merged_table), numel(unique(string(merged_table.Directory))), ...
     strjoin(unique(string(merged_table.MouseID))', ', '));
 
+% What centralize_primary will find. The State_PaxFWHM column is still written by
+% mapdirstruct and still counted here, but nothing reads it any more -- the state
+% analysis is computed into centralized_paxfwhm_state.mat, not written per session.
 has_fwhm  = string(merged_table.Primary_paxFWHM) == "paxfwhm.mat";
-has_state = string(merged_table.State_PaxFWHM)   == "paxfwhm_state.mat";
-fprintf('  paxfwhm %d | paxfwhm_state %d | both %d\n', ...
-    nnz(has_fwhm), nnz(has_state), nnz(has_fwhm & has_state));
+has_score = string(merged_table.Peripheral_SleepScore) == "sleep_score.mat";
+fprintf('  paxfwhm %d | sleep_score %d | both %d\n', ...
+    nnz(has_fwhm), nnz(has_score), nnz(has_fwhm & has_score));
 
 %% 2. Write the merged sheet
 % caution  writetable does not clear the sheet first, so a shorter table would
@@ -89,32 +85,12 @@ end
 writetable(merged_table, sheet_out, 'Sheet', 'reference');
 fprintf('wrote %s\n', sheet_out);
 
-%% 3. The secondary_main chain, on the merged sheet
-% note  identical to secondary_main.m except for the path it is pointed at. If
-%       that file's steps change, change them here too
-mtable_FWHMsleep = tableManager(char(sheet_out));
-mtable_FWHMsleep.filter_refTable("Primary_paxFWHM", "paxfwhm");
-mtable_FWHMsleep.filter_refTable("State_PaxFWHM",   "paxfwhm");
-mtable_FWHMsleep.parseParams();
-mtable_FWHMsleep.aggregateData("State_PaxFWHM");
-mtable_FWHMsleep.addnest2subtable(param.nest_names);
-mtable_FWHMsleep.save2disk("mtable_FWHMsleep.mat");
-% save2disk empties subTables before writing -- they are derived from
-% aggregatedTable and load2disk rebuilds them. tableManager is a handle class, so
-% the object left in the workspace is emptied too and everything after this line
-% would read []. see CLAUDE_LOG.md
-mtable_FWHMsleep.addnest2subtable(param.nest_names);
-
-%% 4. What came out
-fprintf('\nrefTable %d rows | mice %s\n', height(mtable_FWHMsleep.refTable), ...
-    strjoin(unique(string(mtable_FWHMsleep.refTable.MouseID))', ', '));
-fprintf('subTables : %s\n', strjoin(fieldnames(mtable_FWHMsleep.subTables)', ', '));
-transition_table = mtable_FWHMsleep.subTables.transition;
-fprintf('transition %d rows | SessionIndex 1..%d | %d DataTypes\n', ...
-    height(transition_table), max(transition_table.SessionIndex), ...
-    numel(unique(string(transition_table.DataType))));
-% caution  more than one trace length here means a session ran at a different fps
-%          or under older code. tableAnalyzer.match_tracelength downsamples to the
-%          shortest, never up, but a surprise here is worth chasing to its source
-fprintf('trace lengths present : %s\n', ...
-    mat2str(unique(cellfun(@numel, transition_table.data))'));
+%% 3. What came out
+fprintf('\nmerged sheet %d rows | mice %s\n', height(merged_table), ...
+    strjoin(unique(string(merged_table.MouseID))', ', '));
+session_type = string(merged_table.SessionType);
+type_name = unique(session_type);
+for k = 1:numel(type_name)
+    fprintf('   %-12s %d\n', type_name(k), sum(session_type == type_name(k)));
+end
+fprintf('centralize_primary reads this sheet next\n');

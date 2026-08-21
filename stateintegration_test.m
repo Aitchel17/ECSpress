@@ -10,7 +10,8 @@ sessiondir = 'G:\tmp\00_igkl\hql097\260321_hql097_sleep\HQL097_sleep260321_010';
 %%
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
-state_integrate = state_integration(sessiondir);
+score = load(fullfile(sessiondir, 'peripheral', 'sleep_score.mat'));
+state_integrate = state_integration(score);
 state_integrate.trim_to_duration(session.pax_fwhm.t_axis(end));
 
 

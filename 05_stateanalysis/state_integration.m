@@ -15,43 +15,38 @@ classdef state_integration < handle
 
     methods
 
-        function obj = state_integration(base_path)
-            %UNTITLED Construct an instance of this class
-            %   Detailed explanation goes here
-            [~, folder_name] = fileparts(base_path);
-            obj.dir_struct.stateanalysis = fullfile(base_path,"state_analysis");
-            if ~exist(obj.dir_struct.stateanalysis, 'dir')
-                mkdir(obj.dir_struct.stateanalysis);
-                disp(['Created directory: ', obj.dir_struct.stateanalysis]);
+        function obj = state_integration(score, primary_analog)
+            %STATE_INTEGRATION  Time tables for one recording, from its scoring.
+            % IN   score           struct   contents of sleep_score.mat, [] if none
+            %      primary_analog  struct   contents of analysis_analog.mat, [] if none
+            %
+            %   Takes the contents, not a session path. Which kind of recording this
+            %   is comes from WHICH ARGUMENT IS FILLED, not from whether the folder
+            %   name contains "sleep" or "whis", and nothing is read or created on
+            %   disk -- the old constructor made <session>/state_analysis just by
+            %   being called. see CLAUDE_LOG.md
+            arguments
+                score = []
+                primary_analog = []
             end
-            sleepscore_dir = fullfile(base_path,"peripheral","sleep_score.mat");
-            analog_dir =     fullfile(base_path,"peripheral","analysis_analog.mat");
-            if isfile(sleepscore_dir)
-                fprintf('sleep_score.mat detected\n')
-                obj.sleep_integration(sleepscore_dir);
-            elseif contains(folder_name,'sleep','IgnoreCase',true)
-                fprintf('sleepscoring is not done')
-                return
-            elseif contains(folder_name,'whis','IgnoreCase',true)
-                if isfile(analog_dir)
-                    fprintf('analog.mat detected with whisker stim folder')
-                    obj.awake_integration(analog_dir)
-                else
-                    fprintf('peripheral analysis is not done')
-                end
-            else
-                fprintf('Folder does not contain sleep or whis, check folder name')
-                return
+
+            if ~isempty(score)
+                obj.sleep_integration(score);
             end
-            %%
+            if ~isempty(primary_analog)
+                obj.awake_integration(primary_analog);
+            end
+            if isempty(score) && isempty(primary_analog)
+                error('state_integration:noInput', ...
+                    'neither a sleep score nor an analog analysis was given');
+            end
         end
 
 
-        function awake_integration(obj,analog_dir)
+        function awake_integration(obj, primary_analog)
+            % primary_analog  struct   the primary_analog field of analysis_analog.mat,
+            %                          already loaded. Only airtable and ball are read
             %% Whisker stimulation time table
-            obj.dir_struct.analog = analog_dir;
-            loadstruct = load(analog_dir);
-            primary_analog = loadstruct.primary_analog;
             atable = primary_analog.airtable;
             atable.('rounded_duration')= round(atable.Duration);
             unique_dur = unique(atable.rounded_duration);
@@ -153,53 +148,11 @@ classdef state_integration < handle
                 end
             end
 
-            %% Diagnostic plots
-            figure()
-            plot(taxis,binary_move)
-
-            %%
-            cla
-            plot(taxis,ballSmooth)
-            hold on
-            plot(taxis,absball,'Color','k')
-            %%
-            plot(taxis, binary_move, 'y', 'LineWidth', 1.5)
-            hold on
-            plot(taxis, binary_move, 'r', 'LineWidth', 1.5)
-
-            plot(taxis, absball > 0.02, 'k:', 'LineWidth', 1)
-            legend('Interpolated (final_binary_movement)', 'Raw (absball > 0.02)')
-            %%
-            % Generate a color map for the different durations
-            y_pos = 0;
-
-            % Loop through each duration to draw its bars
-            for idx = 1:numel(unique_dur)
-                stim_dur = unique_dur(idx);
-
-                % Retrieve the Nx2 table/matrix of [StartTime, EndTime]
-                time_intervals = obj.time_table.(strcat("dur", string(stim_dur)));
-
-                % Fast plotting strategy: Create vectors separated by NaNs
-                % so we only call plot() once per duration type.
-                num_intervals = size(time_intervals, 1);
-                x_data = NaN(3, num_intervals);
-                x_data(1, :) = time_intervals(:, 1)'; % StartTime
-                x_data(2, :) = time_intervals(:, 2)'; % EndTime
-
-                y_data = NaN(3, num_intervals);
-                y_data(1:2, :) = y_pos; % Set the line height to 2.5
-
-                % Plot all horizontal bars for this duration type
-                plot(x_data(:), y_data(:), 'Color', 'g', ...
-                    'LineWidth', 4, 'DisplayName', sprintf('Duration %d s', stim_dur));
-            end
         end
 
-        function sleep_integration(obj,sleepscore_dir)
-            obj.dir_struct.sleep_score = sleepscore_dir;
-            sleep_score = load(obj.dir_struct.sleep_score);
-            obj.sleep_score = sleep_score;
+        function sleep_integration(obj, score)
+            % score  struct   the contents of sleep_score.mat, already loaded
+            obj.sleep_score = score;
             obj.param.transition_window = 25;
             obj.param.bigchunk_windowsize = 300;            obj.param.bigchunk_awake_weight = struct('w_awake', 10, 'w_nrem', -1, 'w_rem', -1000, 'w_drowsy', 0);
             obj.param.bigchunk_nrem_weight = struct('w_awake', -1, 'w_nrem', 10, 'w_rem', -1000, 'w_drowsy', 0);
@@ -207,18 +160,18 @@ classdef state_integration < handle
             obj.param.bigchunk_drowsy_weight = struct('w_awake', 0, 'w_nrem', -1, 'w_rem', -1000, 'w_drowsy', 10);
 
             % Binary array generation
-            obj.binary_bin.awake = sleep_score.behavState == sleep_score.statecodes.NotSleep;
-            obj.binary_bin.nrem = sleep_score.behavState == sleep_score.statecodes.NREM;
-            obj.binary_bin.rem = sleep_score.behavState == sleep_score.statecodes.REM;
-            obj.binary_bin.drowsy = sleep_score.behavState == sleep_score.statecodes.Drowsy;
+            obj.binary_bin.awake = score.behavState == score.statecodes.NotSleep;
+            obj.binary_bin.nrem = score.behavState == score.statecodes.NREM;
+            obj.binary_bin.rem = score.behavState == score.statecodes.REM;
+            obj.binary_bin.drowsy = score.behavState == score.statecodes.Drowsy;
             [obj.time_table.long_nrem, obj.info.bigchunk_nrem_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_nrem_weight,...
-                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, score.binwidth_sec);
             [obj.time_table.long_awake, obj.info.bigchunk_awake_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_awake_weight,...
-                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, score.binwidth_sec);
             [obj.time_table.long_drowsy, obj.info.bigchunk_drowsy_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_drowsy_weight,...
-                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, score.binwidth_sec);
             [obj.time_table.long_rem, obj.info.bigchunk_rem_composition] = get_bigchunk(obj.binary_bin, obj.param.bigchunk_rem_weight,...
-                obj.param.bigchunk_windowsize, sleep_score.binwidth_sec);
+                obj.param.bigchunk_windowsize, score.binwidth_sec);
             % Time table generation
             % for chunk analysis
             obj.time_table.roughawake = statebin2timetable(obj.sleep_score.AwakeTimes, obj.sleep_score.DrowsyTimes);
