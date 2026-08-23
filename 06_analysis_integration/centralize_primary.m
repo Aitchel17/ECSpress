@@ -56,10 +56,11 @@ schema_version = 1;
 % fields carry the measurement and which are bulk or regenerable. It lives with
 % the code that does the taking, at the bottom of this file.
 
-dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
-    '2023ecspress\02_secondary_analysis'];
-dirs.working_root = 'G:\tmp';        % the live data tree, read but never written
-dirs.central = fullfile(dirs.secondary_root, 'centralized');
+dirs = util_centraldirs();
+if strlength(dirs.working_root) == 0
+    error('centralize_primary:noTree', ...
+        'this machine carries no data tree, so there are no sources to read');
+end
 
 % analysis_analog.mat holds an object of a class that lives in 02_othersignal, and
 % ECSSession needs mdfExtractLoader out of 00_mdfExtractor, so both sibling repos

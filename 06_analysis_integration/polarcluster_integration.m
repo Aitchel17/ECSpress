@@ -20,9 +20,8 @@ clc, clear
 addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
 util_ecspath;                                     % three roots, minus zz_notinuse
 
-dirs.data_root = 'G:\tmp';
-dirs.save_dir  = ['E:\OneDrive - The Pennsylvania State University\2023ecspress' ...
-    '\02_secondary_analysis\polar_ave'];
+dirs = util_centraldirs();
+dirs.save_dir = fullfile(dirs.secondary_root, 'polar_ave');
 
 % One place where every field of a session row is declared, so its shape is
 % readable without tracing which line wrote what.
@@ -53,8 +52,8 @@ session_proto = struct( ...
 param.smooth_deg = 15;    % circular moving-average width for the alignment measurement
 
 %% 1. Find every session that has both files
-file_list = dir(fullfile(dirs.data_root, '**', 'polarcluster.mat'));
-fprintf('polarcluster.mat found : %d under %s\n', numel(file_list), dirs.data_root);
+file_list = dir(fullfile(dirs.working_root, '**', 'polarcluster.mat'));
+fprintf('polarcluster.mat found : %d under %s\n', numel(file_list), dirs.working_root);
 
 sessions = session_proto([]);
 skipped  = strings(0, 2);
@@ -140,7 +139,7 @@ end
 polar_ave = struct();
 polar_ave.sessions = sessions;
 polar_ave.param    = struct( ...
-    'data_root',    string(dirs.data_root), ...
+    'data_root',    string(dirs.working_root), ...
     'smooth_deg',   param.smooth_deg, ...
     'n_bin',        360, ...
     'bin_start_deg', -7.5, ...     % see the caution on session_proto

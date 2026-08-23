@@ -3,7 +3,7 @@ classdef make_fig < handle
     %   Detailed explanation goes here
 
     properties
-        save_path = 'E:\OneDrive - The Pennsylvania State University\2023_ECSpress\08_figures';
+        save_path = '';   % [] = ask util_centraldirs when save2svg runs
         monitor_xyinch = [27 2];
         xy_sizeinch = [5 2];
         fig_color = 'w';
@@ -228,10 +228,14 @@ classdef make_fig < handle
                 save_path = [];
             end
             %%
-            if isempty(save_path)
+            % the argument wins, then the property, then the project's figure
+            % folder. The property default is empty so the last one is normal
+            target_dir = save_path;
+            if isempty(target_dir)
                 target_dir = obj.save_path;
-            else
-                target_dir = save_path;
+            end
+            if isempty(target_dir)
+                target_dir = util_centraldirs().figure_root;
             end
             % Lazily create the target folder so categories with no figures never
             % leave an empty folder behind (see ECSSession.setup_directories).

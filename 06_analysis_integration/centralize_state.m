@@ -40,9 +40,7 @@ param.contents = [ ...
 % change, so no stamp can see it.
 schema_version = 1;
 
-dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
-    '2023ecspress\02_secondary_analysis'];
-dirs.central = fullfile(dirs.secondary_root, 'centralized');
+dirs = util_centraldirs();
 
 addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
 util_ecspath;                                     % three roots, minus zz_notinuse

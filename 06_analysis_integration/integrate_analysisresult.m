@@ -43,12 +43,11 @@
 clc, clear
 
 % Where the analysis products live. Not the data.
-dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
-    '2023ecspress\02_secondary_analysis'];
+dirs = util_centraldirs();
 
-% The live data tree. E:\ is the BACKUP drive -- a cohort path under it produces
-% rows that duplicate the same sessions under G:\tmp. see CLAUDE_LOG.md
-dirs.working_root = 'G:\tmp';
+% The live data tree comes from util_centraldirs and is "" off the rig.
+% E:\ is the BACKUP drive -- a cohort path under it produces rows that
+% duplicate the same sessions under G:\tmp. see CLAUDE_LOG.md
 
 % Cohorts, as <folder under dirs.working_root>. Only cell 1 reads this, and only
 % to pick which tree to rename videos in. Which cohorts go into the DATASET is
@@ -112,7 +111,7 @@ fwhm_rederive(char(fullfile(dirs.working_root, param.cohorts(param.cohort_idx)))
 %   changed is seconds and does not rewrite the files.
 %   note  the scan does not overwrite a metadata value corrected by hand in the
 %        reference sheet -- write_dirtable updates only the file columns
-run(fullfile('g:\03_program\01_ecspress\06_analysis_integration', 'centralize_primary.m'));
+run(which('centralize_primary.m'));
 
 %% 3. State analysis for every session   [WRITES centralized_paxfwhm_state.mat]
 % state_integration -> state_linefwhm over the nine series, computed from the
@@ -120,7 +119,7 @@ run(fullfile('g:\03_program\01_ecspress\06_analysis_integration', 'centralize_pr
 %   This replaced batch_state_analysis, which wrote paxfwhm_state.mat into each
 %   session folder and skipped any session that already had one -- so a re-scored
 %   recording silently kept its old answer. see CLAUDE_LOG.md
-run(fullfile('g:\03_program\01_ecspress\06_analysis_integration', 'centralize_state.m'));
+run(which('centralize_state.m'));
 
 %% 4. Summary and transition tables   [WRITES state_summary.mat, transition.mat]
 % Flattens the two nests out of the centralized state analysis and applies the
@@ -130,7 +129,7 @@ run(fullfile('g:\03_program\01_ecspress\06_analysis_integration', 'centralize_st
 %   Nothing caches what this produces. state_summary/transition are pure functions
 %   of the centralized state table and of those filters, so the committed script IS
 %   the record -- as long as it is committed. see CLAUDE_LOG.md
-run(fullfile('g:\03_program\01_ecspress\06_analysis_integration', 'tablegeneration_main.m'));
+run(which('tablegeneration_main.m'));
 
 %% 4.1 What came out
 summary_path    = fullfile(dataset_dir, "state_summary.mat");
@@ -153,22 +152,21 @@ fprintf('trace lengths : %s\n', ...
 %   Only polar_ave_fig writes files. The other three draw on screen.
 
 %% 5.1 Transition traces, four transitions x three vessels
-run(fullfile('g:\03_program\01_ecspress\07_figuregeneration', 'transition_fig.m'));
+run(which('transition_fig.m'));
 
 %% 5.2 Pre/post scatter for the same transitions
-run(fullfile('g:\03_program\01_ecspress\07_figuregeneration', 'transition_prepost.m'));
+run(which('transition_prepost.m'));
 
 %% 5.3 Tonic state summary
-run(fullfile('g:\03_program\01_ecspress\07_figuregeneration', 'tonic_state.m'));
+run(which('tonic_state.m'));
 
 %% 5.4 Vessel-averaged polar contours   [WRITES svg]
 % Needs polar_ave.mat, which polarcluster_integration writes and which is NOT
 % part of the table chain -- it walks the sessions itself. Run that first if the
 % file is missing.
-run(fullfile('g:\03_program\01_ecspress\07_figuregeneration', 'polar_ave_fig.m'));
+run(which('polar_ave_fig.m'));
 
 %% 5.0 Polar contour extraction, only when polar_ave.mat is missing   [WRITES]
 % Minutes, not seconds. polar_ave_fig does the alignment and averaging, so this
 % only has to run when the contours themselves change.
-run(fullfile('g:\03_program\01_ecspress\06_analysis_integration', ...
-    'polarcluster_integration.m'));
+run(which('polarcluster_integration.m'));

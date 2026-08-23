@@ -38,11 +38,7 @@ param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
     param.dataset = 'merged_igkl_igkltdt';
 end
-dirs.secondary_root = getenv('ECSPRESS_ROOT');
-if isempty(dirs.secondary_root)
-    dirs.secondary_root = ['E:\OneDrive - The Pennsylvania State University\' ...
-        '2023ecspress\02_secondary_analysis'];
-end
+dirs = util_centraldirs();
 dirs.central = fullfile(dirs.secondary_root, 'centralized');
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);
 

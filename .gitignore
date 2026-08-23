@@ -22,3 +22,8 @@ functions/toshare/
 
 # Scratch pad. Whatever is being tried right now, by design
 untitled.m
+
+# Per-machine path override. util_centraldirs derives the products root from
+# the OneDrive environment variable, so this only exists on a machine whose layout
+# is not that -- and it is the one place a path may be written down by hand
+functions/dirs_local.m

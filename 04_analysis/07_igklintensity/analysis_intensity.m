@@ -26,10 +26,11 @@ clear
 addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
 util_ecspath;                                     % three roots, minus zz_notinuse
 
-dirs.secondary = ['E:\OneDrive - The Pennsylvania State University\2023ecspress\' ...
-    '02_secondary_analysis'];
-dirs.dirtable = fullfile(dirs.secondary, 'merged_igkl_igkltdt', 'merged_igkl_igkltdt_dirtable.xlsx');
-dirs.scratch = 'C:\Users\hql5715\AppData\Local\Temp\claude\g--03-program\aba78c46-71f9-4044-865e-82b968e72537\scratchpad';
+dirs = util_centraldirs();
+dirs.dirtable = fullfile(dirs.secondary_root, 'merged_igkl_igkltdt', 'merged_igkl_igkltdt_dirtable.xlsx');
+% a session temp folder was written down here and then deleted with the session.
+% tempdir is the same kind of place and always exists
+dirs.scratch = tempdir;
 
 param.vessel_prefix        = "PA";  % str    penetrating arterioles
 param.depth_thr_um         = 70;    % float  tableManager.m sets the L1 / L2 boundary here
