@@ -1,10 +1,6 @@
 function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
 %MERGE_DIRTABLE  Scan each cohort, write its sheet, join them into one.
-%   Everything that produces a directory table is here: the walk over each cohort,
-%   the per-cohort sheet, and the merged sheet centralize_primary reads. It used to
-%   go on and build mtable_FWHMsleep.mat by opening every session's
-%   paxfwhm_state.mat, and that job moved to centralize_primary and
-%   centralize_state, which are incremental.
+
 %
 %   IN   working_root    1x1 str    the live data tree, one folder per cohort
 %        secondary_root  1x1 str    where the sheets go. NOT the data
@@ -19,22 +15,7 @@ function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
 %          .collision    1xC str    keys that name more than one LIVE folder, so
 %                                   they were left alone. Empty when there are none
 %          .n_row        1x1 double rows in the merged sheet
-%
-%   THE SCAN IS SAFE TO RE-RUN, and that is why centralize_primary calls it before
-%   reading. write_dirtable updates only the FILE columns of a row that already
-%   exists; VesselID, Depth, Resolution, Notes and the rest of the metadata are
-%   left alone, so a value corrected by hand in the reference sheet survives every
-%   later scan. It also leaves the workbook untouched when nothing changed. With
-%   the MDF metadata cache warm the whole walk is about a second.
-%
-%   why  a function and not a script : the caller says which cohorts go into the
-%        dataset, so that decision lives in ONE place instead of being repeated
-%        here and in whatever ran this
-%   caution  this is the ONLY place the merged dataset comes from. It lived in a
-%        scratch folder until 2026-08-08, which meant the 32-session result could
-%        not be rebuilt from the repo
-%   note  rename_avi_files is deliberately NOT here. It renames files in the DATA
-%        tree, and nothing that runs automatically should do that
+
     arguments
         working_root   (1,1) string
         secondary_root (1,1) string
@@ -43,14 +24,6 @@ function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
     end
 
 
-    % What the scan looks for in each session folder, as <column name>, <file name>.
-    % Not a setting: it is the list of products this pipeline makes, so it lives
-    % with the code that looks for them.
-    %   note  paxfwhm_state.mat is still looked for and still written into the
-    %         sheet, and nothing reads that column -- the state analysis is
-    %         computed into centralized_paxfwhm_state.mat now, not written per
-    %         session. The column stays so a session that still has the old file
-    %         is recorded rather than silently unlisted
     primary_map = { ...
         'RadonResult',  'radon_result.mat'; ...
         'RoiList',      'roilist.mat'; ...
@@ -93,10 +66,7 @@ function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
     end
 
     %% 2. Join the cohort sheets
-    % err  E:\ is a BACKUP drive, not a second data tree. write_dirtable merges an
-    %      old sheet with a fresh scan, so an igkltdt sheet that was once written
-    %      while pointed at E:\ keeps those rows, and they duplicate sessions that
-    %      also sit under G:\tmp. Every row not on working_root is dropped
+
     part = cell(1, n_cohort);
     for cohort_idx = 1:n_cohort
         import_opts = detectImportOptions(cohort_sheet(cohort_idx), 'Sheet', 'reference');

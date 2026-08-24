@@ -1,39 +1,13 @@
 %PVS_DIAMETER_FIG  PVS extent against lumen diameter, as a 2-D density.
-%   param.y_series picks which extent -- eps, the outer PVS edges, or totalpvs, the
-%   annulus. They are one series read two ways and the choice is about measurement
-%   error, not about content; the block beside that setting says why.
-%   The slope of this relation is already measured on the state summary, by
-%   regression rather than by binning. What a slope cannot say is whether one slope
-%   is the right summary: whether the relation is straight over the range or bends,
-%   whether the frames form one band or two, and whether the number is carried by
-%   the body of the distribution or by its tail. That is what this draws.
-%
-%   caution  a density pooled over a whole recording has no time in it, so two
-%        limbs that trace the same band in opposite directions come out as ONE
-%        band. This figure cannot show hysteresis and an absence of two bands is
-%        not evidence against it. Splitting the frames by the sign of d(bv)/dt
-%        would be a different figure
-%
-%   Reads centralized_paxfwhm.mat and nothing else. No session folder is opened.
-%
-%   Each session is re-centred on its own modal diameter and its own modal PVS
-%   thickness before it is drawn, because absolute diameter differs between vessels
-%   and pooling raw micrometres would smear the relation rather than show it. That
-%   is heatmap_postprocessing's origin correction, which also keeps only the largest
-%   connected component of the density so a stray island does not set the axes.
-%
-%   note  this deliberately does NOT go through secondary_afterproceesing or
-%        tertiary_integration. Those estimate a slope, and they sort the two heatdata
-%        rows BY that slope before comparing them, so the comparison cannot come out
-%        the other way. see STRUCTURE.md and CLAUDE_LOG.md
+
 clc, clear
 addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
 util_ecspath;                                     % three roots, minus zz_notinuse
 clee = color_lee();
-param.colormap = clee.gradient.inferno;   % density, so a perceptually ordered ramp
 
-% integrate_analysisresult sets these in the environment, which survives the clear
-% above; run this file on its own and the defaults below apply.
+%% Which dataset, and where it lives
+% Set by integrate_analysisresult cell 0. The fallback is what makes this script
+% runnable on its own; nothing below this block addresses the dataset.
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
     param.dataset = 'merged_igkl_igkltdt';
@@ -42,120 +16,44 @@ dirs = util_centraldirs();
 dirs.central = fullfile(dirs.secondary_root, 'centralized');
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);
 
+%% What gets in
+
 param.depth_thr = 70;      % um       L1 / L2-3 boundary, the stratum every result uses
 param.min_frame = 900;     % frames   fewer than this does not fill a 2-D histogram
-% A session whose diameter barely moved has no relation to fit. Its mode curve is
-% flat because the x axis is two bins wide, not because the PVS held still, and a
-% flat curve enters the population as a slope near zero.
-%   err  the first run gated on frames alone, and sessions whose mode curve was
-%        flat for want of an x axis entered the population as slopes at zero.
-%        see CLAUDE_LOG.md
 param.min_bv_range = 2;    % um       diameter span a session must cover to be fitted
-% How far the PVS scatters at a FIXED diameter, printed on every panel. OFF as a
-% gate, and the reason is worth keeping.
-%   why  a density looks round when the scatter is large COMPARED WITH how far the
-%        vessel moved, so the roundness the eye picks up is a ratio and this is
-%        only its numerator. A session whose vessel barely moved reads round at a
-%        small scatter, and one that dilated widely reads as a band at a large one
-%   why  the scatter cannot be attributed to the instrument either. The pipeline's
-%        own median filters have already removed everything faster than the
-%        temporal floor, so the frame-to-frame part of it is a LOWER bound on
-%        detector noise and what is left cannot be assigned. Gating would narrow
-%        the claim to sessions where the boundary is resolved rather than remove a
-%        known artefact
-%   caution  gating on the ratio instead is worse, not better: that ratio IS the
-%        correlation this figure exists to show, and selecting on it is what made
-%        the retired chain's second circularity unfalsifiable. see STRUCTURE.md
 param.max_cond_sd = Inf;   % um       PVS scatter at a fixed diameter. Inf = no gate
+
+param.pool_resolution = 0.285;   % um/px  a session is pooled only at this setting
+param.resolution_tol = 0.01;     % um/px  how close counts as the same setting
+
+param.min_vessel_n = 10;   % vessels a diameter column needs before it is drawn
+param.min_column = 4;      % columns a side needs before that vessel is fitted
+
+%% Parameter section
+% How the surviving rows are reduced and drawn. Changing any of these changes the
+% picture, never the sample.
+param.pool_step = [];      % um       common grid spacing, [] = the coarsest pixel
+param.column_stat = "median";
+param.y_series = "eps";
+
+param.colormap = clee.gradient.inferno;   % density, so a perceptually ordered ramp
+param.stat_name = ["mode", "centroid", "median"];
+param.fontsize = 11;
 param.n_tile = Inf;        % sessions the grid shows, widest diameter range first.
                            % Inf draws every one, which is the point of the grid
 param.n_col = 10;          % columns in that grid
 
-% Pooling. The pixel size is not the same in every session, so the common grid has
-% to be at least as coarse as the coarsest of them or the finest sessions would be
-% interpolated onto a grid they cannot support. [] takes the coarsest that is there.
-param.pool_step = [];      % um       common grid spacing, [] = the coarsest pixel
-param.min_vessel_n = 10;   % vessels a diameter column needs before it is drawn
-% Pool only sessions acquired at ONE pixel size, so the common grid is the grid the
-% data already sits on and nothing is resampled. Mixing sizes means the finest
-% sessions are thrown onto a grid three times coarser than they were measured at,
-% and the pooled band's thickness then carries that resampling.
-%   [] pools every session whatever its pixel size
-param.pool_resolution = 0.285;   % um/px
-param.resolution_tol = 0.01;     % um/px  how close counts as the same setting
-param.min_column = 4;      % columns a side needs before that vessel is fitted
 
-% Which one number stands for a diameter column. All three are computed and
-% printed; param.column_stat picks the one the figures draw.
-%   "mode"     the brightest bin. Quantised to the grid, so a line fitted to it is
-%              a line fitted to a staircase and that quantisation goes straight
-%              into the variance
-%   "centroid" the column's mean. Continuous and uses the whole column, but a
-%              skewed column pulls it, and PVS thickness has a floor at zero so
-%              skew is expected
-%   "median"   the half-mass crossing, read between bins. Continuous and does not
-%              follow a tail
-%   note  the no-flux null is derived from AREAS, which is the language of means
-%        rather than of most-common values
-%   err  the first run used the mode and the vessel-level bend came back at p 0.09.
-%        Both continuous statistics put it two orders of magnitude lower on the
-%        same vessels, so what the mode was measuring was its own grid.
-%        see CLAUDE_LOG.md
-param.column_stat = "median";
-param.stat_name = ["mode", "centroid", "median"];
-param.fontsize = 11;
-
-% WHICH THICKNESS GOES ON THE Y AXIS. The two are one series read two ways:
-% eps = bv + totalpvs is a definition, so on the OBSERVED values
-% d(totalpvs)/d(bv) = d(eps)/d(bv) - 1 holds identically, noise or no noise. Every
-% slope shifts by exactly one and every slope DIFFERENCE -- the bend, a limb split,
-% a state split -- is unchanged. Reporting both is counting one finding twice.
-% What the choice does change is where measurement error sends the estimate.
-%   "totalpvs"  the annulus itself. It is built from the two lumen walls with the
-%        opposite sign to bv, so a wall error enters x and y anticorrelated and the
-%        pure-noise limit of the slope is -1
-%   "eps"       the two outer PVS edges, which share NO boundary row with bv. The
-%        errors are then independent, the pure-noise limit is 0, and that is
-%        ordinary regression dilution rather than an attractor nobody expects.
-%        The scatter at a fixed diameter also becomes a clean read on the outer
-%        boundary alone instead of a mixture with the wall error
-%   caution  on EITHER axis the pure-noise limit lands exactly on the rigid outer
-%        wall reference, so a session whose density is noise reads as a rigid outer
-%        wall. Changing the axis makes that legible, not absent
-%   see SPLIT_DESIGN.md and FINDINGS.md
-param.y_series = "eps";
-
-% The reference slopes this figure rules across every panel, as values of
-% d(eps)/d(bv). On the totalpvs axis each is one less.
-%   no flux, area conserved    bv/eps, at the population median
-%   measured                   at the vessel level
-% see FINDINGS.md for where both come from
-%   note  the two ends of the range are deliberately not drawn. A PVS of fixed
-%        THICKNESS is 1, and it is not a null at all -- a fixed-thickness annulus
-%        gains area as the lumen grows, so it is fluid flowing IN. A rigid outer
-%        wall is 0, and on this axis that is also exactly where pure measurement
-%        noise sends the estimate, so a line there cannot be read. see FINDINGS.md
 param.ref_slope = [0.550, 0.434];
 param.ref_name = [ "no flux, area conserved", ...
     "measured"];
-% Only one of the two came from a regression, so only one has a correlation to
-% report. A hypothesis has no r, and NaN prints nothing.
-%   why  the slope alone cannot say HOW the outer edge follows the wall --
-%        beta = r * SD_eps/SD_bv, so a faithful follower at reduced amplitude and a
-%        weak coupling at equal amplitude give the same beta. r is the discriminator
-%        and it was never carried beside the slope it decomposes. see FINDINGS.md
-%   caution  r does NOT follow the +1 slope shift, so it needs its own value per
-%        axis. totalpvs shares both lumen walls with bv, so the common wall error
-%        enters x and y anticorrelated and raises the magnitude on that axis; eps
-%        shares no boundary row with bv and is the honest one.
+
 param.ref_r = [NaN, 0.612];
 if param.y_series == "totalpvs"
     param.ref_slope = param.ref_slope - 1;
     param.ref_r = [NaN, -0.749];
 end
-% Which entry is which, found by NAME. Positional indices into the list above were
-% used at six call sites, and shortening the list silently repointed four of them at
-% the wrong reference and put two out of range. see CLAUDE_LOG.md
+
 ref_noflux = find(param.ref_name == "no flux, area conserved", 1);
 ref_measured = find(param.ref_name == "measured", 1);
 param.y_label = param.y_series + ", um from its mode";
@@ -163,17 +61,21 @@ param.y_label = param.y_series + ", um from its mode";
 central = load(fullfile(dirs.central, 'centralized_paxfwhm.mat')).central;
 fprintf('centralized_paxfwhm %d sessions\n', height(central));
 
-%% The stratum, and one density per session
+%% Which rows the result is about
 vessel_id = string(central.VesselID);
 depth_um = lead_number(central.Depth);
 resolution_um = lead_number(central.Resolution);
 is_artery = contains(vessel_id, "PA", 'IgnoreCase', true);
 is_layer1 = depth_um < param.depth_thr;
-in_stratum = is_artery & is_layer1 & isfinite(resolution_um);
-fprintf('   PA %d | depth < %d um %d | in the stratum %d\n', ...
-    sum(is_artery), param.depth_thr, sum(is_layer1), sum(in_stratum));
+has_resolution = isfinite(resolution_um);
+keep_session = is_artery & is_layer1 & has_resolution;
+fprintf('centralized_paxfwhm : %d of %d rows kept\n', ...
+    sum(keep_session), numel(keep_session));
+fprintf('   PA %d | depth < %d um %d | resolution known %d\n', ...
+    sum(is_artery), param.depth_thr, sum(is_layer1), sum(has_resolution));
+row_list = find(keep_session);
 
-row_list = find(in_stratum);
+%% One density per session, and the two per-session numbers the panels are labelled with
 n_session = numel(row_list);
 heat = cell(n_session, 1);
 drawn = false(n_session, 1);
@@ -238,8 +140,10 @@ fprintf('   %d had fewer than %d frames | %d spanned less than %g um\n', ...
 fprintf('   %d sessions drawn, %d held back for PVS scatter over %g um at a fixed diameter\n', ...
     sum(drawn), sum(wide_enough & cond_sd > param.max_cond_sd), param.max_cond_sd);
 
-% One slope per session off the mode curve, computed here because every figure
-% below labels its panels with it.
+%% One slope per session off the mode curve
+% Split from the loop above because it costs a different amount: that one builds a
+% density per session, this one fits a line to a handful of points. Anything that
+% only re-labels the panels belongs here, where it can be re-run for free.
 %   caution  the mode of a diameter bin holding three frames is noise, so this
 %        slope is dragged toward zero wherever the density is thin. It is a LABEL
 %        on the panel, not the leg's estimate of d(totalpvs)/d(bv) -- that comes
@@ -256,7 +160,7 @@ for k = 1:n_session
 end
 
 %% One session, with its two marginals
-[~, pick] = max(bv_range .* drawn);
+[~, piqueck] = max(bv_range .* drawn);
 pick_row = row_list(pick);
 this_heat = heat{pick};
 fprintf('\nrepresentative %s\n   %d frames | %.3f um/px | diameter range %.2f um\n', ...
