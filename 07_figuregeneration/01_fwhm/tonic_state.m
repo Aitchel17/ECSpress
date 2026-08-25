@@ -9,7 +9,7 @@ param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
     param.dataset = 'merged_igkl_igkltdt';
 end
-dirs = util_centraldirs();
+dirs = dirs_central();
 exp_path = fullfile(dirs.secondary_root, param.dataset);
 table_path = fullfile(exp_path, "state_summary.mat");
 load_struct = load(table_path);

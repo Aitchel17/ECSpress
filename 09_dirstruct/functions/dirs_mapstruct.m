@@ -1,5 +1,5 @@
-function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map, state_map, cache_path)
-%MAPDIRECTORY Build the session directory table by scanning experiment_folder.
+function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_map, state_map, cache_path)
+%DIRS_MAPSTRUCT Build the session directory table by scanning experiment_folder.
 %   cache_path (optional): path to a .mat file caching immutable MDF metadata
 %   per session directory. When given, each session's MDF info is parsed at
 %   most once ever -- subsequent runs reuse the cached metadata and skip the
@@ -17,7 +17,7 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
                 meta_cache = loaded.meta_cache;
             end
         catch ME
-            warning('mapdirstruct:cacheLoad', ...
+            warning('dirs_mapstruct:cacheLoad', ...
                 'Could not load metadata cache (%s); reparsing all sessions.', ME.message);
         end
     end
@@ -113,7 +113,7 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
                 num_tokens = s_split(~cellfun('isempty', regexp(s_split, '^\d+$', 'once')));
                 is_session = ~isempty(regexpi(session.name, '^HQL\d+', 'once')) && ~isempty(num_tokens);
                 if ~is_session
-                    warning('mapdirstruct:skipNonSession', ...
+                    warning('dirs_mapstruct:skipNonSession', ...
                         'Skipping non-session folder: %s', ...
                         fullfile(datefolder.dirs(session_idx).folder, session.name));
                     continue
@@ -128,7 +128,7 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
                 else
                     cached_meta = [];
                 end
-                [session_data, parsed_meta] = scan_sessionfolder(session.directory, cached_meta);
+                [session_data, parsed_meta] = dirs_scansession(session.directory, cached_meta);
                 if isempty(cached_meta) && ~isempty(parsed_meta)
                     meta_cache(cache_key) = parsed_meta;   % first parse -> cache for reuse
                     cache_dirty = true;
@@ -137,25 +137,25 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
                 % --- Scan Primary Analysis Folder ---
                 if ~strcmp(session_data.PrimaryAnalysis, 'NA')
                     p_dir = fullfile(session.directory, session_data.PrimaryAnalysis);
-                    found_primary = scan_analysisfolder(p_dir, primary_map);
+                    found_primary = dirs_scananalysis(p_dir, primary_map);
                 else
-                    found_primary = scan_analysisfolder('NA', primary_map);
+                    found_primary = dirs_scananalysis('NA', primary_map);
                 end
     
                 % --- Scan Peripheral Folder ---
                 if ~strcmp(session_data.Peripheral, 'NA')
                     p_dir = fullfile(session.directory, session_data.Peripheral);
-                    found_peri = scan_analysisfolder(p_dir, peri_map);
+                    found_peri = dirs_scananalysis(p_dir, peri_map);
                 else
-                    found_peri = scan_analysisfolder('NA', peri_map);
+                    found_peri = dirs_scananalysis('NA', peri_map);
                 end
     
                 % --- Scan State Analysis Folder ---
                 if isfield(session_data, 'State_analysis') && ~strcmp(session_data.State_analysis, 'NA')
                     p_dir = fullfile(session.directory, session_data.State_analysis);
-                    found_state = scan_analysisfolder(p_dir, state_map);
+                    found_state = dirs_scananalysis(p_dir, state_map);
                 else
-                    found_state = scan_analysisfolder('NA', state_map);
+                    found_state = dirs_scananalysis('NA', state_map);
                 end
     
                 % --- Append Data to Columns ---
@@ -225,7 +225,7 @@ function dirstruct_table = mapdirstruct(experiment_folder, primary_map, peri_map
         try
             save(cache_path, 'meta_cache');
         catch ME
-            warning('mapdirstruct:cacheSave', ...
+            warning('dirs_mapstruct:cacheSave', ...
                 'Could not save metadata cache: %s', ME.message);
         end
     end

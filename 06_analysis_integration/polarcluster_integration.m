@@ -17,10 +17,10 @@
 %            polar_ave.mat under dirs.save_dir
 
 clc, clear
-addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
-util_ecspath;                                     % three roots, minus zz_notinuse
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 
-dirs = util_centraldirs();
+dirs = dirs_central();
 dirs.save_dir = fullfile(dirs.secondary_root, 'polar_ave');
 
 % One place where every field of a session row is declared, so its shape is

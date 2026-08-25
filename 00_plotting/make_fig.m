@@ -3,7 +3,7 @@ classdef make_fig < handle
     %   Detailed explanation goes here
 
     properties
-        save_path = '';   % [] = ask util_centraldirs when save2svg runs
+        save_path = '';   % [] = ask dirs_central when save2svg runs
         monitor_xyinch = [27 2];
         xy_sizeinch = [5 2];
         fig_color = 'w';
@@ -235,7 +235,7 @@ classdef make_fig < handle
                 target_dir = obj.save_path;
             end
             if isempty(target_dir)
-                target_dir = util_centraldirs().figure_root;
+                target_dir = dirs_central().figure_root;
             end
             % Lazily create the target folder so categories with no figures never
             % leave an empty folder behind (see ECSSession.setup_directories).

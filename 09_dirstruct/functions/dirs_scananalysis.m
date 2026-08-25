@@ -1,5 +1,5 @@
-function found_files = scan_analysisfolder(analysis_dir, expected_files_map)
-% SCAN_ANALYSISFOLDER Scan a specific analysis folder for expected files
+function found_files = dirs_scananalysis(analysis_dir, expected_files_map)
+% DIRS_SCANANALYSIS Scan a specific analysis folder for expected files
 %
 % Inputs:
 %   analysis_dir       - Full path to the analysis directory (or 'NA')

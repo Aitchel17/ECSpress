@@ -29,8 +29,8 @@
 % The repo roots, not pwd. genpath(pwd) from g:\03_program pulled in a second copy
 % of this whole tree that used to sit in ECSpress_py, and MATLAB resolves by
 % filename, so which copy ran depended on path order. See CLAUDE.md.
-addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
-util_ecspath;                                     % three roots, minus zz_notinuse
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 close all
 % 0.2 Session directory
 % sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';

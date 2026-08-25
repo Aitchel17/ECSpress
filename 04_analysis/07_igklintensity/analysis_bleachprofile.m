@@ -35,12 +35,12 @@ dirs.scratch = ['C:\Users\hql5715\AppData\Local\Temp\claude\g--03-program\' ...
 
 %% load, following analysis_main
 % ECSSession inherits from mdfExtractLoader, which lives in the extractor tree, so
-% both roots have to be on the path. util_ecspath adds exactly the three ECSpress
+% both roots have to be on the path. dirs_ecspath adds exactly the three ECSpress
 % roots and nothing above them -- other folders under the program root carry
 % copies of these same file names, and the two trees already share one,
 % pre_thresholding, whose two versions differ.
-addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
-util_ecspath;                                     % three roots, minus zz_notinuse
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 session = ECSSession(dirs.session);
 session = session.load_primary_results;
 session.stackch1 = session.loadstack('ch1');

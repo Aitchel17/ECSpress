@@ -1,6 +1,6 @@
-function dirs = util_centraldirs()
-%UTIL_CENTRALDIRS  Where the centralized products live, on whatever machine this is.
-%   util_ecspath finds the pipeline's CODE by deriving it from its own location. This
+function dirs = dirs_central()
+%DIRS_CENTRAL  Where the centralized products live, on whatever machine this is.
+%   dirs_ecspath finds the pipeline's CODE by deriving it from its own location. This
 %   is the other half, and it cannot use the same trick: the products do not sit
 %   beside the code, and their absolute path differs between machines.
 %
@@ -68,7 +68,7 @@ if strlength(secondary_root) == 0
     if isempty(onedrive_report)
         onedrive_report = '(no OneDrive variable set)';
     end
-    error('util_centraldirs:noRoot', ...
+    error('dirs_central:noRoot', ...
         ['cannot locate the products root.\n' ...
         '   OneDrive reports : %s\n' ...
         '   looked for       : %s under it\n' ...

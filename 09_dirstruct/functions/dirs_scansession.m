@@ -1,5 +1,5 @@
-function [session_data, parsed_meta] = scan_sessionfolder(session_dir, cached_meta)
-% SCAN_SESSIONFOLDER Scan a session folder for files and metadata
+function [session_data, parsed_meta] = dirs_scansession(session_dir, cached_meta)
+% DIRS_SCANSESSION Scan a session folder for files and metadata
 %
 % Input:
 %   session_dir - Full path to session directory

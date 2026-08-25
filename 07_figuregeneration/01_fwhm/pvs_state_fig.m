@@ -22,10 +22,10 @@
 %        through param, and both should be switched back ON before any positive
 %        result is believed. see FINDINGS.md
 clc, clear
-addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
-util_ecspath;                                     % three roots, minus zz_notinuse
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 clee = color_lee();
-dirs = util_centraldirs();
+dirs = dirs_central();
 
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)

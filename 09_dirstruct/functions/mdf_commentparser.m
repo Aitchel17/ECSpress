@@ -39,7 +39,7 @@ parsed_struct.objz = [];
 parsed_struct.resolution = [];
 %% Acquisition metadata, one field at a time
 % err      only zoom used to be guarded, so a session whose folder has no
-%          *_info.txt died on objpix and took the whole mapdirstruct with it.
+%          *_info.txt died on objpix and took the whole dirs_mapstruct with it.
 %          NONE of the folders that hit it has a paxfwhm.mat -- the scan was
 %          dying on folders it had nothing to collect from
 %          see FINDINGS.md

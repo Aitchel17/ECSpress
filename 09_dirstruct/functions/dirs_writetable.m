@@ -1,5 +1,5 @@
-function write_dirtable(dirstruct_table, dirtable_dir)
-%WRITE_DIRTABLE Update directory mapping Excel with smart merging and logging.
+function dirs_writetable(dirstruct_table, dirtable_dir)
+%DIRS_WRITETABLE Update directory mapping Excel with smart merging and logging.
 %   Orchestrates the loading, updating, and saving of directory tables.
 
     if ~isfile(dirtable_dir)
@@ -72,11 +72,11 @@ function load_and_update_tables(dirstruct_table, dirtable_dir)
             writetable(dirstruct_table, dirtable_dir, "Sheet", "auto_mapped");
             writetable(log_table, dirtable_dir, "Sheet", "log");
         else
-            fprintf('[write_dirtable] No changes detected; directory table left as-is.\n');
+            fprintf('[dirs_writetable] No changes detected; directory table left as-is.\n');
         end
         
     catch ME
-        warning('write_dirtable:updateFailed', 'Failed to update directory table: %s', ME.message);
+        warning('dirs_writetable:updateFailed', 'Failed to update directory table: %s', ME.message);
     end
 end
 

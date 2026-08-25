@@ -26,7 +26,7 @@ clc, clear
 addpath(genpath('g:\03_program\01_ecspress\00_plotting'));
 clee = color_lee();
 
-dirs = util_centraldirs();
+dirs = dirs_central();
 dirs.save_dir = fullfile(dirs.secondary_root, 'polar_ave');
 load_struct = load(fullfile(dirs.save_dir, 'polar_ave.mat'));
 sessions = load_struct.polar_ave.sessions;

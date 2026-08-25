@@ -1,5 +1,5 @@
-function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
-%MERGE_DIRTABLE  Scan each cohort, write its sheet, join them into one.
+function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
+%DIRS_MERGETABLE  Scan each cohort, write its sheet, join them into one.
 
 %
 %   IN   working_root    1x1 str    the live data tree, one folder per cohort
@@ -48,7 +48,7 @@ function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
         cohort_dir = fullfile(working_root, cohort);
         cohort_out = fullfile(secondary_root, cohort);
         if ~isfolder(cohort_dir)
-            error('merge_dirtable:noCohort', 'cohort folder not found: %s', cohort_dir);
+            error('dirs_mergetable:noCohort', 'cohort folder not found: %s', cohort_dir);
         end
         if ~isfolder(cohort_out)
             mkdir(cohort_out)
@@ -57,9 +57,9 @@ function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
         cache_path = fullfile(cohort_out, cohort + "_dircache.mat");
 
         scan_start = tic;
-        scanned_table = mapdirstruct(char(cohort_dir), primary_map, ...
+        scanned_table = dirs_mapstruct(char(cohort_dir), primary_map, ...
             peripheral_map, stateanalysis_map, char(cache_path));
-        write_dirtable(scanned_table, char(cohort_sheet(cohort_idx)));
+        dirs_writetable(scanned_table, char(cohort_sheet(cohort_idx)));
         n_scanned(cohort_idx) = height(scanned_table);
         fprintf('%-12s scanned %d sessions in %.1f s\n', cohort, ...
             n_scanned(cohort_idx), toc(scan_start));
@@ -91,7 +91,7 @@ function info = merge_dirtable(working_root, secondary_root, cohorts, dataset)
 
     %% 3. One row per session key
     % A folder that gets a suffix (_piv, _notanalyzable, _lowcontrast, ...) is
-    % rescanned under its new name while write_dirtable keeps the row under the old
+    % rescanned under its new name while dirs_writetable keeps the row under the old
     % one, so the sheet ends up with two rows for one recording and both carry the
     % same key. Downstream every stage looks a session up by that key with
     % find(...,1) and takes whichever came first, which is a coin toss.

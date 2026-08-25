@@ -23,10 +23,10 @@
 % is the filter, not the tissue.
 
 clear
-addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
-util_ecspath;                                     % three roots, minus zz_notinuse
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 
-dirs = util_centraldirs();
+dirs = dirs_central();
 dirs.dirtable = fullfile(dirs.secondary_root, 'merged_igkl_igkltdt', 'merged_igkl_igkltdt_dirtable.xlsx');
 % a session temp folder was written down here and then deleted with the session.
 % tempdir is the same kind of place and always exists
