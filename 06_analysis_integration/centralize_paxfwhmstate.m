@@ -1,6 +1,6 @@
-%CENTRALIZE_STATE  State analysis for every session, computed from the centralized
-%   inputs and written as one table. Nothing is read from or written to the data
-%   tree.
+%CENTRALIZE_PAXFWHMSTATE  State analysis for every session, computed from the
+%   centralized inputs and written as one table. Nothing is read from or written
+%   to the data tree.
 %
 %   This is what batch_state_analysis did, moved off the session folders. It was
 %   the only stage in the chain that wrote into G:, and it wrote paxfwhm_state.mat
@@ -38,18 +38,19 @@ param.contents = [ ...
 % Bump when what is taken off state_linefwhm changes, or when any of the five
 % analysis methods changes what it produces. The inputs are untouched by such a
 % change, so no stamp can see it.
-schema_version = 1;
+%   2  the four boundary rows are carried alongside the results
+schema_version = 2;
 
-dirs = util_centraldirs();
+dirs = dirs_central();
 
-addpath('g:\03_program\01_ecspress\functions');   % where util_ecspath lives
-util_ecspath;                                     % three roots, minus zz_notinuse
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 
 %% the inputs
 in_path = fullfile(dirs.central, "centralized_" + ["paxfwhm", "sleep_score", "analysis_analog"] + ".mat");
 [in_exists, ~, ~] = util_checkdirstat(in_path);
 if ~in_exists(1)
-    error('centralize_state:noPax', 'run centralize_primary first, centralized_paxfwhm.mat is missing');
+    error('centralize_paxfwhmstate:noPax', 'run centralize_primary first, centralized_paxfwhm.mat is missing');
 end
 pax_table = load(in_path(1)).central;
 score_table = table();
@@ -84,131 +85,54 @@ if ~isempty(previous)
     key_previous = util_sessionkey(previous);
 end
 
-%% one session at a time
-n_session = height(pax_table);
-data_cell = cell(n_session, 1);
-has_data = false(n_session, 1);
-was_reused = false(n_session, 1);
-input_stamp = nan(n_session, 1);
-skipped = strings(0, 1);
-failed = strings(0, 1);
-for k = 1:n_session
-    % the state analysis needs a scoring: a sleep score, or the analog analysis a
-    % whisker recording carries instead. Neither means there is nothing to split by
-    % An analog analysis is only a scoring when it carries stimulus times. Almost
-    % every recording has an analysis_analog.mat, sleep ones included, and theirs
-    % has an empty air table -- running awake_integration over it asks a table with
-    % no columns for Duration. So the analog counts only when its air table has rows.
-    hit_score = find(key_score == key_pax(k), 1);
-    hit_analog = find(key_analog == key_pax(k), 1);
-    if ~isempty(hit_analog)
-        analog_row = analog_table.data{hit_analog};
-        if ~isfield(analog_row, 'airtable') || isempty(analog_row.airtable)
-            hit_analog = [];
-        end
-    end
-    if isempty(hit_score) && isempty(hit_analog)
-        skipped(end+1) = key_pax(k); %#ok<SAGROW>
+%% one row per session that has a scoring to split by
+scan = struct('pax_i', {}, 'data', {}, 'input_stamp', {}, 'reused', {});
+for k = 1:height(pax_table)
+    [score, primary_analog, stamp] = centralize_scoring(score_table, key_score, ...
+        analog_table, key_analog, key_pax(k), pax_table.source_modified(k));
+    if isempty(stamp)
+        fprintf('   no scoring %s\n', key_pax(k));
         continue
     end
-
-    % The stamp covers the sources this row is actually built from, and only those:
-    % a sleep recording that also carries an analog analysis does not read it, so a
-    % change there must not force a recompute.
-    stamp = pax_table.source_modified(k);
-    if ~isempty(hit_score)
-        stamp = stamp + score_table.source_modified(hit_score);
-    else
-        stamp = stamp + analog_table.source_modified(hit_analog);
+    hit = find(key_previous == key_pax(k), 1);
+    old = previous(hit, :);
+    [row, failure] = centralize_statesession(k, pax_table.data{k}, score, ...
+        primary_analog, param.contents, stamp, old);
+    if failure ~= ""
+        fprintf('   FAILED %s -- %s\n', key_pax(k), failure);
     end
-    input_stamp(k) = stamp;
-
-    hit_previous = find(key_previous == key_pax(k), 1);
-    if ~isempty(hit_previous) && previous.input_stamp(hit_previous) == stamp
-        data_cell{k} = previous.data{hit_previous};
-        has_data(k) = true;
-        was_reused(k) = true;
-        continue
-    end
-
-    try
-        % A sleep score wins. Most recordings carry an analysis_analog.mat whether
-        % or not they were whisker sessions, so passing both would run
-        % awake_integration over a sleep recording's empty air table. The old
-        % batch path chose with an elseif for the same reason.
-        score = [];
-        primary_analog = [];
-        if ~isempty(hit_score)
-            score = score_table.data{hit_score};
-        elseif ~isempty(hit_analog)
-            primary_analog = analog_table.data{hit_analog};
-        end
-        pax_fwhm = pax_table.data{k};
-
-        state_integrate = state_integration(score, primary_analog);
-        state_integrate.trim_to_duration(pax_fwhm.t_axis(end));
-        paxfwhm_state = state_linefwhm(state_integrate);
-        paxfwhm_state.get_state_indices(pax_fwhm.t_axis, pax_fwhm.param.fs);
-
-        for c = 1:size(param.contents, 1)
-            property = param.contents(c, 1);
-            field = param.contents(c, 2);
-            if ~isfield(pax_fwhm, property) || ~isfield(pax_fwhm.(property), field)
-                continue
-            end
-            name = property + "_" + field;
-            data = pax_fwhm.(property).(field);
-            paxfwhm_state.get_summary(name, data);
-            paxfwhm_state.get_powerdensity(name, data);
-            paxfwhm_state.decompose_signal(name, data);
-            paxfwhm_state.get_pppt_decomposition(name);
-            paxfwhm_state.get_transitionsummary(name, data);
-        end
-
-        data_cell{k} = strip_state(paxfwhm_state);
-        has_data(k) = true;
-    catch err
-        if ~isempty(hit_previous)
-            data_cell{k} = previous.data{hit_previous};
-            has_data(k) = true;
-            was_reused(k) = true;
-        end
-        failed(end+1) = key_pax(k) + " -- " + string(err.message); %#ok<SAGROW>
+    if ~isempty(row)
+        scan(end+1) = row; %#ok<SAGROW>
     end
     if mod(k, 10) == 0
-        fprintf('   %d/%d, %d computed, %d reused\n', ...
-            k, n_session, sum(has_data & ~was_reused), sum(was_reused));
+        fprintf('   %d/%d scanned, %d held\n', k, height(pax_table), numel(scan));
     end
 end
 
 %% out
-central = pax_table(has_data, param.key_columns);
+kept = [scan.pax_i];
+reused = [scan.reused];
+central = pax_table(kept, param.key_columns);
 extra = intersect(["VesselID", "Depth", "Resolution", "Cohort", "Directory"], ...
     string(pax_table.Properties.VariableNames));
-central = [central, pax_table(has_data, extra)];
+central = [central, pax_table(kept, extra)];
 
 % Depth reads '70um' and Resolution '0.19um' -- both transcribed off the
 % acquisition info.txt, so the number sits at the front and the unit follows it.
 % Both are read as NUMBERS downstream: Depth by the layer filter, Resolution by
 % the scaling that turns pixels into micrometres, and neither can be done from
 % the text. Parsed here because this is the table those readers open.
-depth_text = pax_table.Depth(has_data);
-resolution_text = pax_table.Resolution(has_data);
-central.NumericDepth = parse_leadnumber(depth_text);
-central.NumericResolution = parse_leadnumber(resolution_text);
+central.NumericDepth = parse_leadnumber(pax_table.Depth(kept));
+central.NumericResolution = parse_leadnumber(pax_table.Resolution(kept));
 
-central.data = data_cell(has_data);
-central.input_stamp = input_stamp(has_data);
+central.data = {scan.data}';
+central.input_stamp = [scan.input_stamp]';
 save(out_path, 'central', 'schema_version', '-v7.3');
 
 listing = dir(out_path);
-fprintf('\n%d rows: %d computed, %d reused, %d with no scoring, %d failed\n', ...
-    height(central), sum(has_data & ~was_reused), sum(was_reused), ...
-    numel(skipped), numel(failed));
+fprintf('\n%d rows: %d computed, %d reused\n', ...
+    height(central), nnz(~reused), nnz(reused));
 fprintf('%.0f MB -> %s\n', listing.bytes/1e6, out_path);
-for k = 1:numel(failed)
-    fprintf('   FAILED %s\n', failed(k));
-end
 
 %% ---------------------------------------------------------------- helpers
 function value = parse_leadnumber(text_column)
@@ -224,27 +148,5 @@ function value = parse_leadnumber(text_column)
         if strlength(head) > 0
             value(k) = str2double(head);
         end
-    end
-end
-
-function out = strip_state(paxfwhm_state)
-    % The five result structs the downstream tables nest on, plus the two event
-    % fields and the axes. sleep_obj is a handle to the state_integration that
-    % built this, and carrying the object would carry the whole sleep score with
-    % it; only the two pieces anything outside the class reads are kept --
-    % rebuild_state_analysis takes param.transition_window off it, and the time
-    % tables are what the windows mean.
-    out = struct();
-    for f = ["state_summary", "powerdensity", "band_decomposition", "transition", ...
-            "peak_trough", "eventlist", "event", "t_axis", "state_idx", "param"]
-        if isprop(paxfwhm_state, f)
-            out.(f) = paxfwhm_state.(f);
-        end
-    end
-    out.sleep_obj = struct();
-    if ~isempty(paxfwhm_state.sleep_obj)
-        out.sleep_obj.param = paxfwhm_state.sleep_obj.param;
-        out.sleep_obj.time_table = paxfwhm_state.sleep_obj.time_table;
-        out.sleep_obj.info = paxfwhm_state.sleep_obj.info;
     end
 end

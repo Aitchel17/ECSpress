@@ -121,7 +121,6 @@ classdef line_fwhm < handle
         end
 
         function getdiameter(obj)
-            obj.thickness = struct();
         % STORED ANATOMICALLY, on purpose. This used to sort the two sides by
         % thickness and store them as dynamic_pvs / static_pvs, so a claim about
         % MOTION was baked into the field names by a criterion that has no time
@@ -130,11 +129,7 @@ classdef line_fwhm < handle
         % time and with a motion criterion 65.5%. See CLAUDE_LOG.md and
         % FINDINGS.md. up_thicker still records which side is thicker, so any
         % caller that wants the sorted view can build it and has to say so.
-            obj.thickness.bv = obj.idx.clean_lowerBVboundary - obj.idx.clean_upperBVboundary;
-            obj.thickness.uppvs = obj.idx.clean_upperBVboundary - obj.idx.clean_pvsupedge_idx;
-            obj.thickness.downpvs = obj.idx.clean_pvsdownedge_idx - obj.idx.clean_lowerBVboundary;
-            obj.thickness.totalpvs = obj.thickness.uppvs + obj.thickness.downpvs;
-            obj.thickness.eps = obj.thickness.totalpvs + obj.thickness.bv;
+            obj.thickness = fwhm_thickness(obj.idx);
 
             % which side is thicker, as its own recorded fact
             difference_pvs = obj.thickness.uppvs - obj.thickness.downpvs;

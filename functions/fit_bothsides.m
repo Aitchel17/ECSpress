@@ -6,8 +6,9 @@ function [slope_low, slope_high, info] = fit_bothsides(x_value, y_value, min_col
 %
 %   WHICH OUTPUT IS WHICH IS FIXED BY THE SIGN OF X AND NEVER BY MAGNITUDE. A
 %   version that sorted the two and called the smaller one anything would be
-%   secondary_afterproceesing.m:47-51 reintroduced: sorting before comparing puts
-%   every point on one side of the diagonal whatever the data says.
+%   zz_notinuse/tertiary_analysis/secondary_afterproceesing.m:47-51 reintroduced:
+%   sorting before comparing puts every point on one side of the diagonal
+%   whatever the data says.
 %   see STRUCTURE.md
 %
 %   THE SPAN IS FORCED SYMMETRIC. The two sides rarely reach equally far, and a
@@ -24,6 +25,8 @@ function [slope_low, slope_high, info] = fit_bothsides(x_value, y_value, min_col
 %        .n_low    1 x 1 int     points the low side was fitted on
 %        .n_high   1 x 1 int     points the high side was fitted on
 %        .bend     1 x 1 double  slope_high - slope_low, the paired quantity
+%        .intercept_low  1 x 1 double  so the fitted line can be drawn again
+%        .intercept_high 1 x 1 double
     arguments
         x_value    (1,:) double
         y_value    (1,:) double
@@ -32,7 +35,8 @@ function [slope_low, slope_high, info] = fit_bothsides(x_value, y_value, min_col
 
 slope_low = NaN;
 slope_high = NaN;
-info = struct('span', NaN, 'n_low', 0, 'n_high', 0, 'bend', NaN);
+info = struct('span', NaN, 'n_low', 0, 'n_high', 0, 'bend', NaN, ...
+    'intercept_low', NaN, 'intercept_high', NaN);
 
 usable = isfinite(x_value) & isfinite(y_value);
 if ~any(usable & x_value < 0) || ~any(usable & x_value > 0)
@@ -54,5 +58,7 @@ coef_low = polyfit(x_value(on_low), y_value(on_low), 1);
 coef_high = polyfit(x_value(on_high), y_value(on_high), 1);
 slope_low = coef_low(1);
 slope_high = coef_high(1);
+info.intercept_low = coef_low(2);
+info.intercept_high = coef_high(2);
 info.bend = slope_high - slope_low;
 end
