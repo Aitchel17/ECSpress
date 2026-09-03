@@ -1,10 +1,10 @@
-%PVS_DIAMETER_FIG  PVS extent against lumen diameter, as a 2-D heatmap.
+%FIG_FWHM_DIAMETER  PVS extent against lumen diameter, as a 2-D heatmap.
 %   Reads fwhmrelation.mat and puts it on axes. Every heatmap here is drawn by
 %   plot_heatpanel; this file decides which rows go on which tile and what each
 %   panel is labelled with.
 %
 %   Nothing is measured below. tablegeneration_fwhmrelation built the densities,
-%   the per-session numbers, the pooled map and the per-vessel bend, so changing a
+%   the per-session numbers, the vessel_pool map and the per-vessel bend, so changing a
 %   colour or a tile count costs a redraw and changing what is measured is a run
 %   of that file.
 clc, clear
@@ -31,7 +31,7 @@ relation_path = fullfile(dirs.save_dir, 'fwhmrelation.mat');
 relation = load(relation_path).save_content;
 %%
 session = relation.session;
-pooled = relation.pooled;
+vessel_pool = relation.vessel_pool;
 vesselbend = relation.vesselbend;
 
 drawn = session(session.drawn, :);
@@ -50,7 +50,7 @@ ref_noflux = find(ref_name == "no flux, area conserved", 1);
 ref_measured = find(ref_name == "measured", 1);
 y_label = relation.param.y_series + ", um from its mode";
 
-fprintf('fwhmrelation %s\n   %d sessions, %d drawn, %d vessels pooled\n', ...
+fprintf('fwhmrelation %s\n   %d sessions, %d drawn, %d vessels vessel_pool\n', ...
     relation_path, height(session), height(drawn), height(vesselbend));
 
 %% One session, with its two marginals
@@ -60,15 +60,15 @@ heat = one.heat{1};
 fprintf('\nrepresentative %s\n   %d samples | %.3f um/px | diameter range %.2f um\n', ...
     string(one.Directory), one.n_sample, one.NumericResolution, one.bv_range);
 
-fig_one = figure('Color', 'w', 'Position', [80 60 980 780], 'Name', 'pvs_diameter_heatmap');
+fig_one = figure('Color', 'w', 'Position', [80 60 980 780], 'Name', 'fig_fwhm_diameter_heatmap');
 layout_one = tiledlayout(fig_one, 4, 4, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 axis_main = nexttile(layout_one, 5, [3 3]);
-[ref_main, slope_main] = reference_curve(heat.x_baseceneters, one.bv_anchor, ...
-    one.pvs_anchor, ref_beta, relation.param.y_series);
+[ref_main, slope_main] = reference_curve(heat.x_baseceneters, one.bv_sessionmedian, ...
+    one.y_sessionmedian, ref_beta, relation.param.y_series);
 ref_label_main = ref_name + label_reference(slope_main, ref_r);
 handle_main = plot_heatpanel(axis_main, heat.x_baseceneters, heat.y_baseceneters, ...
-    heat.xy_counts_clean, 'curve', heat.modepvs(:)', 'ref_curve', ref_main, ...
+    heat.xy_counts_clean, 'curve', heat.mode_curve(:)', 'ref_curve', ref_main, ...
     'colormap', param.colormap, 'fontsize', param.fontsize);
 xlabel(axis_main, 'lumen diameter, um from this session''s mode')
 ylabel(axis_main, y_label)
@@ -97,14 +97,14 @@ ylim(axis_right, [min(heat.y_baseceneters) max(heat.y_baseceneters)])
 
 title(layout_one, sprintf('%s %s %s   |   %d samples, %.3f um/px', string(one.MouseID), ...
     string(one.Date), string(one.VesselID), one.n_sample, one.NumericResolution))
-save_figure(fig_one, dirs.save_dir, 'pvs_diameter_heatmap');
+save_figure(fig_one, dirs.save_dir, 'fig_fwhm_diameter_heatmap');
 
 %% Many sessions, each on its own origin
 tiled = sortrows(drawn, 'bv_range', 'descend');
 n_show = min(param.n_tile, height(tiled));
 tiled = tiled(1:n_show, :);
 n_grid_row = ceil(n_show / param.n_col);
-fig_grid = figure('Color', 'w', 'Name', 'pvs_diameter_grid', ...
+fig_grid = figure('Color', 'w', 'Name', 'fig_fwhm_diameter_grid', ...
     'Position', [20 20 220 * param.n_col, 190 * n_grid_row + 90]);
 layout_grid = tiledlayout(fig_grid, n_grid_row, param.n_col, ...
     'TileSpacing', 'tight', 'Padding', 'compact');
@@ -112,10 +112,10 @@ fprintf('grid : %d sessions in %d x %d\n', n_show, n_grid_row, param.n_col);
 for k = 1:n_show
     tile_heat = tiled.heat{k};
     axis_tile = nexttile(layout_grid);
-    ref_tile = reference_curve(tile_heat.x_baseceneters, tiled.bv_anchor(k), ...
-        tiled.pvs_anchor(k), ref_beta([ref_measured ref_noflux]), relation.param.y_series);
+    ref_tile = reference_curve(tile_heat.x_baseceneters, tiled.bv_sessionmedian(k), ...
+        tiled.y_sessionmedian(k), ref_beta([ref_measured ref_noflux]), relation.param.y_series);
     plot_heatpanel(axis_tile, tile_heat.x_baseceneters, tile_heat.y_baseceneters, ...
-        tile_heat.xy_counts_clean, 'curve', tile_heat.modepvs(:)', ...
+        tile_heat.xy_counts_clean, 'curve', tile_heat.mode_curve(:)', ...
         'ref_curve', ref_tile, ...
         'ref_style', ["--", ":"], 'ref_color', [1 0.85 0.3; 0.6 0.8 1], ...
         'colormap', param.colormap, 'curve_width', 1.5, 'fontsize', 6, 'ticks', false);
@@ -132,62 +132,62 @@ title(layout_grid, [char(relation.param.y_series) ...
     ' against lumen diameter, one panel per session, each on its own mode' ...
     newline grid_legend ...
     newline 'beside each label: the sample-level fitted slope, its r, and the PVS scatter at a fixed diameter. Ticks are dropped; every panel spans its own range'])
-save_figure(fig_grid, dirs.save_dir, 'pvs_diameter_grid');
+save_figure(fig_grid, dirs.save_dir, 'fig_fwhm_diameter_grid');
 
 %% Pooled over vessels
-kept_x = pooled.grid_x(~pooled.thin_column);
-fig_pool = figure('Color', 'w', 'Position', [70 50 900 820], 'Name', 'pvs_diameter_pooled');
+kept_x = vessel_pool.grid_x(~vessel_pool.thin_column);
+fig_pool = figure('Color', 'w', 'Position', [70 50 900 820], 'Name', 'fig_fwhm_diameter_pooled');
 layout_pool = tiledlayout(fig_pool, 4, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 axis_pool = nexttile(layout_pool, 1, [3 1]);
-% the pooled map is an average of maps that were each shifted onto their own
+% the vessel_pool map is an average of maps that were each shifted onto their own
 % operating point, so its anchor is the median of theirs
 in_pool = session(session.in_pool, :);
-[ref_pool, slope_pool] = reference_curve(pooled.grid_x, median(in_pool.bv_anchor), ...
-    median(in_pool.pvs_anchor), ref_beta, relation.param.y_series);
+[ref_pool, slope_pool] = reference_curve(vessel_pool.grid_x, median(in_pool.bv_sessionmedian), ...
+    median(in_pool.y_sessionmedian), ref_beta, relation.param.y_series);
 % the label belongs to the curve it sits on: these are the POOLED anchors, and the
 % main panel's were one session's. Reusing one label for both put that session's
-% numbers under the pooled curves
+% numbers under the vessel_pool curves
 ref_label_pool = ref_name + label_reference(slope_pool, ref_r);
-handle_pool = plot_heatpanel(axis_pool, pooled.grid_x, pooled.grid_y, pooled.pooled_map, ...
-    'curve', pooled.pooled_mode, 'ref_curve', ref_pool, 'ref_style', ["--", "-"], ...
+handle_pool = plot_heatpanel(axis_pool, vessel_pool.grid_x, vessel_pool.grid_y, vessel_pool.map, ...
+    'curve', vessel_pool.mode_curve, 'ref_curve', ref_pool, 'ref_style', ["--", "-"], ...
     'colormap', param.colormap, 'fontsize', param.fontsize);
 
 % the two sides of the modal diameter, each fitted over the SAME half width so the
 % pair is one measurement made twice. see fit_bothsides
-on_constricted = pooled.grid_x < 0 & pooled.grid_x >= -pooled.sym_span;
-on_dilated = pooled.grid_x > 0 & pooled.grid_x <= pooled.sym_span;
-fit_handle = plot(axis_pool, pooled.grid_x(on_constricted), ...
-    polyval([pooled.sym_constricted, pooled.sym_constricted_intercept], pooled.grid_x(on_constricted)), ...
+on_constricted = vessel_pool.grid_x < 0 & vessel_pool.grid_x >= -vessel_pool.sym_span;
+on_dilated = vessel_pool.grid_x > 0 & vessel_pool.grid_x <= vessel_pool.sym_span;
+fit_handle = plot(axis_pool, vessel_pool.grid_x(on_constricted), ...
+    polyval([vessel_pool.sym_constricted, vessel_pool.sym_constricted_intercept], vessel_pool.grid_x(on_constricted)), ...
     '-', 'Color', [0.3 1 0.5], 'LineWidth', 2.5);
-plot(axis_pool, pooled.grid_x(on_dilated), ...
-    polyval([pooled.sym_dilated, pooled.sym_dilated_intercept], pooled.grid_x(on_dilated)), ...
+plot(axis_pool, vessel_pool.grid_x(on_dilated), ...
+    polyval([vessel_pool.sym_dilated, vessel_pool.sym_dilated_intercept], vessel_pool.grid_x(on_dilated)), ...
     '-', 'Color', [0.3 1 0.5], 'LineWidth', 2.5);
 
 ylabel(axis_pool, y_label)
 xlabel(axis_pool, 'lumen diameter, um from each session''s own mode')
 fit_label = sprintf('either side of the mode: %+.3f (r %+.2f) | %+.3f (r %+.2f)', ...
-    pooled.sym_constricted, pooled.r_sym_constricted, pooled.sym_dilated, pooled.r_sym_dilated);
+    vessel_pool.sym_constricted, vessel_pool.r_sym_constricted, vessel_pool.sym_dilated, vessel_pool.r_sym_dilated);
 legend(axis_pool, [handle_pool.curve, fit_handle, handle_pool.ref], ...
-    [relation.param.column_stat + " of the pooled column", string(fit_label), ref_label_pool], ...
+    [relation.param.column_stat + " of the vessel_pool column", string(fit_label), ref_label_pool], ...
     'Location', 'southwest', 'TextColor', 'w', 'Color', [0 0 0], 'Box', 'off', ...
     'FontSize', param.fontsize - 2)
 set(axis_pool, 'XTickLabel', [])
 xlim(axis_pool, [min(kept_x) max(kept_x)])
 
 axis_count = nexttile(layout_pool, 4, [1 1]);
-bar(axis_count, pooled.grid_x, pooled.vessel_reaches, 1, ...
+bar(axis_count, vessel_pool.grid_x, vessel_pool.vessel_reaches, 1, ...
     'FaceColor', [0.45 0.45 0.45], 'EdgeColor', 'none');
 hold(axis_count, 'on')
-yline(axis_count, relation.param.min_vessel_n, '-', 'drawn above this', 'LineWidth', 1);
+yline(axis_count, relation.filt.min_vessel, '-', 'drawn above this', 'LineWidth', 1);
 xlabel(axis_count, 'lumen diameter, um from each session''s own mode')
 ylabel(axis_count, 'vessels')
 set(axis_count, 'FontSize', param.fontsize - 1, 'Box', 'off')
 xlim(axis_count, [min(kept_x) max(kept_x)])
 
-title(layout_pool, [char(relation.param.y_series + " given lumen diameter, pooled over vessels") ...
+title(layout_pool, [char(relation.param.y_series + " given lumen diameter, vessel_pool over vessels") ...
     newline 'each diameter column is a distribution that sums to one, averaged within vessel then across'])
-save_figure(fig_pool, dirs.save_dir, 'pvs_diameter_pooled');
+save_figure(fig_pool, dirs.save_dir, 'fig_fwhm_diameter_pooled');
 
 %% The bend, one point per vessel
 fitted = vesselbend(vesselbend.fitted, :);
@@ -195,7 +195,7 @@ vessel_constricted = fitted.("constricted_" + relation.param.column_stat);
 vessel_dilated = fitted.("dilated_" + relation.param.column_stat);
 vessel_bend = vessel_dilated - vessel_constricted;
 
-fig_bend = figure('Color', 'w', 'Position', [90 70 940 440], 'Name', 'pvs_diameter_bend');
+fig_bend = figure('Color', 'w', 'Position', [90 70 940 440], 'Name', 'fig_fwhm_diameter_bend');
 layout_bend = tiledlayout(fig_bend, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 axis_pair = nexttile(layout_bend);
@@ -231,7 +231,7 @@ axis_hist.Toolbar.Visible = 'off';
 
 title(layout_bend, ['the PVS gives up less per micrometre once the vessel is already wide' ...
     newline 'each vessel fitted on its own span, equal length either side of its modal diameter'])
-save_figure(fig_bend, dirs.save_dir, 'pvs_diameter_bend');
+save_figure(fig_bend, dirs.save_dir, 'fig_fwhm_diameter_bend');
 
 %% ---------------------------------------------------------------- helpers
 function save_figure(fig, save_dir, fig_name)
@@ -245,35 +245,35 @@ function save_figure(fig, save_dir, fig_name)
     fprintf('wrote %s.svg and .png to %s\n', fig_name, save_dir);
 end
 
-function [curve, slope_at_rest] = reference_curve(x_value, bv_rest, y_rest, beta_list, y_series)
+function [curve, slope_at_baseline] = reference_curve(x_value, bv_baseline, y_baseline, beta_list, y_series)
 %REFERENCE_CURVE  eps^2 = beta*bv^2 + c, anchored so it passes through the origin.
 %   One row per beta. beta = 1 is the area-conserving level curve; the fitted
 %   beta_ratio is the measured one. Anchoring at the operating point rather than at
 %   the least-squares intercept is what puts every reference through (0,0), which is
 %   what plot_heatpanel draws and what the panel's zero means.
 % IN   x_value   1xN double   the shifted abscissa, um from the operating point
-%      bv_rest   1x1 double   lumen diameter there, um
-%      y_rest    1x1 double   the plotted series there, um
+%      bv_baseline   1x1 double   lumen diameter there, um
+%      y_baseline    1x1 double   the plotted series there, um
 %      beta_list 1xR double   one reference per entry
 %      y_series  1x1 str      "eps" | "totalpvs"
 % OUT  curve         RxN double  on the plotted axis, zero at x = 0
-%      slope_at_rest 1xR double  d(y)/d(bv) there, for a legend or an axis line
+%      slope_at_baseline 1xR double  d(y)/d(bv) there, for a legend or an axis line
     if y_series == "totalpvs"
-        eps_rest = bv_rest + y_rest;
+        eps_baseline = bv_baseline + y_baseline;
     else
-        eps_rest = y_rest;
+        eps_baseline = y_baseline;
     end
-    bv_value = bv_rest + x_value;
+    bv_value = bv_baseline + x_value;
     curve = zeros(numel(beta_list), numel(x_value));
-    slope_at_rest = zeros(1, numel(beta_list));
+    slope_at_baseline = zeros(1, numel(beta_list));
     for r = 1:numel(beta_list)
-        eps_value = sqrt(eps_rest^2 + beta_list(r) * (bv_value.^2 - bv_rest^2));
-        slope_at_rest(r) = beta_list(r) * bv_rest / eps_rest;
+        eps_value = sqrt(eps_baseline^2 + beta_list(r) * (bv_value.^2 - bv_baseline^2));
+        slope_at_baseline(r) = beta_list(r) * bv_baseline / eps_baseline;
         if y_series == "totalpvs"
-            curve(r, :) = (eps_value - bv_value) - y_rest;
-            slope_at_rest(r) = slope_at_rest(r) - 1;
+            curve(r, :) = (eps_value - bv_value) - y_baseline;
+            slope_at_baseline(r) = slope_at_baseline(r) - 1;
         else
-            curve(r, :) = eps_value - eps_rest;
+            curve(r, :) = eps_value - eps_baseline;
         end
     end
 end

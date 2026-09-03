@@ -1,5 +1,5 @@
 %PVS_STATE_FIG  The PVS-diameter coupling split by arousal state, and read as area.
-%   pvs_diameter_fig draws the coupling pooled over a whole recording. This asks the
+%   fig_fwhm_diameter draws the coupling pooled over a whole recording. This asks the
 %   two questions that need the recording taken apart: whether the arousal state
 %   changes it, and what it looks like when the same relation is written as the
 %   annulus AREA rather than as a slope.

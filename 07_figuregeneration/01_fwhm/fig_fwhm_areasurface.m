@@ -1,4 +1,4 @@
-%PVS_AREASURFACE_FIG  The annulus area as a surface over the two radii.
+%FIG_FWHM_AREASURFACE  The annulus area as a surface over the two radii.
 %   A = pi(r_eps^2 - r_bv^2) is a hyperbolic paraboloid, and the two hypotheses
 %   are two curves ON it: area conservation is a level curve, the measured one is
 %   the same curve opened by the fitted beta_ratio. Drawn as a surface because the
@@ -40,8 +40,8 @@ drawn = relation.session(relation.session.drawn, :);
 param.walk = 4;             % um       how far along bv each trajectory is drawn
 
 % the surface is drawn in RADII and the table holds diameters
-start_bv = median(drawn.bv_anchor) / 2;
-start_eps = median(drawn.pvs_anchor) / 2;
+start_bv = median(drawn.bv_sessionmedian) / 2;
+start_eps = median(drawn.y_sessionmedian) / 2;
 beta_ratio = median(drawn.beta_ratio);
 bvwalk = linspace(start_bv - param.walk, start_bv + param.walk / 2, 120);
 start_area = pi * (start_eps^2 - start_bv^2);
@@ -72,7 +72,7 @@ fprintf('   after %+.1f um of DIAMETER : no flux %.1f, measured %.1f, given up %
     param.walk, noflux_area(end), measured_area(end), noflux_area(end) - measured_area(end));
 
 %% Draw
-fig = figure('Color', 'w', 'Position', [60 50 1180 520], 'Name', 'pvs_areasurface');
+fig = figure('Color', 'w', 'Position', [60 50 1180 520], 'Name', 'fig_fwhm_areasurface');
 layout = tiledlayout(fig, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 axis_surface = nexttile(layout);
@@ -125,7 +125,7 @@ title(axis_plan, 'from above: a contour is a constant PVS area')
 
 title(layout, ['the annulus area over the two radii, and the two ways out of one vessel' ...
     newline 'the measured slope crosses contours downhill, which is the area the PVS gives up'])
-save_figure(fig, dirs.save_dir, 'pvs_areasurface');
+save_figure(fig, dirs.save_dir, 'fig_fwhm_areasurface');
 
 %% ---------------------------------------------------------------- helpers
 function save_figure(fig, save_dir, fig_name)
