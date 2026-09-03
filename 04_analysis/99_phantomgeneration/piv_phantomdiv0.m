@@ -1,34 +1,13 @@
-%PIV_PHANTOMDIV0  발산이 정확히 0 인 변위장을 실제 프레임에 얹어, PIV 사슬이
-%무엇을 되돌려주는지 잰다. Ctrl+Enter 로 셀 단위 실행.
+%PIV_PHANTOMDIV0  
+%     analysis_phantom   Phantom imagegeneration
+%     piv_phantomdiv0    Phantom filed with zero divergence
 %
-%   같은 폴더의 analysis_phantom 과 묻는 것이 다르다.
-%     analysis_phantom   이미지를 합성한다. 대칭으로 확장하는 혈관을 그려서 원본을
-%                        대신한다 -> FWHM 과 기하 사슬을 시험
-%     piv_phantomdiv0    실제 프레임을 알려진 장으로 워프한다 -> PIV 와 발산 사슬
-%
-%   얹는 장은
+%  Phantom field:
 %       u = (A/r) * rhat,   A = [(r0 + dD/2)^2 - r0^2] / 2
-%   원점 밖에서 발산이 정확히 0 이다. 어느 원을 지나든 같은 면적이 지나가므로
-%   (2*pi*r * A/r = 2*pi*A, r 이 지워진다) 임의의 고리에 대한 volume_out 의
-%   참값이 0 이고, 파이프라인이 돌려주는 값은 전부 파이프라인 자신의 것이다.
 %
-%   이득 k(r) 이 반경에 딸리면 발산이 만들어진다. 균일한 이득은 못 만든다.
-%   그래서 셀 9 의 k(r) 이 평평한지가 셀 10 의 volume_out 을 결정한다.
-%
-%   셀 0-1   준비        설정과 세션 확인
-%   셀 2-4   정의        기하 -> 진폭 dD -> A
-%   셀 5-6   만들기      워프를 얹을 프레임 -> 프레임 쌍
-%   셀 7     확인        만든 장을 눈으로 본다. 여기서 안 맞으면 뒤가 무의미
-%   셀 8-10  재기        PIV -> 이득 k(r) -> volume_out
-%
-%   IN   base 워크스페이스의 S / twophoton_processed / event_det / session.
-%        piv_integration_testbed 의 셀 0 (session, twophoton_processed),
-%        셀 3 (event_det), 셀 5 (S) 가 만든다
-%   OUT  워크스페이스에 남는 것. 디스크에 쓰지 않는다
-%
-%   see CLAUDE_LOG.md
-
-%% 0. 설정
+%   IN   base / twophoton_processed / event_det / session.
+%        piv_integration_testbed 의 셀 0 (session, twophoton_processed)
+%% 0. setup
 param.condition     = "rem2awake";           % str          이 아래는 조건 하나만
 param.n_wedge       = 8;                     % int          등각 분할
 param.bin_edges_um  = 0:1.5:40;              % 1 x nB+1 float  벽에서의 거리, um
@@ -67,7 +46,7 @@ exclmask = run_store.exclmask;
 
 vp_geo = vfield_polar(run_store.piv_run(1).xyuv, coremask, p2u, ...
     n_wedge = param.n_wedge, bin_edges_um = param.bin_edges_um, ...
-    exclmask = exclmask, gated = true);
+    exclmask = exclmask, gate_name = "corr2+westerweel");
 centroid_x = vp_geo.centroid(2);
 centroid_y = vp_geo.centroid(1);
 
@@ -219,7 +198,7 @@ fprintf('\n평평하면 volume_out 이 0 이다. 오르내리는 폭이 곧 위�
 %  accumulate 는 bin 을 반경으로 누적하므로, 한 웨지의 값은 그 영역 경계를 지나는
 %  flux 와 같다 (선형 보간의 발산정리). 내부 삼각형의 값은 상쇄되어 남지 않는다
 vp = vfield_polar(xyuv_synth, coremask, p2u, n_wedge = param.n_wedge, ...
-    bin_edges_um = param.bin_edges_um, exclmask = exclmask, gated = true);
+    bin_edges_um = param.bin_edges_um, exclmask = exclmask, gate_name = "corr2+westerweel");
 vp.param.min_tri_wedge = param.min_tri_wedge;
 vp.param.verbose = false;
 vp.applydelaunay();

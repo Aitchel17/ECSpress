@@ -13,17 +13,16 @@
 %   plane FLOOR  the one plane measure that carries something: the rms AWAY from
 %                the peak. Kept as gate_corr_floor, second to lambda2, not instead
 %
-% caution  "the gate rejects long vectors" is NOT by itself the charge. Both gates
-%          reject more at large |d| (panel B), because the labelled-BAD windows
-%          really are the longer ones -- median |d| 1.13 px against 0.79. The
-%          charge is WHICH long ones, which is panel C and only panel C
+% caution  "the gate rejects long vectors" is NOT by itself the charge : both gates
+%          reject more at large |d| (panel B), because the labelled-BAD windows are
+%          the longer ones. The charge is WHICH long ones, panel C. see FINDINGS.md
 %
 % needs   piv_ensemble, an analysis_pivensemble correlated and gated on ev2
 % writes  piv_validation_corrgates.svg next to this file
 % caution R2023b exportgraphics has no SVG writer; print -dsvg -vector does
-% caution the labels are 15 window groups drawn by eye on ev2's quiver plot, and
-%         only 3 of them are GOOD. A second event of opposite polarity (ev22)
-%         reproduced every conclusion but is not re-run here
+% caution the labels are window groups drawn by eye on ev2's quiver plot. A second
+%         event of opposite polarity (ev22) reproduced every conclusion but is not
+%         re-run here. see FINDINGS.md
 
 %% 0. Labels. 20 px circles around each centre, drawn by eye on the quiver plot
 label_live = {[158 98], [115 85], [80 194]};
@@ -32,6 +31,7 @@ label_die  = {[338 134], [254 146], [212 20], [296 200], [68 218], [62 218], ...
 
 result = piv_ensemble.endpoint;
 planes = result.planes;
+maps   = piv_ensemble.get_corrplane("endpoint");   % the object keeps no planes
 mask_ok = ~isnan(planes.utable) & ~isnan(planes.vtable) & planes.typevector == 1;
 len_grid = hypot(planes.utable, planes.vtable);
 % note  lambda2(:,:,1) = leading frames, (:,:,2) = trailing; the worse end decides
@@ -45,7 +45,7 @@ mask_die  = any(cat(3, cell_die{:}),  3);
 
 %% 1. Every candidate, read off the final-pass plane one window at a time
 [ny, nx] = size(planes.utable);
-n_cell   = size(planes.maps, 1);              % plane side, px. 1 cell = 1 px
+n_cell   = size(maps, 1);              % plane side, px. 1 cell = 1 px
 [YY, XX] = ndgrid(1:n_cell, 1:n_cell);
 plane_measure = struct( ...
     'peak_mean',  NaN(ny,nx), ...   % ny x nx float  peak over the plane mean
@@ -55,7 +55,7 @@ plane_measure = struct( ...
 for r = 1:ny
     for c = 1:nx
         if ~mask_ok(r,c); continue; end
-        plane_E = double(sum(planes.maps(:,:,r,c,:), 5));
+        plane_E = double(sum(maps(:,:,r,c,:), 5));
         plane_E = plane_E - min(plane_E(:));
         [peak, k] = max(plane_E(:));
         if peak <= 0; continue; end
@@ -237,7 +237,7 @@ for row = 1:2
     for q = 1:4
         nexttile;
         [r, c] = ind2sub([ny nx], pick(q));
-        plane_E = double(sum(planes.maps(:,:,r,c,:), 5));
+        plane_E = double(sum(maps(:,:,r,c,:), 5));
         plane_E = plane_E - min(plane_E(:));
         imagesc((1:n_cell)-(n_cell+1)/2, (1:n_cell)-(n_cell+1)/2, plane_E);
         axis image;  colormap(gca, cmap_plane);

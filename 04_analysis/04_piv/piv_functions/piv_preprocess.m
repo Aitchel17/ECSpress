@@ -41,7 +41,9 @@ for k = 1:n_frames
 
     % 1.1 Scale the frame to 0~1
     frame = imgstack(:,:,k);
-    norm_frame = (frame-min(frame(:)))/max(frame(:));
+    frame_min  = min(frame(:));
+    frame_max  = max(frame(:));
+    norm_frame = (frame - frame_min) / (frame_max - frame_min);
     % 1.2 Run the PIVlab filter chain
     frame_proc = preproc.PIVlab_preproc( ...
         norm_frame, opt.roirect, ...

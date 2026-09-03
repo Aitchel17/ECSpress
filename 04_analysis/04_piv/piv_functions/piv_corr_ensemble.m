@@ -4,18 +4,8 @@ function corr_planes = piv_corr_ensemble(imgstack, opt)
 %   window deformation, giving one time-averaged displacement field on the
 %   interrogation grid.
 %
-%   CORRELATION ONLY. No gate, no filter, no rejection of any kind, and one
-%   output: what the correlation actually found. Judging a vector needs an order
-%   (the field-wide translation has to come out before anything that keys off
-%   vector length, PIVlab's correlation filter has to come before its local
-%   median), and an engine that gates internally hides that order from whoever
-%   owns it. So it stays out here and the caller runs it -- see
-%   analysis_pivensemble.gate(), which is one method per gate for the same
-%   reason.
-%
-%   The sparse grid is the result; nothing is stamped into a dense image either,
-%   because a vector belongs to a WINDOW and turning that into a pixel is a
-%   presentation choice the caller makes.
+%   CORRELATION ONLY : no gate, no filter, no dense image. The caller orders the
+%   gates (analysis_pivensemble.gate) and stamps the grid (piv_stamp).
 %
 % IN   imgstack       H x W x N double, values in [0,1]. Pairs are (1,2) (3,4)
 %                     ..., non-overlapping, so an interleaved stack correlates
@@ -28,11 +18,11 @@ function corr_planes = piv_corr_ensemble(imgstack, opt)
 %      imdeform       deformation interpolant, default '*spline'
 %      repeat         1 = repeated/multishift correlation on the last pass, default 0
 %      do_pad         1 = zero-padded linear correlation on the last pass, default 1
-%      use_gpu        1 = FFT/deform on the GPU, default false
+%      use_gpu        1 = gather the tables afterwards, default false. pivensemble
+%                     itself is not told; see CLAUDE_LOG.md
 %      exclmask       H x W, true = EXCLUDE that pixel from PIV, default none
-%      save_corrmaps  1 = also carry the per-pair planes, default false. They are
-%                     IA x IA x ny x nx x nPair single and dwarf everything else,
-%                     which is the only reason they are optional
+%      save_corrmaps  1 = also carry the per-pair planes (IA x IA x ny x nx x nPair
+%                     single, the one large array here), default false
 % OUT  corr_planes    one struct, always
 %        .xtable/.ytable  ny x nx image coords of each grid vector
 %        .utable/.vtable  ny x nx displacement, px, RAW
@@ -63,10 +53,8 @@ arguments
     opt.use_gpu      logical = false
     opt.exclmask     {mustBeNumericOrLogical} = []   % H x W, true = EXCLUDE pixel from PIV
     opt.save_corrmaps logical = false  % keep each frame pair's final-pass planes
-    opt.save_passes   logical = false  % keep EVERY pass's planes as well. Only pass
-                                       % 1 sees an undeformed image2; the rest read
-                                       % a residual off an already-shifted one.
-                                       % ~20 MB per result, off by default
+    opt.save_passes   logical = false  % keep EVERY pass's planes as well; pass 2 on
+                                       % hold a residual against a deformed image2
 end
 
 % 0. Setup
@@ -76,11 +64,9 @@ if N < 2
     error('piv_corr_ensemble:tooFewFrames', 'imgstack must have at least 2 frames.');
 end
 
-% 0.2 ROI, defaulting to the full frame
+% 0.2 ROI. Empty goes through to pivensemble's full-frame branch (xroi = 0); the old
+%     [1 1 W-1 H-1] default shifted every window centre by +1 px, see CLAUDE_LOG.md
 roirect = opt.roirect;
-if isempty(roirect)
-    roirect = [1, 1, W-1, H-1];
-end
 
 % 0.3 Split window_sizes into pivensemble's per-pass arguments
 ws = opt.window_sizes;
@@ -125,8 +111,7 @@ if opt.use_gpu
     correlation_map = gather(correlation_map);
 end
 
-% 3. The grid, always. Every field is on the same ny x nx, so a caller can gate
-%    on it and still line the result up with the planes afterwards
+% 3. The grid, always; every field on the same ny x nx
 corr_planes = struct( ...
     'xtable',      double(xtable), ...
     'ytable',      double(ytable), ...
@@ -153,11 +138,8 @@ if opt.save_corrmaps && ~isempty(raw)
     corr_planes.pass        = raw.pass;
 end
 
-% 5. Every pass on its OWN grid, folded the same way. Not regridded, not cropped
-%    and not summed: pass 1 is measured against an unshifted image2 and the later
-%    ones against a deformed one, so how to combine them is the caller's question
-%    see FINDINGS.md
-%    See the note on pass 1 in pivensemble
+% 5. Every pass on its OWN grid, folded the same way; not regridded, not summed.
+%    How to combine them is the caller's question. see FINDINGS.md
 if opt.save_passes && ~isempty(raw_pass)
     for k = numel(raw_pass) : -1 : 1     % reverse, so the array is sized once
         pk = raw_pass{k};
