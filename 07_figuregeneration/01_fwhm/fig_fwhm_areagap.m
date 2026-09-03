@@ -16,12 +16,20 @@ param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
     param.dataset = 'merged_igkl_igkltdt';
 end
-param.state_name = ["all", "awake", "nrem", "rem", "uarousal", ...
-    "an_trans", "na_trans", "nr_trans", "ra_trans"];
+% Name and label side by side, matched by POSITION. The table stores an
+% identifier and an axis names the thing; a subset takes the same indices out of
+% both, which is what param.*_pick below is for
+param.state_name  = ["all",           "awake", "nrem", "rem", "uarousal", ...
+                     "an_trans",      "na_trans",      "nr_trans",    "ra_trans"];
+param.state_label = ["whole session", "awake", "NREM", "REM", "microarousal", ...
+                     "awake to NREM", "NREM to awake", "NREM to REM", "REM to awake"];
+param.scatter_pick = [2 3 4];      % the states that hold still, for the scatter
+param.paired_pick  = [3 4 5 6 7 8 9];   % everything the reference is compared to
 % the scatter puts one point per row, so it only takes the states that hold still.
-% A transition window overlaps the two states it runs between and would draw a third
-% point on top of them
-param.scatter_state = ["awake", "nrem", "rem"];
+% A transition window overlaps the two states it runs between and would draw a
+% third point on top of them
+param.scatter_state = param.state_name(param.scatter_pick);
+param.scatter_label = param.state_label(param.scatter_pick);
 param.fontsize = 11;
 
 dirs = dirs_central();
@@ -123,9 +131,8 @@ for s = 1:numel(state_shown)
     handle_state(s) = scatter(ax, absolute_bv(:, s), absolute_y(:, s), 44, ...
         state_colour(s, :), 'filled', 'MarkerEdgeColor', [0.25 0.25 0.25]);
 end
-legend(ax, handle_state, arrayfun(@shown_as, state_shown), 'Location', 'northwest', ...
-    'Box', 'off')
-xlabel(ax, 'lumen diameter where that state rests, um')
+legend(ax, handle_state, param.scatter_label, 'Location', 'northwest', 'Box', 'off')
+xlabel(ax, 'lumen diameter where that state settles, um')
 ylabel(ax, 'outer PVS diameter there, um')
 set(ax, 'FontSize', param.fontsize, 'Box', 'on')
 axis(ax, 'equal')
@@ -136,18 +143,17 @@ title(ax, sprintf('%d vessels with two or more states | grey = equal annulus are
 % how far the states sit apart, on the vessels that carry them
 fprintf('%-14s %10s %10s\n', 'state', 'baseline bv', 'baseline pvs');
 for s = 1:numel(state_shown)
-    fprintf('%-14s %10.2f %10.2f\n', shown_as(state_shown(s)), ...
+    fprintf('%-14s %10.2f %10.2f\n', param.scatter_label(s), ...
         median(absolute_bv(:, s), 'omitnan'), median(absolute_y(:, s), 'omitnan'));
 end
 
 %% 3. Area gap by state, um^2
 % Bar is the mean over vessels, thick whisker the 95% CI, thin whisker one SD, and
 % every vessel is drawn so the CI can be read against what it came from.
-%   why two bars per state : with beta < 1 the area falls monotonically with
-%        diameter, so the departure is positive constricted and negative dilated.
-%        One mean over both sides cancels them. see CLAUDE_LOG.md
+%   two bars per state : the departure is positive constricted and negative dilated,
+%   and one mean over both sides cancels them. see CLAUDE_LOG.md
 [gap_um, label_um] = by_state(rows, ["area_gap_constricted", "area_gap_dilated"], ...
-    param.state_name);
+    param.state_name, param.state_label);
 fig_gap = figure('Color', 'w', 'Position', [110 110 720 520], 'Name', 'fig_fwhm_areagap_um');
 draw_bars(axes(fig_gap), gap_um, label_um, param.fontsize, ...
     'area gap, um^2', 'left bar constricted, right bar dilated');
@@ -156,7 +162,7 @@ draw_bars(axes(fig_gap), gap_um, label_um, param.fontsize, ...
 % The same quantity with vessel size divided out: the micrometre bars above carry the
 % spread of area_baseline_sample inside them. For its range see FINDINGS.md
 [gap_frac, label_frac] = by_state(rows, ["area_gapfrac_constricted", ...
-    "area_gapfrac_dilated"], param.state_name);
+    "area_gapfrac_dilated"], param.state_name, param.state_label);
 fig_frac = figure('Color', 'w', 'Position', [140 140 720 520], 'Name', 'fig_fwhm_areagap_frac');
 draw_bars(axes(fig_frac), gap_frac, label_frac, param.fontsize, ...
     'area gap, fraction of the resting annulus', 'left bar constricted, right bar dilated');
@@ -167,10 +173,8 @@ draw_bars(axes(fig_frac), gap_frac, label_frac, param.fontsize, ...
 % BOTH states of a pair are kept and each is one line, so the comparison is within
 % vessel and the vessel-to-vessel spread -- the largest thing on this figure --
 % drops out. The test is signrank on those within-vessel differences.
-%   why awake is the reference : tablegeneration_main already normalises and
-%        subtracts against awake, so the two products say the same thing
-%   note  the awake bar is recomputed for each pair, on that pair's own vessels.
-%         A vessel with nrem but no rem is in one pair and not the other
+%   awake is the reference, as in tablegeneration_main. The awake bar is recomputed
+%   for each pair, on that pair's own vessels
 param.paired_ref = "awake";
 % beta - beta_noflux and not the ratio: the difference is what appears in
 % dA/dbv = (pi/2)*eps*(beta - beta_noflux), so a bar height reads straight as an
@@ -179,14 +183,16 @@ param.paired_ref = "awake";
 param.beta_column = "beta_gap";
 param.beta_null = 0;
 param.beta_label = "beta minus the no-flux beta, at rest";
-param.paired_other = ["nrem", "rem", "uarousal", ...
-    "an_trans", "na_trans", "nr_trans", "ra_trans"];
+param.paired_other = param.state_name(param.paired_pick);
+param.paired_other_label = param.state_label(param.paired_pick);
+param.paired_ref_label = "awake";
 param.paired_column = ["area_gapfrac_constricted", "area_gapfrac_dilated"];
 param.paired_label = ["constricted", "dilated"];
 
 fig_paired = figure('Color', 'w', 'Position', [170 170 820 540], 'Name', 'fig_fwhm_areagap_paired');
 draw_paired(axes(fig_paired), rows, param.paired_column, param.paired_label, ...
-    param.paired_ref, param.paired_other, param.fontsize, ...
+    param.paired_ref, param.paired_ref_label, param.paired_other, ...
+    param.paired_other_label, param.fontsize, ...
     'area gap, fraction of the resting annulus');
 
 %% 5c. The same difference, with the flagged vessels drawn apart
@@ -194,8 +200,7 @@ draw_paired(axes(fig_paired), rows, param.paired_column, param.paired_label, ...
 % describe: below 0 the outer boundary moves against the lumen, above 1 the annulus
 % gains area as the vessel dilates. They are drawn as their own group rather than
 % dropped -- if the two groups behave the same the flag does not matter.
-%   caution  the flag is on AWAKE only, so it cannot manufacture a state difference
-%            by selecting on the thing being compared
+%   caution  the flag is on AWAKE only, so it cannot select on the thing being compared
 param.flag_beta_range = [0 1];   % awake beta_ratio inside this is not flagged
 
 awake_beta = rows(rows.state == "awake", ["vessel_key", "beta_ratio"]);
@@ -208,7 +213,7 @@ fprintf("flagged %d of %d vessels on the awake fit\n", numel(unique(flagged_vess
 fig_flagsplit = figure('Color', 'w', 'Position', [230 100 760 520], ...
     'Name', 'fig_fwhm_areagap_beta_flagsplit');
 draw_delta(axes(fig_flagsplit), rows, param.beta_column, param.paired_ref, ...
-    param.paired_other, param.fontsize, param.beta_label + ", minus awake", ...
+    param.paired_ref_label, param.paired_other, param.paired_other_label, param.fontsize, param.beta_label + ", minus awake", ...
     'split', rows.flagged, 'split_name', ["inside 0..1", "flagged"]);
 
 % which sessions carry the flag, with the path to open them in review_session
@@ -239,7 +244,8 @@ fprintf("into NREM : %d vessels rise, %d fall\n", numel(rises_vessel), ...
 fig_dirsplit = figure('Color', 'w', 'Position', [260 130 760 520], ...
     'Name', 'fig_fwhm_areagap_beta_dirsplit');
 draw_delta(axes(fig_dirsplit), rows(ismember(rows.vessel_key, vessel(has_both)), :), ...
-    param.beta_column, param.paired_ref, param.paired_other, param.fontsize, ...
+    param.beta_column, param.paired_ref, param.paired_ref_label, ...
+    param.paired_other, param.paired_other_label, param.fontsize, ...
     param.beta_label + ", minus awake", ...
     'split', rows.rises(ismember(rows.vessel_key, vessel(has_both))), ...
     'split_name', ["falls into NREM", "rises into NREM"]);
@@ -249,81 +255,11 @@ draw_delta(axes(fig_dirsplit), rows(ismember(rows.vessel_key, vessel(has_both)),
 % eye. Here the difference IS the bar, so its height is the effect and its zero is
 % the null. Each vessel enters once, as beta(state) - beta(awake) on its own two
 % fits, which is the same subtraction tablegeneration_main does for state_summary.
-%   note  a vessel missing either half of a pair is absent from that bar only, so
-%         the two n differ and the bars stand over different vessel sets
+%   a vessel missing either half of a pair is absent from that bar only, so the two n differ
 fig_delta = figure('Color', 'w', 'Position', [290 160 520 520], 'Name', 'fig_fwhm_areagap_beta_delta');
-draw_delta(axes(fig_delta), rows, param.beta_column, param.paired_ref, param.paired_other, ...
+draw_delta(axes(fig_delta), rows, param.beta_column, param.paired_ref, ...
+    param.paired_ref_label, param.paired_other, param.paired_other_label, ...
     param.fontsize, param.beta_label + ", minus awake");
-
-%% 5f. How each transition was caught : one row per vessel, aligned on the event
-% This is a check on the DETECTION, not a result. If the windows are landing where
-% they should, every row turns at x = 0 and the colour flips there; a row that is
-% one colour throughout is a window that caught no excursion, and a row that turns
-% early or late is a window placed off the event.
-%
-% Colour is dbv, the diameter against that event own pre-event level, so a 7 um
-% vessel and a 19 um one stack on one scale and the picture is of the excursion.
-% Rows are sorted by how far the vessel went AFTER the event, which puts the
-% windows that caught nothing together at one end where they can be counted.
-param.raster_state = ["an_trans", "na_trans", "nr_trans", "ra_trans", "uarousal"];
-%   uarousal is a scored bout, not a fixed window, so its trace is wider and
-%   aligned on the bout start. The t axis is read off the trace, not assumed
-param.raster_clim = 1.5;           % um   colour saturates here, symmetric about 0
-% What the rows are sorted on: the mean over a window that matches how long the
-% response actually lasts. Sorting over the whole 60 s buries a short one -- the
-% microarousal raster shows its constriction inside the first ten seconds and
-% nothing after, so a 60 s mean put its median at -0.08 um and the ordering was of
-% the noise that followed. Both numbers are the events' own scale, not a choice:
-param.raster_sort_bout_s = 10;     % s    the median microarousal is 31 samples, 10 s
-param.raster_sort_trans_s = 25;    % s    the transition half window, 75 samples
-
-sample_rate = 3;                   % Hz   t axis, from param.fs of the state analysis
-for r = 1:numel(param.raster_state)
-    this_state = param.raster_state(r);
-    % straight from relation.state, not from rows : event_dbv lives only in the
-    % state table and block 1 keeps the columns the two tables share. And NOT filtered
-    % by wide_enough -- a window that caught no excursion is the thing being looked for
-    on_state = relation.state.state == this_state;
-    if ~any(on_state)
-        continue
-    end
-    event_rows = relation.state(on_state, :);
-    [~, event_vessel_of] = ismember(event_rows.vessel_key, vessel);
-    % one row per VESSEL: a vessel carries several sessions and each of those an
-    % average over its own events, so this is a mean of means, weighted by neither
-    trace_by_vessel = stack_by_vessel(event_rows, n_vessel, event_vessel_of);
-    kept_row = any(isfinite(trace_by_vessel), 2);
-    trace_by_vessel = trace_by_vessel(kept_row, :);
-
-    half = (size(trace_by_vessel, 2) - 1) / 2;
-    t_axis = (-half:half) / sample_rate;
-    if endsWith(this_state, "_trans")
-        sort_window = param.raster_sort_trans_s;
-    else
-        sort_window = param.raster_sort_bout_s;
-    end
-    on_sort = t_axis > 0 & t_axis <= sort_window;
-    after = mean(trace_by_vessel(:, on_sort), 2, "omitnan");
-    [~, order] = sort(after);
-
-    fig_raster = figure('Color', 'w', 'Position', [80 + 30*r, 60, 560, 520], ...
-        'Name', 'areagap_raster_' + this_state);
-    ax = axes(fig_raster); %#ok<LAXES>
-    imagesc(ax, t_axis, 1:size(trace_by_vessel, 1), trace_by_vessel(order, :), ...
-        [-param.raster_clim param.raster_clim]);
-    colormap(ax, clee.gradient.hilo)   % blue-white-red, made for reading against zero
-    xline(ax, 0, '-', 'Color', [0 0 0], 'LineWidth', 1.5);
-    bar_handle = colorbar(ax);
-    bar_handle.Label.String = 'lumen diameter, um from the pre-event level';
-    xlabel(ax, 'time from the transition, s')
-    ylabel(ax, "vessel, sorted by the first " + sort_window + " s after")
-    set(ax, 'FontSize', param.fontsize, 'Box', 'on', 'YDir', 'normal')
-    title(ax, sprintf("%s  |  %d vessels", shown_as(this_state), ...
-        size(trace_by_vessel, 1)), 'FontWeight', 'normal')
-    fprintf('%-14s %2d vessels | first %2d s after %+.2f .. %+.2f um, median %+.2f\n', ...
-        shown_as(this_state), numel(after), sort_window, min(after), max(after), ...
-        median(after));
-end
 
 %% 6. Save, when a block above is worth keeping
 % save_figure(fig_scatter, dirs.save_dir, "fig_fwhm_areagap_scatter")
@@ -336,39 +272,6 @@ end
 % save_figure(fig_delta,   dirs.save_dir, "fig_fwhm_areagap_beta_delta")
 
 %% ---------------------------------------------------------------- helpers
-function trace = stack_by_vessel(state_rows, n_vessel, vessel_of)
-%STACK_BY_VESSEL  Each vessel event-triggered trace, sessions averaged within it.
-%   IN   state_rows  table       the rows of ONE state
-%        n_vessel    1x1 double  how many vessels the whole set holds
-%        vessel_of   Nx1 double  which vessel each row belongs to
-%   OUT  trace       n_vessel x T double   NaN where a vessel has no row
-    stacked = cell2mat(state_rows.event_dbv);
-    trace = nan(n_vessel, size(stacked, 2));
-    for v = 1:n_vessel
-        on_v = vessel_of == v;
-        if ~any(on_v)
-            continue
-        end
-        trace(v, :) = mean(stacked(on_v, :), 1, "omitnan");
-    end
-end
-
-function name = shown_as(state_name)
-%SHOWN_AS  A state as a figure says it, not as the table stores it.
-%   The table column is an identifier and belongs in code; an axis names the thing.
-%   Keeping the two apart is also what stops MATLAB reading an_trans as a
-%   subscript, so no interpreter anywhere has to be turned off.
-    known = ["all" "awake" "nrem" "rem" "uarousal" "an_trans" "na_trans" "nr_trans" "ra_trans"];
-    shown = ["whole session" "awake" "NREM" "REM" "microarousal" ...
-        "awake to NREM" "NREM to awake" "NREM to REM" "REM to awake"];
-    hit = find(known == state_name, 1);
-    if isempty(hit)
-        name = replace(state_name, "_", " ");
-    else
-        name = shown(hit);
-    end
-end
-
 function rgb = state_rgb(clee, state_name)
 %STATE_RGB  clee.clist by name, grey for a state it has no colour for.
     if isfield(clee.clist, state_name)
@@ -378,7 +281,8 @@ function rgb = state_rgb(clee, state_name)
     end
 end
 
-function draw_delta(ax, rows, column, ref_state, other_state, fontsize, y_label, opt)
+function draw_delta(ax, rows, column, ref_state, ref_label, other_state, ...
+    other_label, fontsize, y_label, opt)
 %DRAW_DELTA  One bar per state, each the within-vessel difference against a reference.
 %   The difference IS the bar, so its height is the effect and zero is the null. The
 %   paired form -- both bars and a line per vessel -- draws the same number as thirty
@@ -398,7 +302,9 @@ function draw_delta(ax, rows, column, ref_state, other_state, fontsize, y_label,
         rows table
         column      (1,1) string
         ref_state   (1,1) string
+        ref_label   (1,1) string
         other_state (1,:) string
+        other_label (1,:) string
         fontsize    (1,1) double
         y_label     (1,1) string
         opt.split      (:,1) logical = logical.empty(0,1)
@@ -424,7 +330,7 @@ function draw_delta(ax, rows, column, ref_state, other_state, fontsize, y_label,
             other = column_mean(one, vessel_of, numel(vessel), column, other_state(o));
             difference = other - reference;
             difference = difference(isfinite(difference));
-            label(o) = shown_as(other_state(o));
+            label(o) = other_label(o);
             if isempty(difference)
                 continue
             end
@@ -453,7 +359,7 @@ function draw_delta(ax, rows, column, ref_state, other_state, fontsize, y_label,
     if numel(group_of) > 1
         legend(ax, handle_group, group_name, 'Location', 'best', 'Box', 'off')
     end
-    title(ax, "zero = no move from " + shown_as(ref_state) + ", one point per vessel", ...
+    title(ax, "zero = no move from " + ref_label + ", one point per vessel", ...
         'FontWeight', 'normal', 'FontSize', fontsize - 1)
 end
 
@@ -465,7 +371,8 @@ function value = column_mean(rows, vessel_of, n_vessel, column, state_name)
         [n_vessel 1], @mean, NaN);
 end
 
-function draw_paired(ax, rows, column, column_label, ref_state, other_state, fontsize, y_label, opt)
+function draw_paired(ax, rows, column, column_label, ref_state, ref_label, ...
+    other_state, other_label, fontsize, y_label, opt)
 %DRAW_PAIRED  One reference state against each of the others, within vessel.
 %   A vessel missing either half of a pair is dropped from THAT pair only, so the
 %   n under each group is its own and the reference bar can differ between groups.
@@ -485,7 +392,9 @@ function draw_paired(ax, rows, column, column_label, ref_state, other_state, fon
         column       (1,:) string
         column_label (1,:) string
         ref_state    (1,1) string
+        ref_label    (1,1) string
         other_state  (1,:) string
+        other_label  (1,:) string
         fontsize     (1,1) double
         y_label      (1,1) string
         opt.null_at  (1,1) double = 0
@@ -523,10 +432,10 @@ function draw_paired(ax, rows, column, column_label, ref_state, other_state, fon
             % which is a property of the whole figure and belongs in the title -- put
             % on every tick it read "falls into nrem nrem"
             if isscalar(column)
-                tick_label(end+1) = shown_as(other_state(o)) + ...
+                tick_label(end+1) = other_label(o) + ...
                     " (n=" + size(paired_value, 1) + ")"; %#ok<AGROW>
             else
-                tick_label(end+1) = column_label(c) + newline + shown_as(other_state(o)) + ...
+                tick_label(end+1) = column_label(c) + newline + other_label(o) + ...
                     " (n=" + size(paired_value, 1) + ")"; %#ok<AGROW>
             end
             at = at + 3;
@@ -539,7 +448,7 @@ function draw_paired(ax, rows, column, column_label, ref_state, other_state, fon
         'FontSize', fontsize - 1, 'Box', 'off')
     xlim(ax, [0.4, at - 0.4])
     ylabel(ax, y_label)
-    heading = "left bar " + shown_as(ref_state) + ", right bar the other, one line per vessel";
+    heading = "left bar " + ref_label + ", right bar the other, one line per vessel";
     if isscalar(column)
         heading = column_label(1) + "  |  " + heading;
     end
@@ -577,11 +486,12 @@ function paired_value = pair_by_vessel(rows, column, state_pair)
 end
 
 
-function [per_vessel, label] = by_state(rows, column, state_name)
+function [per_vessel, label] = by_state(rows, column, state_name, state_label)
 %BY_STATE  One value per vessel per state and side, sessions averaged within vessel.
 %   IN   rows        table       the stacked session and state rows
 %        column      1xC str     which columns to pull, one group of bars each
 %        state_name  1xS str     the states, in the order they are drawn
+%        state_label 1xS str     what each is called on the abscissa
 %   OUT  per_vessel  CxS cell    each cell a vector, one entry per vessel
 %        label       1xS str     the state and how many vessels it kept
     per_vessel = cell(numel(column), numel(state_name));
@@ -589,7 +499,7 @@ function [per_vessel, label] = by_state(rows, column, state_name)
     for s = 1:numel(state_name)
         on_state = rows.state == state_name(s);
         if ~any(on_state)
-            label(s) = shown_as(state_name(s)) + " (0)";
+            label(s) = state_label(s) + " (0)";
             continue
         end
         one_state = rows(on_state, :);
@@ -598,7 +508,7 @@ function [per_vessel, label] = by_state(rows, column, state_name)
             value = accumarray(vessel_of, one_state.(column(c)), [], @mean, NaN);
             per_vessel{c, s} = value(isfinite(value));
         end
-        label(s) = shown_as(state_name(s)) + " (n=" + numel(per_vessel{1, s}) + ")";
+        label(s) = state_label(s) + " (n=" + numel(per_vessel{1, s}) + ")";
     end
 end
 
