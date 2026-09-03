@@ -1,14 +1,14 @@
 classdef analysis_pivensemble < handle
 % Ensemble-correlation PIV across the two endpoints of one dilation event.
 %
-% IN   imgstack   H x W x T float  whole recording; only needed frames kept
-%      frames     1 x 2 int        [from to], the event endpoints
+% IN   stack_span H x W x n_span   from-halfwin : to+halfwin, before preprocessing;
+%                                  piv_getframescope cuts it out of the recording
+%      halfwin    int              frames either side of each endpoint
 %      fps        float            frames per second
 %      pixel2um   float            microns per pixel
-%      halfwin    int              frames either side of each endpoint, default 2
 %      name-value                  pre-processing settings, applied once here
-% OUT  obj        handle           knows two frame numbers. Nothing about events,
-%                                  sleep state or the session
+% OUT  obj        handle           knows the frames it was handed. Nothing about the
+%                                  recording, events, sleep state or the session
 %
 % RESULTS  both come out as TOTAL px across the event
 %   endpoint     lead 2*halfwin+1 vs trailing : every pair spans the whole event
@@ -30,7 +30,8 @@ classdef analysis_pivensemble < handle
 %   order        is a finding : gate() spells the sequence out, never loops it
 %   no facade    postproc.PIVlab_* direct, not piv_validate : a facade bundling
 %                three stages takes the ordering away from the class that owns it
-%   margin       object cuts from-halfwin : to+halfwin itself, raw stack dropped
+%   margin       the caller cuts from-halfwin : to+halfwin (piv_getframescope);
+%                only the overlap check lives here
 %   blink        endpoint.stack interleaved : sliceViewer flips FROM/TO
 
     properties
@@ -126,9 +127,8 @@ classdef analysis_pivensemble < handle
         input = struct( ...
             'fps',      [], ...   % float      frames per second
             'pixel2um', [], ...   % float      microns per pixel
-            'frames',   [], ...   % 1 x 2 int  [from to] in the recording
             'halfwin',  [], ...   % int        frames either side of each endpoint
-            'span',     [], ...   % 1 x N int  the indices actually cut out
+            'n_span',   [], ...   % int        frames handed in
             'preproc',  [])       % struct     the pre-processing that was applied
 
         endpoint    % struct  total displacement across the event; see new_result
@@ -136,17 +136,16 @@ classdef analysis_pivensemble < handle
     end
 
     methods
-        function obj = analysis_pivensemble(imgstack, frames, fps, pixel2um, opt)
+        function obj = analysis_pivensemble(stack_span, halfwin, fps, pixel2um, opt)
         % why  pre-processing is contrast only, nothing that moves a pixel
         % why  CLAHE lifts the sparse texture the correlation keys on, Wiener
         %      takes the shot noise with it
         % why  here and not a method : it has to happen exactly once, first
             arguments
-                imgstack {mustBeNumeric, mustBeNonempty}
-                frames   (1,2) double {mustBePositive, mustBeInteger}
-                fps      (1,1) double {mustBePositive}
-                pixel2um (1,1) double {mustBePositive}
-                opt.halfwin      (1,1) double {mustBeNonnegative} = 2
+                stack_span {mustBeNumeric, mustBeNonempty}
+                halfwin    (1,1) double {mustBeInteger, mustBeNonnegative}
+                fps        (1,1) double {mustBePositive}
+                pixel2um   (1,1) double {mustBePositive}
                 opt.clahe        (1,1) logical = true   % lifts the sparse texture
                 opt.clahe_size   (1,1) double  = 64     % tile size, px
                 opt.wiener       (1,1) logical = true   % denoise; also the low-pass
@@ -154,30 +153,21 @@ classdef analysis_pivensemble < handle
                 opt.prctile_low  (1,1) double  = 0.05   % imadjust, on the 0~1 frame
                 opt.prctile_high (1,1) double  = 0.95
             end
-            % 0. The frames both schemes need, margin included
-            halfwin    = opt.halfwin;
+            % 0. The class's own contract : the two framesets must not overlap, or a
+            %    frame correlates with itself. Where the span sits in the recording is
+            %    not checked here -- the caller cut it
+            n_span     = size(stack_span, 3);
             n_frameset = 2*halfwin + 1;      % frames making up one endpoint's set
-            span       = frames(1)-halfwin : frames(2)+halfwin;
-            if span(1) < 1 || span(end) > size(imgstack, 3)
-                error('analysis_pivensemble:margin', ...
-                    ['event %d-%d needs frames %d-%d for halfwin %d, and the ' ...
-                     'recording is %d long. Clipping would move an endpoint, so ' ...
-                     'the event is refused instead.'], frames(1), frames(2), ...
-                    span(1), span(end), halfwin, size(imgstack, 3));
-            end
-            if numel(span) < 2*n_frameset
+            if n_span < 2*n_frameset
                 error('analysis_pivensemble:framesetOverlap', ...
-                    ['event %d-%d gives %d frames but halfwin %d needs %d; below ' ...
-                     'that the two framesets overlap and a frame correlates with ' ...
-                     'itself.'], frames(1), frames(2), numel(span), halfwin, ...
-                     2*n_frameset);
+                    '%d frames with halfwin %d; the two framesets need %d', ...
+                    n_span, halfwin, 2*n_frameset);
             end
 
             obj.input.fps      = fps;
             obj.input.pixel2um = pixel2um;
-            obj.input.frames   = frames;
             obj.input.halfwin  = halfwin;
-            obj.input.span     = span;
+            obj.input.n_span   = n_span;
 
             % 1. Pre-processing, listed POSITIVELY rather than subtracted
             %    why      halfwin is not pre-processing : it picks which frames
@@ -193,27 +183,23 @@ classdef analysis_pivensemble < handle
             %    why  record is the source of the call, not a copy : cannot drift
             %    why  raw stack not kept : the two schemes cannot diverge
             preproc_args = namedargs2cell(obj.input.preproc);
-            filtered     = piv_preprocess(imgstack(:, :, span), preproc_args{:});
+            filtered     = piv_preprocess(stack_span, preproc_args{:});
 
-            % 3. Consecutive : span as it stands, pairs 1:2:end
-            %    caution  scaled by INTERVALS between the endpoints, not by pair
-            %             count : the pairs sample every other interval, so
+            % 3. Consecutive : the span as it stands, pairs 1:2:end
+            %    caution  scaled by INTERVALS between the endpoints (to - from), not
+            %             by pair count : the pairs sample every other interval, so
             %             counting pairs would halve it
-            n_span  = numel(span);
             n_pairs = floor(n_span/2);
+            pair_consecutive = [(1:2:2*n_pairs)', (2:2:2*n_pairs)'];
             obj.consecutive = analysis_pivensemble.new_result(filtered, ...
-                span([(1:2:2*n_pairs)', (2:2:2*n_pairs)']), diff(frames));
+                pair_consecutive, n_span - 1 - 2*halfwin);
 
             % 4. Endpoint : (lead_1, trail_1, lead_2, trail_2, ...)
-            %    why  every pair already spans the event, so scale 1
-            lead  = 1:n_frameset;
-            trail = n_span-n_frameset+1 : n_span;
-            [height, width] = size(filtered, 1, 2);
-            interleaved = zeros(height, width, 2*n_frameset);
-            interleaved(:, :, 1:2:end) = filtered(:, :, lead);
-            interleaved(:, :, 2:2:end) = filtered(:, :, trail);
-            obj.endpoint = analysis_pivensemble.new_result(interleaved, ...
-                span([lead(:), trail(:)]), 1);
+            %    why  every pair already spans the event, so scale 1. pair_frames
+            %         are indices into the span; the caller's span maps them back
+            [interleaved, pair_endpoint] = piv_interleave(filtered, ...
+                halfwin + 1, n_span - halfwin, halfwin);
+            obj.endpoint = analysis_pivensemble.new_result(interleaved, pair_endpoint, 1);
         end
 
         function correlate(obj, which, opt)
@@ -490,7 +476,7 @@ classdef analysis_pivensemble < handle
         %      caller and no method decides it later
             result = struct( ...
                 'stack',       stack, ...        % H x W x N float  filtered frames
-                'pair_frames', pair_frames, ...  % P x 2 int        recording indices
+                'pair_frames', pair_frames, ...  % P x 2 int        indices into the span
                 'scale',       scale, ...        % int              onto uv -> event total
                 'planes',      [], ...           % struct           piv_corr_ensemble's
                 'xyuv',        [], ...           % ny x nx x 4 float  (:,:,1:2) [x y]

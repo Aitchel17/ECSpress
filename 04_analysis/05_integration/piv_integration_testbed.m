@@ -96,11 +96,13 @@ fprintf('ev%d  %s  %s  dD %+.2f um  rise %.1f s  frames %d -> %d\n', ...
     event_det.eventlist(ev).rise_s, event_det.eventlist(ev).from, event_det.eventlist(ev).to);
 
 %% 3. Make the ensemble object
-% Whole recording plus the two endpoints; the margin, the cut and the filtering
-% are the object's business. Only the frames it correlates survive
-piv_ensemble = analysis_pivensemble(twophoton_processed.ch1, ...
-    [event_det.eventlist(ev).from, event_det.eventlist(ev).to], ...
-    twophoton_processed.fps, twophoton_processed.pixel2um, halfwin = 2);
+% The object takes the frames it will correlate and nothing else. piv_getframescope
+% cuts them, and refuses an event too close to either end of the recording
+halfwin = 2;                                          % frames either side of from / to
+[stack_span, span] = piv_getframescope(twophoton_processed.ch1, ...
+    event_det.eventlist(ev).from, event_det.eventlist(ev).to, halfwin);
+piv_ensemble = analysis_pivensemble(stack_span, halfwin, ...
+    twophoton_processed.fps, twophoton_processed.pixel2um);
 
 % 3.1 PIV masks
 % Analyse inside piv_include and outside the PVS, which is one mask in PIVlab's
