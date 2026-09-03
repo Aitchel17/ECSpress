@@ -2,33 +2,16 @@ classdef vfield_profile < handle
 %VFIELD_PROFILE  Radial profiles from many fields, compared against quiet rows.
 %   One row per event. Each row holds the n_bin x n_wedge block that
 %   vfield_polar.accumulate produced, plus what it needs to be believed: polarity,
-%   state, whether the field was gated, and how far each wedge reached. The
+%   state, which gates the field came through, and how far each wedge reached. The
 %   displacement fields themselves are not kept, so a whole cohort fits in memory.
 %
-%   THIS CLASS EXISTS BECAUSE OF ONE BUG.
-%   Averaging over a set whose membership changes with the coordinate. It happened
-%   three times in one day -- a ring mean over wedges that differed per ring, a
-%   table whose sector set changed per row, and a radial rise that was half
-%   composition. The two rules that came out of it are enforced here as method
-%   signatures rather than left to the caller:
-%
+%   Two rules are enforced by the method signatures, never left to the caller:
 %     1  a wedge is in or out for the WHOLE comparison interval, never per bin
-%     2  only cells where every row in the comparison has data, and no omitnan
-%        stepping over the ones where it does not
-%
-%   gate_support() computes the verdict, and curve() and difference() will not
-%   run without a bin range to compute it over.
-%
-%   THE CONTROL IS event_findquiet's OWN ROWS.
-%   Not a window built for the occasion. The quiet rows share the geometry, the
-%   optics and the recording, so passing them through this identical pipeline is
-%   the only thing that says whether a number is real. Rows with pol == "none".
-%
-%   POLARITY IS NOT FOLDED BY DEFAULT.
-%   Displacement reverses with polarity because that is geometry, but a VOLUME
-%   change need not. Folding cancels anything that comes out the same sign both
-%   ways -- which is rectification, one of the things this is here to look for.
-%   See CLAUDE_LOG.md
+%     2  only cells where every row in the comparison has data; no omitnan
+%   gate_support() computes that verdict; curve_rows() and difference() take a
+%   bin range and will not run without one. The control is the quiet rows
+%   (pol == "none"), through the identical path. Polarity is not folded by
+%   default. Why each: see CLAUDE_LOG.md, vfield_profile
 %
 %   see also VFIELD_POLAR, EVENT_FINDQUIET
 
@@ -50,7 +33,7 @@ classdef vfield_profile < handle
                            %   state      string   the transition
                            %   dD         float um diameter change
                            %   sgn        int      +1 / -1
-                           %   gated      bool     provenance, carried from the field
+                           %   gate_name  string   provenance, carried from the field
                            %   cells      struct   n_bin x n_wedge, see append
                            %   reach_bin  1 x n_wedge float
                            %   mag_kept   n_bin x 1 float um   [] if not audited
@@ -89,10 +72,7 @@ classdef vfield_profile < handle
 
         function append(obj, cells, opt)
         %APPEND  Add one event's block. Takes the BLOCK, not a vfield_polar.
-        %   Deliberately not the object: if this took the field it would have to
-        %   drive its stages, and the order of measure -> gate_wedge -> accumulate
-        %   belongs to vfield_polar. The caller runs them and hands over what came
-        %   out, so a half-run field cannot be silently finished here.
+        %   The caller runs measure -> gate_wedge -> accumulate and hands over the result.
         % IN  cells  struct of n_bin x n_wedge, from vfield_polar.accumulate
             arguments
                 obj
@@ -101,7 +81,7 @@ classdef vfield_profile < handle
                 opt.pol (1,1) string
                 opt.state (1,1) string
                 opt.dD (1,1) double
-                opt.gated (1,1) logical
+                opt.gate_name (1,1) string
                 opt.mag_kept double = []
                 opt.mag_cut double = []
             end
@@ -111,10 +91,10 @@ classdef vfield_profile < handle
                     'block is %d x %d, this profile is %d x %d.', ...
                     got(1), got(2), obj.n_bin, obj.n_wedge);
             end
-            if obj.n_row > 0 && obj.rows(1).gated ~= opt.gated
+            if obj.n_row > 0 && obj.rows(1).gate_name ~= opt.gate_name
                 error('vfield_profile:gateMismatch', ...
-                    'row %d is gated=%d, this profile holds gated=%d.', ...
-                    opt.event_idx, opt.gated, obj.rows(1).gated);
+                    'row %d came through "%s", this profile holds "%s".', ...
+                    opt.event_idx, opt.gate_name, obj.rows(1).gate_name);
             end
 
             sgn = sign(opt.dD);
@@ -123,7 +103,7 @@ classdef vfield_profile < handle
             end
             row = struct('event_idx', opt.event_idx, 'pol', opt.pol, ...
                 'state', opt.state, 'dD', opt.dD, 'sgn', sgn, ...
-                'gated', opt.gated, 'cells', cells, ...
+                'gate_name', opt.gate_name, 'cells', cells, ...
                 'reach_bin', cells.reach_bin, ...
                 'mag_kept', opt.mag_kept, 'mag_cut', opt.mag_cut);
             if obj.n_row == 0
@@ -139,21 +119,10 @@ classdef vfield_profile < handle
 
         function v = peak(obj, quantity, rowsel)
         %PEAK  The largest magnitude one quantity reaches anywhere in the cohort.
-        %   A cohort number, which is why it is here: max over ROWS is the same
-        %   shape of question as wedges_over and widest_common, and a single row
-        %   cannot answer it.
         % IN  quantity  char, which field of cells to look at
         %     rowsel    1 x n_row bool, default every row
         % OUT v         1 x 1 float, max |value| over the selected rows. 1 when
         %               nothing finite was found, so a caller can divide by it
-        %
-        %   why  the display layer wants ONE limit across every panel -- pass a
-        %        per-event limit and each map self-normalises, so a weak event
-        %        and a strong one come out looking the same
-        %        (showpiv.plot_overlay says the same thing from its side)
-        %   note named for what it measures, not for what it is for. This class
-        %        does not know that the number becomes a colour axis, and it
-        %        should not -- see CLAUDE.md, engines stay pure
             arguments
                 obj
                 quantity (1,:) char
@@ -174,9 +143,7 @@ classdef vfield_profile < handle
 
         function support = gate_support(obj, rowsel, quantity)
         %GATE_SUPPORT  Which cells every row in the comparison actually has.
-        %   n_bin x n_wedge, NOT n_bin x n_wedge x n_row. There is one partition,
-        %   so there is one common support; a per-row answer would only invite
-        %   someone to average over a set that changes.
+        %   n_bin x n_wedge : one partition, one common support, never per row.
         % IN  rowsel    1 x n_row bool, the rows that must ALL have data
         %     quantity  char, which field of cells to test
             arguments
@@ -194,8 +161,7 @@ classdef vfield_profile < handle
 
         function [wedge_ok, support] = wedges_over(obj, rowsel, bin_range, quantity)
         %WEDGES_OVER  Wedges with data at every bin of the interval, for every row.
-        %   Rule 1. A wedge is in or out for the WHOLE interval; there is no
-        %   per-bin membership, because that is what made the ring mean wrong.
+        %   Rule 1 : a wedge is in or out for the whole interval, never per bin.
         % IN  bin_range 1 x 2 int, [first last] bin index inclusive
         % OUT wedge_ok  1 x n_wedge bool
             arguments
@@ -211,16 +177,9 @@ classdef vfield_profile < handle
 
         function [bin_range, wedge_ok] = widest_common(obj, rowsel, quantity)
         %WIDEST_COMMON  The longest bin span some wedge covers for every row.
-        %   Every comparison needs an interval, and picking one by hand at the
-        %   call site is how a magic number gets into a figure. This reports the
-        %   longest one the data actually supports; a caller wanting a narrower
-        %   one still passes it explicitly.
-        %
-        %   IT MAXIMISES THE SPAN, NOT THE WEDGE COUNT, so it is the right default
-        %   for a PLOT and the wrong one for a CLAIM. Asking a wedge to reach the
-        %   outer edge throws away wedges that stop sooner, and a claim about the
-        %   inner radii does not need them to. For a statement at radius r, pass
-        %   [1 bin(r)] and keep the wedges that reach only that far.
+        %   Maximises the span, not the wedge count : the default for a plot, not for
+        %   a claim. A statement at radius r passes [1 bin(r)] itself and keeps the
+        %   wedges that reach only that far.
         % OUT bin_range 1 x 2 int, [first last]. [NaN NaN] if nothing is common
             arguments
                 obj
@@ -266,8 +225,7 @@ classdef vfield_profile < handle
                 k = idx(i);
                 M = obj.rows(k).cells.(opt.quantity);
                 block = M(span, wedge_ok);
-                % plain mean, not omitnan : wedges_over already guaranteed every
-                % one of these is finite, so a NaN here is a fault to see
+                % plain mean, not omitnan : wedges_over guaranteed every cell finite
                 curves(i, span) = mean(block, 2);
                 if opt.fold
                     curves(i, span) = curves(i, span) * obj.rows(k).sgn;
@@ -287,9 +245,7 @@ classdef vfield_profile < handle
                 opt.fold (1,1) logical = false
             end
             isq = obj.quiet_rows();
-            % A difference against nothing is not a difference. Without this the
-            % table comes back all NaN and only the verbose line says why, which is
-            % how a whole run of transitions-only ended up looking like a result
+            % a difference against nothing is not a difference; see CLAUDE_LOG.md
             if ~any(isq)
                 error('vfield_profile:noQuietRows', ...
                     ['no pol=="none" rows in this profile. The controls have to go ' ...
@@ -321,8 +277,7 @@ classdef vfield_profile < handle
 
         function out = increment(obj, rowsel, bin_range, opt)
         %INCREMENT  Bin-to-bin change of the quiet-subtracted curve.
-        %   A cumulative that has stopped rising is not the same claim as one that
-        %   is still rising, and the level cannot tell them apart.
+        %   The level cannot tell a cumulative that stopped from one still rising.
             arguments
                 obj
                 rowsel (1,:) logical
@@ -340,9 +295,7 @@ classdef vfield_profile < handle
         end
 
         function f = frac_absorbed(obj, rowsel, bin_range, opt)
-        %FRAC_ABSORBED  1 - volume_out(outer) / volume_out(inner). A method, not a
-        %   property: it is a question about two radii the caller picks, and
-        %   storing it would hide which two.
+        %FRAC_ABSORBED  1 - volume_out(outer) / volume_out(inner), at the caller's two radii.
             arguments
                 obj
                 rowsel (1,:) logical
@@ -357,9 +310,8 @@ classdef vfield_profile < handle
 
         function tbl = audit_gate(obj, rowsel)
         %AUDIT_GATE  Pool the per-row gate audits. Empty if none were supplied.
-        %   mag_cut > mag_kept means the gates took the LARGER displacements at
-        %   that radius, which no quiet subtraction can undo: the bias scales with
-        %   amplitude and the quiet rows have none. See CLAUDE_LOG.md
+        %   mag_cut > mag_kept : the gates took the larger displacements at that
+        %   radius, which no quiet subtraction undoes; see CLAUDE_LOG.md
             arguments
                 obj
                 rowsel (1,:) logical
@@ -432,9 +384,7 @@ classdef vfield_profile < handle
 
     methods (Access = private)
         function out = group_curve(obj, rowsel, wedge_ok, bin_range, quantity, fold)
-        % Mean and standard error across rows, on a wedge set the caller fixed.
-        % Every row uses the same wedges and the same bins, so what varies between
-        % rows is the measurement and nothing else
+        % mean and standard error across rows, on the wedge set and bins the caller fixed
             idx = find(rowsel);
             span = bin_range(1):bin_range(2);
             per_row = nan(numel(idx), obj.n_bin);

@@ -1,12 +1,8 @@
 function [pivtable, pivarray] = pivevent_assemble(piv_run, profile, dirrow, opt)
 %PIVEVENT_ASSEMBLE  One session's PIV products as the two variables pivevent.mat holds.
-%   Row of pivtable = one event. The cell blocks ride as multi-dimensional table
-%   variables, so groupsummary averages a whole n_bin x n_wedge block at once and
-%   the long form never has to be stored.
-%
-%   Once this has run the stack is not needed again for anything downstream of
-%   the correlation. What still forces a re-read is written down in
-%   design/PIVEVENT_DESIGN.md.
+%   Row of pivtable = one event; the cell blocks ride as multi-dimensional table
+%   variables, so groupsummary averages a whole n_bin x n_wedge block at once.
+%   What still forces a re-read of the stack : design/PIVEVENT_DESIGN.md
 %
 % IN   piv_run   1 x N struct, piv_run_events' output. Event metadata and the
 %                two displacement grids
@@ -17,28 +13,20 @@ function [pivtable, pivarray] = pivevent_assemble(piv_run, profile, dirrow, opt)
 %                needs no translation
 %      coremask  H x W bool, the vessel at maximum dilation
 %      exclmask  H x W bool, true = pixel excluded from PIV
-%      mean_ch1  H x W float, recording mean of channel 1. sd_ch1 likewise, and
-%      sd_ch1    the same pair for channel 2. These four close the pixel-level
-%      mean_ch2  questions that would otherwise reopen the stack
+%      mean_ch1  H x W float, recording mean of channel 1; sd_ch1, mean_ch2,
+%      sd_ch1    sd_ch2 likewise
+%      mean_ch2
 %      sd_ch2
 %      pivparam  struct, every stage's settings. Stored, never read here
-% OUT  pivtable  N x 28 table. pivparam sits in Properties.UserData, which is
-%                what makes the bin columns readable -- a bin index means
-%                nothing without bin_edges_um, and UserData cannot be separated
-%                from the table the way a second variable can
+% OUT  pivtable  N x 28 table. pivparam sits in Properties.UserData, so a bin
+%                index can be read against bin_edges_um without a second variable
+%      pivarray  struct, the eight arrays, saved as its own top-level variable
 %
-%   ROW = (event, segment). Today every event is correlated as ONE displacement
-%   from its start endpoint to its end endpoint, so seg_idx is 1 on every row and
-%   seg_from / seg_to equal from / to. A field measured inside an event would be
-%   several rows of the same event_idx with different seg_to, which needs no
-%   change to this schema -- see CLAUDE_LOG.md for why the row unit is not the
-%   event itself
-%      pivarray  struct, the eight arrays. Saved as its own top-level variable
-%                so load(f, 'pivtable') does not drag 15 MB with it
-%
-% UNIT  a suffix names a unit; no suffix is dimensionless or an index. dD_px is
-%       the point of the rule -- the diameter change is pixels and has been
-%       labelled microns twice, see CLAUDE_LOG.md
+%   ROW = (event, segment). Today seg_idx is 1 on every row and seg_from / seg_to
+%   equal from / to; a field measured inside an event would add rows of the same
+%   event_idx. Why the row unit is not the event : see CLAUDE_LOG.md
+% UNIT  a suffix names a unit; no suffix = dimensionless or an index. dD_px has
+%       been labelled microns twice, see CLAUDE_LOG.md
 %
 %   see also PIV_RUN_EVENTS, PIV_POLAR_EVENTS, VFIELD_PROFILE
 
@@ -59,8 +47,7 @@ n_event = numel(piv_run);
 n_bin   = profile.n_bin;
 n_wedge = profile.n_wedge;
 
-% Rows are matched by event id. piv_polar_events appends in piv_run's order, so
-% position would work today, but the id is what the two records actually agree on
+% rows are matched by event id, not by position
 row_id  = [profile.rows.event_idx];
 run_id  = [piv_run.id];
 [found, row_of] = ismember(run_id, row_id);
@@ -77,15 +64,13 @@ for name = key_names
     keys.(name) = repmat(string(value), n_event, 1);
 end
 
-% 2. Per-row scalars. from / to are the event; seg_from / seg_to are the two
-%    instants this row's displacement actually spans, which is the whole event
-%    while an event is correlated as a single field
+% 2. Per-row scalars. seg_from / seg_to are the instants this row spans : the whole event today
 event_idx = zeros(n_event, 1);
 seg_idx   = ones(n_event, 1);
 state     = strings(n_event, 1);
 polarity  = strings(n_event, 1);
 bout      = zeros(n_event, 1);
-gated     = false(n_event, 1);
+gate_name = strings(n_event, 1);
 from      = zeros(n_event, 1);
 to        = zeros(n_event, 1);
 seg_from  = zeros(n_event, 1);
@@ -102,7 +87,7 @@ for k = 1:n_event
     state(k)     = string(run.state);
     polarity(k)  = string(run.pol);
     bout(k)      = run.bout;
-    gated(k)     = row.gated;
+    gate_name(k) = row.gate_name;
     from(k)      = run.from;
     to(k)        = run.to;
     seg_from(k)  = run.from;
@@ -113,8 +98,7 @@ for k = 1:n_event
     dD_px(k)     = row.dD;
 end
 
-% 3. Cell blocks. n_event x n_bin x n_wedge, the first dimension being the one
-%    table requires to match its height. groupsummary then averages the block
+% 3. Cell blocks, n_event x n_bin x n_wedge : the first dimension is the table height
 block_names = ["divergence", "volume_out_um2", "disp_radial_um", "disp_tangential_um", ...
                "strain_radial", "strain_hoop", "strain_shear", "rotation", ...
                "n_tri", "area_um2"];
@@ -138,7 +122,7 @@ for k = 1:n_event
 end
 
 % 4. The table
-pivtable = [keys, table(event_idx, seg_idx, state, polarity, bout, gated, ...
+pivtable = [keys, table(event_idx, seg_idx, state, polarity, bout, gate_name, ...
     from, to, seg_from, seg_to, rise_s, nfr, sgn, dD_px)];
 for b = 1:numel(block_names)
     pivtable.(block_names(b)) = blocks.(block_names(b));
@@ -146,15 +130,13 @@ end
 pivtable.first_bin = first_bin;
 pivtable.reach_bin = reach_bin;
 
-% 5. What the columns mean. The names carry the units for a reader; these slots
-%    carry them for code, and the description says what the block's axes are
+% 5. What the columns mean, for code : units and the block axes
 pivtable.Properties.UserData = opt.pivparam;
 pivtable.Properties.VariableUnits = pivevent_units(pivtable.Properties.VariableNames);
 pivtable.Properties.VariableDescriptions = ...
     pivevent_descriptions(pivtable.Properties.VariableNames, n_bin, n_wedge);
 
-% 6. The arrays. xyuv is the record; everything in the table above was derived
-%    from it, so a question the table cannot answer reopens here and not the stack
+% 6. The arrays. xyuv is the record everything above was derived from
 pivarray = struct( ...
     'xyuv',         {{piv_run.xyuv}}, ...          % 1 x N cell, each ny x nx x 4 px
     'xyuv_ungated', {{piv_run.xyuv_ungated}}, ...  % 1 x N cell, before the gates
@@ -205,7 +187,7 @@ function desc = pivevent_descriptions(names, n_bin, n_wedge)
         'seg_to',    'the later one. Equals to while seg_idx is always 1'; ...
         'state',     'transition label, or the state name for a quiet control'; ...
         'polarity',  'dilation / constriction / none. none = a control row'; ...
-        'gated',     'whether uv came through the PIV gates'; ...
+        'gate_name', 'the PIV gates uv came through, joined by +'; ...
         'nfr',       'frame pairs the ensemble averaged. NOT a scale factor'; ...
         'sgn',       'sign of dD_px, +1 or -1'; ...
         'dD_px',     'diameter change on the smoothed trace, PIXELS'; ...
