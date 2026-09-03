@@ -69,34 +69,8 @@ tmp.count_by_y = sum(result.xy_counts_clean,2,'omitmissing');
 [~,tmp.maxyloc]= max(tmp.count_by_y);
 result.y_mode = result.y_baseceneters(tmp.maxyloc);
 
-
-% 5. Mode of PVS for each x point
-[~,tmp.modepvslocs] = max(result.xy_counts_clean,[],1);
-result.modepvs = result.y_baseceneters(tmp.modepvslocs);
-
-% 6. The mode curve's slope, whole and either side of zero
-% Zero on x is wherever the caller anchored, so x < 0 is constricted against that
-% anchor and x > 0 dilated. Which columns land on which side therefore moves with
-% the anchor, and so do these two slopes. The 2 given to fit_bothsides is not a
-% threshold -- it is the fewest points a straight line has. How many columns a side
-% NEEDS is the caller's judgement, and n_constricted / n_dilated is what it judges.
-% robustfit needs more points than parameters AND a scale to weight by. A
-% microarousal is a few seconds long and its map can come out two or three columns
-% wide, which has neither -- it errored on uarousal before this was here. NaN and
-% not a crash: how short is too short is the caller judgement, and n_constricted +
-% n_dilated is what it judges on.
-if numel(result.x_baseceneters) >= 4
-    tmp.mode_fit = robustfit(result.x_baseceneters, result.modepvs);
-    result.mode_slope = tmp.mode_fit(2);
-else
-    result.mode_slope = NaN;
-end
-[tmp.slope_low, tmp.slope_high, tmp.side_info] = fit_bothsides(result.x_baseceneters, ...
-    result.modepvs, 2);
-result.slope_constricted = tmp.slope_low;
-result.slope_dilated = tmp.slope_high;
-result.n_constricted = tmp.side_info.n_low;
-result.n_dilated = tmp.side_info.n_high;
-result.bend = tmp.side_info.bend;
+% 5. The mode curve: each column's most-occupied row
+[~,tmp.mode_row] = max(result.xy_counts_clean,[],1);
+result.mode_curve = result.y_baseceneters(tmp.mode_row);
 end
 
