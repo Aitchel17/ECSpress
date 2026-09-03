@@ -20,10 +20,9 @@
 %% settings
 param.dataset  = "merged_igkl_igkltdt";
 param.rebuild  = false;         % bool  true re-reads every session
-param.key_columns = ["MouseID", "Date", "SessionType", "SessionID"];
 
 % which sessions the product is about
-filt.cohorts = ["00_igkl", "01_igkltdt"];   % 1 x C str  membership, as centralize_primary
+cohorts = ["00_igkl", "01_igkltdt"];   % 1 x C str  membership, as centralize_primary
 
 % Bump when what is taken off the file changes. The sources are untouched by such a
 % change, so no stamp can see it.
@@ -35,7 +34,7 @@ dirs = dirs_central();
 
 %% the sessions
 sheet_info = dirs_mergetable(dirs.working_root, dirs.secondary_root, ...
-    filt.cohorts, param.dataset);
+    cohorts, param.dataset);
 dir_table = readtable(sheet_info.sheet_path, 'VariableNamingRule', 'preserve');
 
 alive = false(height(dir_table), 1);
