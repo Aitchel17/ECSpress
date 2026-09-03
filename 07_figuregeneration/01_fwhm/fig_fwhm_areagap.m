@@ -1,13 +1,13 @@
-%PVS_AREAGAP_FIG  How far the annulus area sits from keeping itself, and the spread.
+%FIG_FWHM_AREAGAP  How far the annulus area sits from keeping itself, and the spread.
 %   One block, one figure. Nothing is tiled and nothing is saved unless you ask, so
 %   a block can be run on its own while looking at the one before it.
 %
 %   The unit of replication is the VESSEL. One vessel here contributes up to five
 %   sessions, so sessions are averaged within vessel first and every n below counts
 %   vessels. see tablegeneration_fwhmrelation
-
-%% 1. Read
 clc, clear
+%% 1. Read
+
 addpath('g:\03_program\01_ecspress\09_dirstruct');
 dirs_ecspath;
 clee = color_lee();
@@ -40,7 +40,7 @@ fprintf('%d rows over %d vessels\n', height(rows), numel(unique(rows.vessel_key)
 % bv against eps, one point per session. The iso-area curves are what makes the
 % spread readable: two vessels on one curve hold the same annulus at rest however
 % different their diameters are.
-fig_scatter = figure('Color', 'w', 'Position', [80 80 620 580], 'Name', 'areagap_scatter');
+fig_scatter = figure('Color', 'w', 'Position', [80 80 620 580], 'Name', 'fig_fwhm_areagap_scatter');
 ax = axes(fig_scatter);
 hold(ax, 'on')
 
@@ -58,10 +58,10 @@ plot(ax, bv_line, bv_line, '-', 'Color', [0.6 0.6 0.6], 'LineWidth', 1.5);
 % reason every n below counts vessels
 [vessel, ~, vessel_of] = unique(rows.vessel_key);
 n_vessel = numel(vessel);
-bv_vessel = column_mean(rows, vessel_of, n_vessel, "bv_anchor", "all");
-pvs_vessel = column_mean(rows, vessel_of, n_vessel, "pvs_anchor", "all");
+bv_vessel = column_mean(rows, vessel_of, n_vessel, "bv_sessionmedian", "all");
+y_vessel = column_mean(rows, vessel_of, n_vessel, "y_sessionmedian", "all");
 gap_vessel = column_mean(rows, vessel_of, n_vessel, "area_gapfrac_dilated", "all");
-scatter(ax, bv_vessel, pvs_vessel, 46, gap_vessel, ...
+scatter(ax, bv_vessel, y_vessel, 46, gap_vessel, ...
     'filled', 'MarkerEdgeColor', [0.25 0.25 0.25]);
 colormap(ax, clee.gradient.inferno)
 bar_handle = colorbar(ax);
@@ -75,12 +75,13 @@ title(ax, sprintf('%d vessels | grey = equal annulus area | diagonal = no PVS', 
     sum(isfinite(bv_vessel))))
 
 %% 2b. Where each STATE rests, and the line from one to the other
-% The anchors are session-level, so plotting state rows at (bv_anchor, pvs_anchor)
+% The anchors are session-level, so plotting state rows at (bv_sessionmedian, y_sessionmedian)
 % would stack every state of a session on one point. What separates them is where
-% each one RESTS on that shared axis, which is (bv_rest, pvs_rest).
+% each one SETTLES on that shared axis. Note the two are not the same estimator --
+% bv_heatmedian is a median and baseline_y is a modal ridge; see CLAUDE_LOG.md
 %   the grey line joins the states of one vessel-session, so its direction is the
 %   move from one state to the other and its length is how far
-fig_state = figure('Color', 'w', 'Position', [100 100 620 580], 'Name', 'areagap_state');
+fig_state = figure('Color', 'w', 'Position', [100 100 620 580], 'Name', 'fig_fwhm_areagap_state');
 ax = axes(fig_state);
 hold(ax, 'on')
 
@@ -96,30 +97,30 @@ state_shown = param.scatter_state;
 state_colour = cell2mat(arrayfun(@(f) state_rgb(clee, f), state_shown', ...
     'UniformOutput', false));
 
-% rest_bv and rest_pvs are sums of two columns, and a mean of a sum is the sum of
-% the means, so each is averaged within vessel one column at a time
-rest_bv = nan(n_vessel, numel(state_shown));
-rest_pvs = nan(n_vessel, numel(state_shown));
+% absolute_bv and absolute_y are sums of two columns, and a mean of a sum is the
+% sum of the means, so each is averaged within vessel one column at a time
+absolute_bv = nan(n_vessel, numel(state_shown));
+absolute_y = nan(n_vessel, numel(state_shown));
 for s = 1:numel(state_shown)
-    rest_bv(:, s) = column_mean(rows, vessel_of, n_vessel, "bv_anchor", state_shown(s)) + ...
-        column_mean(rows, vessel_of, n_vessel, "bv_ref", state_shown(s));
-    rest_pvs(:, s) = column_mean(rows, vessel_of, n_vessel, "pvs_anchor", state_shown(s)) + ...
-        column_mean(rows, vessel_of, n_vessel, "pvs_rest", state_shown(s));
+    absolute_bv(:, s) = column_mean(rows, vessel_of, n_vessel, "bv_sessionmedian", state_shown(s)) + ...
+        column_mean(rows, vessel_of, n_vessel, "bv_heatmedian", state_shown(s));
+    absolute_y(:, s) = column_mean(rows, vessel_of, n_vessel, "y_sessionmedian", state_shown(s)) + ...
+        column_mean(rows, vessel_of, n_vessel, "baseline_y", state_shown(s));
 end
 
 % one line per vessel, drawn first so the points sit on top of it
 for v = 1:n_vessel
-    on_v = isfinite(rest_bv(v, :)) & isfinite(rest_pvs(v, :));
+    on_v = isfinite(absolute_bv(v, :)) & isfinite(absolute_y(v, :));
     if sum(on_v) < 2
         continue
     end
-    plot(ax, rest_bv(v, on_v), rest_pvs(v, on_v), '-', 'Color', [0.7 0.7 0.7], ...
+    plot(ax, absolute_bv(v, on_v), absolute_y(v, on_v), '-', 'Color', [0.7 0.7 0.7], ...
         'LineWidth', 0.8);
 end
 
 handle_state = gobjects(1, numel(state_shown));
 for s = 1:numel(state_shown)
-    handle_state(s) = scatter(ax, rest_bv(:, s), rest_pvs(:, s), 44, ...
+    handle_state(s) = scatter(ax, absolute_bv(:, s), absolute_y(:, s), 44, ...
         state_colour(s, :), 'filled', 'MarkerEdgeColor', [0.25 0.25 0.25]);
 end
 legend(ax, handle_state, arrayfun(@shown_as, state_shown), 'Location', 'northwest', ...
@@ -128,15 +129,15 @@ xlabel(ax, 'lumen diameter where that state rests, um')
 ylabel(ax, 'outer PVS diameter there, um')
 set(ax, 'FontSize', param.fontsize, 'Box', 'on')
 axis(ax, 'equal')
-paired = sum(sum(isfinite(rest_bv), 2) >= 2);
+paired = sum(sum(isfinite(absolute_bv), 2) >= 2);
 title(ax, sprintf('%d vessels with two or more states | grey = equal annulus area', ...
     paired))
 
 % how far the states sit apart, on the vessels that carry them
-fprintf('%-14s %10s %10s\n', 'state', 'rest bv', 'rest pvs');
+fprintf('%-14s %10s %10s\n', 'state', 'baseline bv', 'baseline pvs');
 for s = 1:numel(state_shown)
     fprintf('%-14s %10.2f %10.2f\n', shown_as(state_shown(s)), ...
-        median(rest_bv(:, s), 'omitnan'), median(rest_pvs(:, s), 'omitnan'));
+        median(absolute_bv(:, s), 'omitnan'), median(absolute_y(:, s), 'omitnan'));
 end
 
 %% 3. Area gap by state, um^2
@@ -147,16 +148,16 @@ end
 %        One mean over both sides cancels them. see CLAUDE_LOG.md
 [gap_um, label_um] = by_state(rows, ["area_gap_constricted", "area_gap_dilated"], ...
     param.state_name);
-fig_gap = figure('Color', 'w', 'Position', [110 110 720 520], 'Name', 'areagap_um');
+fig_gap = figure('Color', 'w', 'Position', [110 110 720 520], 'Name', 'fig_fwhm_areagap_um');
 draw_bars(axes(fig_gap), gap_um, label_um, param.fontsize, ...
     'area gap, um^2', 'left bar constricted, right bar dilated');
 
 %% 4. Area gap by state, as a fraction of the resting annulus
-% The same quantity with vessel size divided out. area_rest runs 136 to 987 um^2 in
-% this set, so the micrometre bars above carry that 7-fold spread inside them.
+% The same quantity with vessel size divided out: the micrometre bars above carry the
+% spread of area_baseline_sample inside them. For its range see FINDINGS.md
 [gap_frac, label_frac] = by_state(rows, ["area_gapfrac_constricted", ...
     "area_gapfrac_dilated"], param.state_name);
-fig_frac = figure('Color', 'w', 'Position', [140 140 720 520], 'Name', 'areagap_frac');
+fig_frac = figure('Color', 'w', 'Position', [140 140 720 520], 'Name', 'fig_fwhm_areagap_frac');
 draw_bars(axes(fig_frac), gap_frac, label_frac, param.fontsize, ...
     'area gap, fraction of the resting annulus', 'left bar constricted, right bar dilated');
 
@@ -183,7 +184,7 @@ param.paired_other = ["nrem", "rem", "uarousal", ...
 param.paired_column = ["area_gapfrac_constricted", "area_gapfrac_dilated"];
 param.paired_label = ["constricted", "dilated"];
 
-fig_paired = figure('Color', 'w', 'Position', [170 170 820 540], 'Name', 'areagap_paired');
+fig_paired = figure('Color', 'w', 'Position', [170 170 820 540], 'Name', 'fig_fwhm_areagap_paired');
 draw_paired(axes(fig_paired), rows, param.paired_column, param.paired_label, ...
     param.paired_ref, param.paired_other, param.fontsize, ...
     'area gap, fraction of the resting annulus');
@@ -205,7 +206,7 @@ fprintf("flagged %d of %d vessels on the awake fit\n", numel(unique(flagged_vess
     numel(unique(rows.vessel_key)));
 
 fig_flagsplit = figure('Color', 'w', 'Position', [230 100 760 520], ...
-    'Name', 'areagap_beta_flagsplit');
+    'Name', 'fig_fwhm_areagap_beta_flagsplit');
 draw_delta(axes(fig_flagsplit), rows, param.beta_column, param.paired_ref, ...
     param.paired_other, param.fontsize, param.beta_label + ", minus awake", ...
     'split', rows.flagged, 'split_name', ["inside 0..1", "flagged"]);
@@ -236,7 +237,7 @@ fprintf("into NREM : %d vessels rise, %d fall\n", numel(rises_vessel), ...
     sum(has_both) - numel(rises_vessel));
 
 fig_dirsplit = figure('Color', 'w', 'Position', [260 130 760 520], ...
-    'Name', 'areagap_beta_dirsplit');
+    'Name', 'fig_fwhm_areagap_beta_dirsplit');
 draw_delta(axes(fig_dirsplit), rows(ismember(rows.vessel_key, vessel(has_both)), :), ...
     param.beta_column, param.paired_ref, param.paired_other, param.fontsize, ...
     param.beta_label + ", minus awake", ...
@@ -250,7 +251,7 @@ draw_delta(axes(fig_dirsplit), rows(ismember(rows.vessel_key, vessel(has_both)),
 % fits, which is the same subtraction tablegeneration_main does for state_summary.
 %   note  a vessel missing either half of a pair is absent from that bar only, so
 %         the two n differ and the bars stand over different vessel sets
-fig_delta = figure('Color', 'w', 'Position', [290 160 520 520], 'Name', 'areagap_beta_delta');
+fig_delta = figure('Color', 'w', 'Position', [290 160 520 520], 'Name', 'fig_fwhm_areagap_beta_delta');
 draw_delta(axes(fig_delta), rows, param.beta_column, param.paired_ref, param.paired_other, ...
     param.fontsize, param.beta_label + ", minus awake");
 
@@ -325,14 +326,14 @@ for r = 1:numel(param.raster_state)
 end
 
 %% 6. Save, when a block above is worth keeping
-% save_figure(fig_scatter, dirs.save_dir, "pvs_areagap_scatter")
-% save_figure(fig_gap,     dirs.save_dir, "pvs_areagap_um")
-% save_figure(fig_frac,    dirs.save_dir, "pvs_areagap_frac")
-% save_figure(fig_state,   dirs.save_dir, "pvs_areagap_state")
-% save_figure(fig_paired,  dirs.save_dir, "pvs_areagap_paired")
-% save_figure(fig_flagsplit, dirs.save_dir, "pvs_areagap_beta_flagsplit")
-% save_figure(fig_dirsplit,  dirs.save_dir, "pvs_areagap_beta_dirsplit")
-% save_figure(fig_delta,   dirs.save_dir, "pvs_areagap_beta_delta")
+% save_figure(fig_scatter, dirs.save_dir, "fig_fwhm_areagap_scatter")
+% save_figure(fig_gap,     dirs.save_dir, "fig_fwhm_areagap_um")
+% save_figure(fig_frac,    dirs.save_dir, "fig_fwhm_areagap_frac")
+% save_figure(fig_state,   dirs.save_dir, "fig_fwhm_areagap_state")
+% save_figure(fig_paired,  dirs.save_dir, "fig_fwhm_areagap_paired")
+% save_figure(fig_flagsplit, dirs.save_dir, "fig_fwhm_areagap_beta_flagsplit")
+% save_figure(fig_dirsplit,  dirs.save_dir, "fig_fwhm_areagap_beta_dirsplit")
+% save_figure(fig_delta,   dirs.save_dir, "fig_fwhm_areagap_beta_delta")
 
 %% ---------------------------------------------------------------- helpers
 function trace = stack_by_vessel(state_rows, n_vessel, vessel_of)

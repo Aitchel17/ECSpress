@@ -1,6 +1,6 @@
 % Make tables that heatmap figures read.
 %   Reads centralized_paxfwhm_state.mat, derives the two series from the four
-%   Holding session, pooled and vesselbend
+%   Holding session, vessel_pool and vesselbend
 %     caution  the OUTPUT lands in the dataset folder.
 
 clc, clear
@@ -231,7 +231,7 @@ end
 % Sessions cannot be averaged as they stand. Each carries a different number of
 % samples and reaches a different distance along the diameter axis, so a plain mean
 % would let the widest-ranging sessions set the wings and the narrowest set the
-% centre, and the pooled band's thickness would be a picture of which session
+% centre, and the vessel_pool band's thickness would be a picture of which session
 % reached where. Normalising each DIAMETER COLUMN to sum to one first turns every
 % column into the distribution of PVS thickness AT that diameter, and the average
 % of those is a quantity with a meaning: where the PVS sits at this much dilation,
@@ -266,11 +266,11 @@ fprintf('   %d vessels from %d mice | columns kept %d of %d\n', numel(vessel_nam
 fprintf('   kept from %+.1f to %+.1f um, where at least %d vessels reach\n', ...
     min(grid_x(~thin_column)), max(grid_x(~thin_column)), param.min_vessel_n);
 
-% one number per column of the pooled distribution, by the same statistic the
+% one number per column of the vessel_pool distribution, by the same statistic the
 % per-vessel fit below uses, so the two tables are reading the same thing
 pooled_mode = column_statistic(pooled_map, grid_y, param.column_stat);
 
-% The bend, read off the pooled map rather than off one session. fit_bothsides
+% The bend, read off the vessel_pool map rather than off one session. fit_bothsides
 % truncates the longer side, which is what makes the two slopes one measurement
 % made twice; the full-reach pair is carried beside it because the two sides do
 % not reach equally far and the difference between the pairs is worth seeing.
@@ -307,7 +307,7 @@ fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend 
     pooled.sym_bend);
 
 %% The bend, once per vessel, so it has a distribution and not just a value
-% The pooled map gives one number and no spread. Fitting each vessel's own map on
+% The vessel_pool map gives one number and no spread. Fitting each vessel's own map on
 % its own symmetric span makes the two slopes a paired measurement within that
 % vessel, so the difference has a null of exactly zero and the vessels can be
 % counted.
@@ -562,7 +562,7 @@ end
 function trace = event_average(pax_idx, interval, onset_offset, half_width, um_per_px)
 %EVENT_AVERAGE  Lumen diameter around the moment a transition lands, averaged over
 %   this row's events. Each event is measured against ITS OWN pre-event level, so a
-%   vessel that sits at 8 um and one that sits at 18 um stack on the same axis and
+%   narrow vessel and a wide one stack on the same axis and
 %   the picture is of the excursion, not of the calibre.
 %
 %   Events whose window runs past either end of the recording are dropped, not

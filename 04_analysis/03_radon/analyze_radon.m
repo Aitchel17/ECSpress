@@ -1,6 +1,38 @@
-function radon_result = analyze_radon(hold_stack,the_angles,rtd_threshold)
-
-
+function [tirs_result, sinogram_stack] = analyze_radon(hold_stack,the_angles,rtd_threshold)
+%ANALYZE_RADON  Vessel width per angle per frame, by thresholding in Radon space.
+%   Every frame is projected at each of the_angles. Each projection is scaled to
+%   0~1 on its own, so a frame getting brighter or dimmer does not move the
+%   boundaries -- only the shape of the profile does. The two boundaries are then
+%   the outermost bins on either side of the peak that fall below rtd_threshold,
+%   which makes the width a full-width-at-that-fraction: 0.5 is FWHM.
+%
+%   The frames go onto the GPU on entry and both outputs come back on the CPU,
+%   so the caller never sees a gpuArray.
+%
+% IN   hold_stack     H x W x T numeric   the frames to measure
+%      the_angles     1 x A double deg    projection angles, as radon takes them
+%      rtd_threshold  1 x 1 double        fraction of the normalised peak, 0~1
+% OUT  tirs_result    1 x 1 struct
+%        radon_size                  1 x 3 double  size of the projection stack
+%        idx_maxloc                  A x T double  peak bin, per angle per frame
+%        idx_uploc                   A x T double  boundary above the peak
+%        idx_downloc                 A x T double  boundary below it
+%        diameter                    A x T double  downloc - uploc, in BINS
+%        center_loc                  A x T double  downloc + uploc -- the SUM,
+%                                                  so twice the midpoint
+%        median_diameter             A x 1 double  over frames
+%        normalized_diameterchange   A x T double  diameter / median - 1
+%        var_normdiameter            A x 1 double  over frames
+%        var_diameter                A x 1 double  over frames
+%      sinogram_stack  P x A x T double  the projections themselves, scaled
+%                                        the same way the boundaries were found
+%                                        on. Only built when asked for -- it is
+%                                        the one array here big enough to matter,
+%                                        and re-thresholding is what it is for
+%
+%   UNIT  bins of the Radon projection, not microns. One bin is one pixel only
+%         along the projection direction; converting needs objpix and the angle
+%
 % 0. Put stack to memory of gpu
 hold_stack = gpuArray(hold_stack);
 
@@ -48,34 +80,37 @@ clearvars row_idx radon_thr mask
 disp('Radon thresholding end')
 
 % Store Statistics results
-radon_result.radon_size = size(radon_stack); % Store size for reconstruction
-radon_result.idx_maxloc = maxlocarray;
-radon_result.idx_uploc = upperboundary_idx;
-radon_result.idx_downloc = bottomboundary_idx;
-radon_result.diameter = bottomboundary_idx-upperboundary_idx;
-radon_result.center_loc = bottomboundary_idx+upperboundary_idx;
-radon_result.median_diameter = median(radon_result.diameter,2);
-radon_result.normalized_diameterchange = radon_result.diameter./radon_result.median_diameter;
-radon_result.normalized_diameterchange = radon_result.normalized_diameterchange-1;
-radon_result.var_normdiameter = var(radon_result.normalized_diameterchange,0,2);
-radon_result.var_diameter = var(radon_result.diameter,0,2);
+tirs_result.radon_size = size(radon_stack); % Store size for reconstruction
+tirs_result.idx_maxloc = maxlocarray;
+tirs_result.idx_uploc = upperboundary_idx;
+tirs_result.idx_downloc = bottomboundary_idx;
+tirs_result.diameter = bottomboundary_idx-upperboundary_idx;
+tirs_result.center_loc = bottomboundary_idx+upperboundary_idx;
+tirs_result.median_diameter = median(tirs_result.diameter,2);
+tirs_result.normalized_diameterchange = tirs_result.diameter./tirs_result.median_diameter;
+tirs_result.normalized_diameterchange = tirs_result.normalized_diameterchange-1;
+tirs_result.var_normdiameter = var(tirs_result.normalized_diameterchange,0,2);
+tirs_result.var_diameter = var(tirs_result.diameter,0,2);
 
 
 disp('Inverse radon transform end')
 
 % Gather all data to CPU
-radon_result = gather_radon_result(radon_result);
+tirs_result = gather_radon_result(tirs_result);
+if nargout >= 2
+    sinogram_stack = gather(radon_stack);
+end
 
 end
 
-function radon_result = gather_radon_result(radon_result)
+function result = gather_radon_result(result)
 % GATHER_RADON_RESULT Bring all GPU arrays to CPU for saving.
-fields = fieldnames(radon_result);
+fields = fieldnames(result);
 for i = 1:numel(fields)
     fname = fields{i};
-    val = radon_result.(fname);
+    val = result.(fname);
     if isa(val, 'gpuArray')
-        radon_result.(fname) = gather(val);
+        result.(fname) = gather(val);
     end
 end
 end
