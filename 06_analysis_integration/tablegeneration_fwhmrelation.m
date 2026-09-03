@@ -12,42 +12,33 @@ if isempty(param.dataset)
     param.dataset = 'merged_igkl_igkltdt';      % or '00_igkl' / '01_igkltdt'
 end
 
+%% Parameter
 
-% What gets in. Every one of these forms a verdict over sessions, over vessels or
-% over diameter columns, so changing one changes WHICH data the tables are about.
-param.min_sample = 150;            % samples  FWHM readouts a heatmap needs behind it.
-                                   %          150 at 3 Hz is 50 s, which is what lets a
-                                   %          REM row in at all -- its longest is 842
-param.min_bv_range = 2;            % um       diameter span a session must cover
-param.max_cond_sd = Inf;           % um       PVS scatter at a fixed diameter. Inf = off
-param.pool_resolution = 0.285;     % um/px    a session is pooled only at this setting
-param.resolution_tol = 0.01;       % um/px    how close counts as the same setting
-param.min_vessel_n = 10;           % vessels  a diameter column needs before it is kept
-param.min_column_session = 5;      % columns  a side of one session's mode curve needs
-param.min_column_vessel = 4;       % columns  a side of one vessel's map needs
+filt.depth_thr = 70;           % Cortical depth kept, shallower than this (um)
+filt.session_type = "sleep";   % Session type kept (str), "" = every type
+filt.drop_flagged = true;      % Drop a folder whose name says notanalyzable (logical)
+filt.min_length = 150;         % Minimum data length (count), REM sets it, see FINDINGS.md
+filt.min_bvamp = 2;            % Minimum diameter span (um)
+filt.max_scatter = Inf;        % Maximum PVS scatter at fixed diameter (um), Inf = off
+filt.max_pxsize = 0.3;         % Coarsest pixel size kept (um/px), Inf = every size
+filt.pool_pxsize = [];         % Pixel size required for pooling (um/px), [] = every size
+filt.pxsize_tol = 0.01;        % Pixel size tolerance (um/px)
+filt.min_vessel = 10;          % Minimum vessels behind a diameter column (count)
+filt.min_column_session = 5;   % Minimum columns per side, one session (count)
+filt.min_column_vessel = 4;    % Minimum columns per side, one vessel (count)
 
-% What is measured. These change the numbers in the tables, not which rows are in
-% them.
-param.y_series = "eps";            % str      against bv; the other choice is totalpvs
-param.pool_step = [];              % um       grid spacing, [] = the coarsest pixel
-param.column_stat = "median";      % str      which of stat_name the pooled curve uses
-% Two kinds of interval sit in state_idx and they do not align the same way.
-%   *_trans  a FIXED 151-sample window, and the state it runs into starts at +75 in
-%            98% of 610 events. t = 0 is therefore the window start plus 75
-%   a bout    awake, nrem, rem, uarousal are scored and vary in length (a
-%            microarousal runs 3 to 76 samples, 10 s at the median). t = 0 is the
-%            bout start, and the window has to be wider than the bout to show it
-param.event_half = 75;             % samples  either side of t = 0, transitions
-param.event_half_bout = 180;       % samples  either side of t = 0, scored bouts.
-                                   %          60 s at 3 Hz, six times the median
-                                   %          microarousal
+param.y_series = "eps";        % Series on y, "eps" or "totalpvs" (str)
+param.pool_step = [];          % Pooling grid spacing (um), [] = the coarsest pixel
+param.column_stat = "median";  % Column statistic the vessel_pool curve uses (str)
+param.event_half = 75;         % Half window, transitions (count)
+param.event_half_bout = 180;   % Half window, scored bouts (count)
 param.stat_name = ["mode", "centroid", "median"];
 param.state_name = ["awake", "nrem", "rem", "uarousal", ...
     "an_trans", "na_trans", "nr_trans", "ra_trans"];
-%   str      state_idx fields the state table splits on. The four _trans are FIXED
-%            151-sample windows, not scored bouts, so every event of them is the same
-%            width and they overlap the steady states they run between -- a transition
-%            row and its neighbours are not independent
+param.state_pooled = ["awake", "nrem", "rem"];   % states that get a pooled map (str)
+% filt forms a verdict over rows; param changes only the numbers in them. t = 0 is the
+% window start plus event_half for a _trans interval and the bout start for a bout;
+% a _trans row overlaps its two neighbours. Why +event_half: see FINDINGS.md
 
 %% Read the centralized state analysis
 dirs = dirs_central();
@@ -57,115 +48,96 @@ loaded_central = load(central_path); central = loaded_central.central; clear loa
 fprintf('centralized state : %d sessions\n   %s\n', height(central), central_path);
 
 %% Which sessions the result is about
-param.depth_thr = 70;              % um       L1 / L2-3 boundary
-cond.is_layer1 = central.NumericDepth < param.depth_thr;
+cond.is_layer1 = central.NumericDepth < filt.depth_thr;
 cond.vessel_id = string(central.VesselID);
 cond.is_artery = contains(cond.vessel_id, "PA", 'IgnoreCase', true);
 cond.has_resolution = isfinite(central.NumericResolution);
-cond.keep_session = cond.is_artery & cond.is_layer1 & cond.has_resolution; % filtering stage
-kept = central(cond.keep_session, :);
+% one session twice as coarse as the rest would set the pooling grid for everybody,
+% and putting it on a finer grid instead would be inventing resolution it never had
+cond.fine_enough = central.NumericResolution <= filt.max_pxsize;
+% a whisker-stimulation recording and a sleep recording are different experiments,
+% so two of them on one vessel are not two looks at the same thing
+cond.right_type = filt.session_type == "" | ...
+    string(central.SessionType) == filt.session_type;
+cond.not_flagged = ~filt.drop_flagged | ...
+    ~contains(string(central.Directory), "notanalyzable", 'IgnoreCase', true);
+cond.keep_session = cond.is_artery & cond.is_layer1 & cond.has_resolution & ...
+    cond.fine_enough & cond.right_type & cond.not_flagged;
+filtered = central(cond.keep_session, :);
 
 % message
 fprintf('fwhmrelation.session : %d of %d rows kept\n', ...
     sum(cond.keep_session), numel(cond.keep_session));
 fprintf('   PA %d | depth < %d um %d | resolution known %d\n', ...
-    sum(cond.is_artery), param.depth_thr, sum(cond.is_layer1), sum(cond.has_resolution));
+    sum(cond.is_artery), filt.depth_thr, sum(cond.is_layer1), sum(cond.has_resolution));
+fprintf('   type %s %d | not flagged %d | pixel <= %g um %d\n', filt.session_type, ...
+    sum(cond.right_type), sum(cond.not_flagged), filt.max_pxsize, sum(cond.fine_enough));
 %% One row per session
-% The heatmap and every number read off it, in one pass. There is no cheap-half /
-% expensive-half split inside this file any more: re-labelling a panel costs a load
-% of what this wrote, not a recompute.
-%   note  the sample-level slope needs no unit conversion -- it is a ratio of two
-%        thicknesses on the same pixel axis, so px/px equals um/um
-measured = struct('n_sample', {}, 'bv_range', {}, 'cond_sd', {}, 'sample_slope', {}, ...
-    'sample_r', {}, 'mode_slope', {}, 'slope_constricted', {}, 'slope_dilated', {}, ...
-    'n_constricted', {}, 'n_dilated', {}, 'beta_ratio', {}, 'beta_gap', {}, 'bv_anchor', {}, ...
-    'pvs_anchor', {}, 'area_rest', {}, 'area_gap_constricted', {}, ...
-    'area_gap_dilated', {}, 'area_gapfrac_constricted', {}, ...
-    'area_gapfrac_dilated', {}, 'bv_ref', {}, 'bv_rest', {}, 'pvs_rest', {}, 'heat', {});
-for k = 1:height(kept)
-    measured(k) = sample_heatmap(kept.data{k}.idx, kept.NumericResolution(k), ...
-        param.y_series, []);
+% The heatmap and every number read off it, in one pass. The sample-level slope is
+% px/px = um/um, so it needs no conversion
+gathered = cell(height(filtered), 1);
+for k = 1:height(filtered)
+    thickness = fwhm_thickness(filtered.data{k}.idx);
+    gathered{k} = sample_heatmap(thickness.bv, thickness.eps, param.y_series, ...
+        filtered.NumericResolution(k), []);
 end
-%%
-session = kept(:, ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
+measured = vertcat(gathered{:});
+
+%% Make session table
+session = filtered(:, ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
     "Directory", "NumericDepth", "NumericResolution"]);
-session.vessel_key = string(kept.MouseID) + "_" + string(kept.VesselID);
-session.n_sample = [measured.n_sample]';
-session.bv_range = [measured.bv_range]';
-session.cond_sd = [measured.cond_sd]';
-session.sample_slope = [measured.sample_slope]';
-session.sample_r = [measured.sample_r]';
-session.mode_slope = [measured.mode_slope]';
-session.slope_constricted = [measured.slope_constricted]';
-session.slope_dilated = [measured.slope_dilated]';
-session.n_constricted = [measured.n_constricted]';
-session.n_dilated = [measured.n_dilated]';
-session.beta_ratio = [measured.beta_ratio]';
-session.beta_gap = [measured.beta_gap]';
-session.bv_anchor = [measured.bv_anchor]';
-session.pvs_anchor = [measured.pvs_anchor]';
-session.area_rest = [measured.area_rest]';
-session.area_gap_constricted = [measured.area_gap_constricted]';
-session.area_gap_dilated = [measured.area_gap_dilated]';
-session.area_gapfrac_constricted = [measured.area_gapfrac_constricted]';
-session.area_gapfrac_dilated = [measured.area_gapfrac_dilated]';
-session.bv_ref = [measured.bv_ref]';
-session.bv_rest = [measured.bv_rest]';
-session.pvs_rest = [measured.pvs_rest]';
-session.heat = {measured.heat}';
+session.vessel_key = string(filtered.MouseID) + "_" + string(filtered.VesselID);
+session = spread_rows(session, measured, "heat");
 
-%%
 
-% the five verdicts, each named where it is defined and none of them applied here
-session.enough_sample = session.n_sample >= param.min_sample;
-session.wide_enough = session.enough_sample & session.bv_range >= param.min_bv_range;
-session.drawn = session.wide_enough & session.cond_sd <= param.max_cond_sd;
-session.in_pool = session.wide_enough & ...
-    abs(session.NumericResolution - param.pool_resolution) <= param.resolution_tol;
+% filter condition
+session.enough_sample = session.n_sample >= filt.min_length;
+session.wide_enough = session.enough_sample & session.bv_range >= filt.min_bvamp;
+session.drawn = session.wide_enough & session.cond_sd <= filt.max_scatter;
+% resolutions may be mixed: pool_by_vessel puts every map on one grid, so a pixel
+% size is a reason to look at a map, not a reason to drop it
+if isempty(filt.pool_pxsize)
+    on_pxsize = true(height(session), 1);
+else
+    on_pxsize = abs(session.NumericResolution - filt.pool_pxsize) <= filt.pxsize_tol;
+end
+session.in_pool = session.wide_enough & on_pxsize;
 % the map fits both sides whenever a line can be drawn at all; how many columns a
 % side must have before that line is worth quoting is decided HERE, on counts the
 % map returned, so lowering it is a re-filter and not a rebuild
-session.bend_fitted = session.n_constricted >= param.min_column_session & ...
-    session.n_dilated >= param.min_column_session;
+session.bend_fitted = session.n_constricted >= filt.min_column_session & ...
+    session.n_dilated >= filt.min_column_session;
 result.fwhmrelation.session = session;
 
 
-fprintf('   %d under %d samples | %d spanned less than %g um | %d drawn | %d pooled\n', ...
-    sum(~session.enough_sample), param.min_sample, ...
-    sum(session.enough_sample & ~session.wide_enough), param.min_bv_range, ...
+fprintf('   %d under %d samples | %d spanned less than %g um | %d drawn | %d vessel_pool\n', ...
+    sum(~session.enough_sample), filt.min_length, ...
+    sum(session.enough_sample & ~session.wide_enough), filt.min_bvamp, ...
     sum(session.drawn), sum(session.in_pool));
-fprintf('   both sides reach %d columns : %d of %d\n', param.min_column_session, ...
+fprintf('   both sides reach %d columns : %d of %d\n', filt.min_column_session, ...
     sum(session.bend_fitted), height(session));
 fprintf('\nmode-curve slope d(%s)/d(bv)\n', param.y_series);
 report_slopes('spans enough diameter', session.mode_slope(session.wide_enough));
 held_back = session.wide_enough & ~session.drawn;
+
+
 %% The same measurement again, one map per sleep state
-% Not per BOUT. An NREM bout runs 91 frames at the median, which is 30 s -- too few
-% to fill a heatmap and far too few to span the 2 um of diameter a slope needs. A
-% session's bouts POOLED reach 2352 frames at the median and 71% of the whole
-% session's diameter span, so the unit is the state within a session.
-%   caution  every map re-origins on its OWN modal diameter, so the resting
-%            diameter each state settles at is not in x_baseceneters. It is in
-%            bv_rest, which is why that field exists
-state_row = struct('n_sample', {}, 'bv_range', {}, 'cond_sd', {}, 'sample_slope', {}, ...
-    'sample_r', {}, 'mode_slope', {}, 'slope_constricted', {}, 'slope_dilated', {}, ...
-    'n_constricted', {}, 'n_dilated', {}, 'beta_ratio', {}, 'beta_gap', {}, 'bv_anchor', {}, ...
-    'pvs_anchor', {}, 'area_rest', {}, 'area_gap_constricted', {}, ...
-    'area_gap_dilated', {}, 'area_gapfrac_constricted', {}, ...
-    'area_gapfrac_dilated', {}, 'bv_ref', {}, 'bv_rest', {}, 'pvs_rest', {}, 'heat', {});
+% pool the state within session
+state_row = cell(0);
 state_of = strings(0);
 state_session = zeros(0);
 event_dbv = cell(0);
-for k = 1:height(kept)
-    scored = kept.data{k}.state_idx;
-    n_sample_total = numel(kept.data{k}.t_axis);
+for k = 1:height(filtered)
+    scored = filtered.data{k}.state_idx;
+    n_sample_total = numel(filtered.data{k}.t_axis);
+    thickness = fwhm_thickness(filtered.data{k}.idx);
     for state_name = param.state_name
         if ~isfield(scored, state_name) || isempty(scored.(state_name))
             continue
         end
-        in_state = interval_mask(scored.(state_name), n_sample_total);
-        state_row(end+1) = sample_heatmap(kept.data{k}.idx, ...
-            kept.NumericResolution(k), param.y_series, in_state); %#ok<SAGROW>
+        in_state = interval_mask(scored.(state_name), n_sample_total); 
+        state_row{end+1} = sample_heatmap(thickness.bv, thickness.eps, ...
+            param.y_series, filtered.NumericResolution(k), in_state); %#ok<SAGROW>
         if endsWith(state_name, "_trans")
             onset_offset = param.event_half;
             half_width = param.event_half;
@@ -173,47 +145,26 @@ for k = 1:height(kept)
             onset_offset = 0;
             half_width = param.event_half_bout;
         end
-        event_dbv(end+1) = {event_average(kept.data{k}.idx, scored.(state_name), ...
-            onset_offset, half_width, kept.NumericResolution(k))}; %#ok<SAGROW>
+        event_dbv(end+1) = {event_average(filtered.data{k}.idx, scored.(state_name), ...
+            onset_offset, half_width, filtered.NumericResolution(k))}; %#ok<SAGROW>
         state_of(end+1) = state_name; %#ok<SAGROW>
         state_session(end+1) = k; %#ok<SAGROW>
     end
 end
+state_row = vertcat(state_row{:});
 
 state = session(state_session, ["MouseID", "Date", "SessionType", "SessionID", ...
     "VesselID", "Directory", "NumericDepth", "NumericResolution", "vessel_key"]);
 state.state = state_of';
-state.n_sample = [state_row.n_sample]';
-state.bv_range = [state_row.bv_range]';
-state.bv_ref = [state_row.bv_ref]';
-state.bv_rest = [state_row.bv_rest]';
-state.pvs_rest = [state_row.pvs_rest]';
+state = spread_rows(state, state_row, "heat");
 state.event_dbv = event_dbv';
-state.cond_sd = [state_row.cond_sd]';
-state.sample_slope = [state_row.sample_slope]';
-state.sample_r = [state_row.sample_r]';
-state.mode_slope = [state_row.mode_slope]';
-state.slope_constricted = [state_row.slope_constricted]';
-state.slope_dilated = [state_row.slope_dilated]';
-state.n_constricted = [state_row.n_constricted]';
-state.n_dilated = [state_row.n_dilated]';
-state.beta_ratio = [state_row.beta_ratio]';
-state.beta_gap = [state_row.beta_gap]';
-state.bv_anchor = [state_row.bv_anchor]';
-state.pvs_anchor = [state_row.pvs_anchor]';
-state.area_rest = [state_row.area_rest]';
-state.area_gap_constricted = [state_row.area_gap_constricted]';
-state.area_gap_dilated = [state_row.area_gap_dilated]';
-state.area_gapfrac_constricted = [state_row.area_gapfrac_constricted]';
-state.area_gapfrac_dilated = [state_row.area_gapfrac_dilated]';
-state.heat = {state_row.heat}';
 
 % the same verdicts as the session table, on the same settings, applied to nothing
-state.enough_sample = state.n_sample >= param.min_sample;
-state.wide_enough = state.enough_sample & state.bv_range >= param.min_bv_range;
-state.drawn = state.wide_enough & state.cond_sd <= param.max_cond_sd;
-state.bend_fitted = state.n_constricted >= param.min_column_session & ...
-    state.n_dilated >= param.min_column_session;
+state.enough_sample = state.n_sample >= filt.min_length;
+state.wide_enough = state.enough_sample & state.bv_range >= filt.min_bvamp;
+state.drawn = state.wide_enough & state.cond_sd <= filt.max_scatter;
+state.bend_fitted = state.n_constricted >= filt.min_column_session & ...
+    state.n_dilated >= filt.min_column_session;
 result.fwhmrelation.state = state;
 
 fprintf('\nfwhmrelation.state : %d rows from %d sessions\n', height(state), ...
@@ -236,8 +187,8 @@ end
 % column into the distribution of PVS thickness AT that diameter, and the average
 % of those is a quantity with a meaning: where the PVS sits at this much dilation,
 % averaged over vessels.
-%   why  vessel and not session : one vessel here contributes five sessions and
-%        would otherwise weigh five times what a singly-imaged vessel weighs
+%   vessel and not session : a vessel with several sessions would otherwise weigh
+%   several times a singly-imaged one
 in_pool = session(session.in_pool, :);
 pool_step = param.pool_step;
 if isempty(pool_step)
@@ -258,78 +209,140 @@ fprintf('\npooling on a %.3f um grid, %d x %d\n', pool_step, numel(grid_y), nume
     numel(vessel_name), grid_x, grid_y);
 
 vessel_reaches = sum(vessel_count > 0, 1);
-thin_column = vessel_reaches < param.min_vessel_n;
-pooled_map = mean(vessel_map, 3, 'omitnan');
-pooled_map(:, thin_column) = NaN;
+thin_column = vessel_reaches < filt.min_vessel;
+pool_map = mean(vessel_map, 3, 'omitnan');
+pool_map(:, thin_column) = NaN;
 fprintf('   %d vessels from %d mice | columns kept %d of %d\n', numel(vessel_name), ...
     numel(unique(extractBefore(vessel_name, "_"))), sum(~thin_column), numel(grid_x));
 fprintf('   kept from %+.1f to %+.1f um, where at least %d vessels reach\n', ...
-    min(grid_x(~thin_column)), max(grid_x(~thin_column)), param.min_vessel_n);
+    min(grid_x(~thin_column)), max(grid_x(~thin_column)), filt.min_vessel);
 
 % one number per column of the vessel_pool distribution, by the same statistic the
 % per-vessel fit below uses, so the two tables are reading the same thing
-pooled_mode = column_statistic(pooled_map, grid_y, param.column_stat);
+pool_mode_curve = column_statistic(pool_map, grid_y, param.column_stat);
 
 % The bend, read off the vessel_pool map rather than off one session. fit_bothsides
 % truncates the longer side, which is what makes the two slopes one measurement
 % made twice; the full-reach pair is carried beside it because the two sides do
 % not reach equally far and the difference between the pairs is worth seeing.
-pooled = struct();
-pooled.grid_x = grid_x;
-pooled.grid_y = grid_y;
-pooled.pooled_map = pooled_map;
-pooled.pooled_mode = pooled_mode;
-pooled.vessel_reaches = vessel_reaches;
-pooled.thin_column = thin_column;
-pooled.pool_step = pool_step;
-pooled.vessel_name = vessel_name;
-[pooled.sym_constricted, pooled.sym_dilated, sym_info] = fit_bothsides(grid_x, pooled_mode, ...
-    param.min_column_vessel);
-pooled.sym_span = sym_info.span;
-pooled.sym_bend = sym_info.bend;
-pooled.n_sym_constricted = sym_info.n_low;
-pooled.n_sym_dilated = sym_info.n_high;
-pooled.sym_constricted_intercept = sym_info.intercept_low;
-pooled.sym_dilated_intercept = sym_info.intercept_high;
-[pooled.full_constricted, pooled.n_full_constricted] = whole_reach(grid_x, pooled_mode, -1);
-[pooled.full_dilated, pooled.n_full_dilated] = whole_reach(grid_x, pooled_mode, 1);
-pooled.r_sym_constricted = side_correlation(grid_x, pooled_mode, -1, pooled.sym_span);
-pooled.r_sym_dilated = side_correlation(grid_x, pooled_mode, 1, pooled.sym_span);
-result.fwhmrelation.pooled = pooled;
+vessel_pool = struct();
+vessel_pool.grid_x = grid_x;
+vessel_pool.grid_y = grid_y;
+vessel_pool.map = pool_map;
+vessel_pool.mode_curve = pool_mode_curve;
+% the stage before the collapse: one map per vessel, on the same grid. vessel_count
+% says how many of that vessel sessions reached each column, so a thin column can be
+% masked per vessel the way thin_column masks the collapsed map
+vessel_pool.vessel_map = vessel_map;
+vessel_pool.vessel_count = vessel_count;
+vessel_pool.vessel_reaches = vessel_reaches;
+vessel_pool.thin_column = thin_column;
+vessel_pool.step = pool_step;
+vessel_pool.vessel_name = vessel_name;
+[vessel_pool.sym_constricted, vessel_pool.sym_dilated, sym_info] = fit_bothsides(grid_x, pool_mode_curve, ...
+    filt.min_column_vessel);
+vessel_pool.sym_span = sym_info.span;
+vessel_pool.sym_bend = sym_info.bend;
+vessel_pool.n_sym_constricted = sym_info.n_low;
+vessel_pool.n_sym_dilated = sym_info.n_high;
+vessel_pool.sym_constricted_intercept = sym_info.intercept_low;
+vessel_pool.sym_dilated_intercept = sym_info.intercept_high;
+[vessel_pool.full_constricted, vessel_pool.n_full_constricted] = whole_reach(grid_x, pool_mode_curve, -1);
+[vessel_pool.full_dilated, vessel_pool.n_full_dilated] = whole_reach(grid_x, pool_mode_curve, 1);
+vessel_pool.r_sym_constricted = side_correlation(grid_x, pool_mode_curve, -1, vessel_pool.sym_span);
+vessel_pool.r_sym_dilated = side_correlation(grid_x, pool_mode_curve, 1, vessel_pool.sym_span);
+result.fwhmrelation.vessel_pool = vessel_pool;
 
 fprintf('   over each side''s whole reach\n');
 fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend %+.3f\n', ...
-    pooled.full_constricted, pooled.n_full_constricted, pooled.full_dilated, pooled.n_full_dilated, ...
-    pooled.full_dilated - pooled.full_constricted);
-fprintf('   over the symmetric span, +/- %.2f um\n', pooled.sym_span);
+    vessel_pool.full_constricted, vessel_pool.n_full_constricted, vessel_pool.full_dilated, vessel_pool.n_full_dilated, ...
+    vessel_pool.full_dilated - vessel_pool.full_constricted);
+fprintf('   over the symmetric span, +/- %.2f um\n', vessel_pool.sym_span);
 fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend %+.3f\n', ...
-    pooled.sym_constricted, pooled.n_sym_constricted, pooled.sym_dilated, pooled.n_sym_dilated, ...
-    pooled.sym_bend);
+    vessel_pool.sym_constricted, vessel_pool.n_sym_constricted, vessel_pool.sym_dilated, vessel_pool.n_sym_dilated, ...
+    vessel_pool.sym_bend);
+
+%% Pool each arousal state at the vessel level
+% The grid and the vessel list are the block above's, so a state map and the
+% all-state map share an abscissa and a vessel index. The NORMALISATION is not --
+% see pool_state_by_vessel for why a state map cannot use the column rule.
+%   steady states only : a _trans interval shares frames with its neighbours. The
+%   origin is the session median taken before the state mask, so the shift between
+%   states is a measurement, not an offset
+keep_pooled = state.drawn & ismember(state.vessel_key, vessel_name);
+state_drawn = state(keep_pooled, :);
+fprintf('\nfwhmrelation.state_pool : %d of %d state rows kept\n', ...
+    sum(keep_pooled), numel(keep_pooled));
+
+n_state = numel(param.state_pooled);
+state_pool = table(param.state_pooled(:), 'VariableNames', {'state'});
+state_pool.n_session = zeros(n_state, 1);
+state_pool.n_vessel = zeros(n_state, 1);
+state_pool.n_mouse = zeros(n_state, 1);
+state_pool.bv_statemedian = nan(n_state, 1);
+state_pool.y_statemedian = nan(n_state, 1);
+state_pool.map = cell(n_state, 1);
+state_pool.mode_curve = cell(n_state, 1);
+state_pool.vessel_reaches = cell(n_state, 1);
+state_pool.thin_column = cell(n_state, 1);
+
+for k = 1:n_state
+    on_state = state_drawn.state == param.state_pooled(k);
+    in_state = state_drawn(on_state, :);
+    [~, vessel_index] = ismember(in_state.vessel_key, vessel_name);
+    [state_map, state_count] = pool_state_by_vessel(in_state.heat, vessel_index, ...
+        numel(vessel_name), grid_x, grid_y);
+    state_reaches = sum(state_count > 0, 1);
+    state_thin = state_reaches < filt.min_vessel;
+    pooled_map = mean(state_map, 3, 'omitnan');
+    pooled_map(:, state_thin) = NaN;
+
+    state_pool.n_session(k) = height(in_state);
+    state_pool.n_vessel(k) = numel(unique(in_state.vessel_key));
+    state_pool.n_mouse(k) = numel(unique(extractBefore(string(in_state.vessel_key), "_")));
+    state_pool.bv_statemedian(k) = median(in_state.bv_sessionmedian, 'omitnan');
+    state_pool.y_statemedian(k) = median(in_state.y_sessionmedian, 'omitnan');
+    state_pool.map{k} = pooled_map;
+    state_pool.mode_curve{k} = column_statistic(pooled_map, grid_y, param.column_stat);
+    state_pool.vessel_reaches{k} = state_reaches;
+    state_pool.thin_column{k} = state_thin;
+
+    fprintf('   %-6s %2d sessions | %2d vessels, %d mice | columns kept %d of %d\n', ...
+        param.state_pooled(k), height(in_state), state_pool.n_vessel(k), ...
+        state_pool.n_mouse(k), sum(~state_thin), numel(grid_x));
+end
+result.fwhmrelation.state_pool = state_pool;
 
 %% The bend, once per vessel, so it has a distribution and not just a value
 % The vessel_pool map gives one number and no spread. Fitting each vessel's own map on
 % its own symmetric span makes the two slopes a paired measurement within that
 % vessel, so the difference has a null of exactly zero and the vessels can be
 % counted.
-%   why  each vessel gets ITS OWN span rather than a common one : a common span
-%        would be set by the vessel that reached least far and would throw away
-%        most of the others. Within a vessel the two sides are still the same
-%        length, which is the only symmetry the comparison needs
-%   note  the two columns per statistic are the CONSTRICTED and DILATED sides,
-%        fixed by the sign of x inside fit_bothsides and never by magnitude
+%   each vessel gets its own symmetric span, not a common one. The two columns per
+%   statistic are the constricted and dilated sides, fixed by the sign of x
 n_vessel = numel(vessel_name);
 vesselbend = table(vessel_name, 'VariableNames', {'vessel_key'});
 vesselbend.MouseID = extractBefore(vessel_name, "_");
 vesselbend.n_session = accumarray(vessel_of, 1);
+% where this vessel sits, so the bend can be read against calibre without a join
+vesselbend.bv_vesselmedian = accumarray(vessel_of, in_pool.bv_sessionmedian, ...
+    [], @(x) median(x, "omitnan"));
+vesselbend.eps_vesselmedian = accumarray(vessel_of, in_pool.eps_sessionmedian, ...
+    [], @(x) median(x, "omitnan"));
 vesselbend.span = nan(n_vessel, 1);
+% one row per vessel on the shared grid_x, so every vessel is a line on one axis.
+% Its own no-flux curve is not stored: bv_vesselmedian and eps_vesselmedian settle it,
+% and a stored copy could drift from them
 for stat = param.stat_name
     vesselbend.("constricted_" + stat) = nan(n_vessel, 1);
     vesselbend.("dilated_" + stat) = nan(n_vessel, 1);
+    vesselbend.("curve_" + stat) = nan(n_vessel, numel(grid_x));
 end
 for v = 1:n_vessel
     for stat = param.stat_name
         curve = column_statistic(vessel_map(:, :, v), grid_y, stat);
-        [low, high, side_info] = fit_bothsides(grid_x, curve, param.min_column_vessel);
+        vesselbend.("curve_" + stat)(v, :) = curve;
+        [low, high, side_info] = fit_bothsides(grid_x, curve, filt.min_column_vessel);
         vesselbend.("constricted_" + stat)(v) = low;
         vesselbend.("dilated_" + stat)(v) = high;
         vesselbend.span(v) = side_info.span;   % the coverage is common to the three
@@ -338,9 +351,13 @@ end
 vesselbend.fitted = isfinite(vesselbend.("constricted_" + param.column_stat)) & ...
     isfinite(vesselbend.("dilated_" + param.column_stat));
 result.fwhmrelation.vesselbend = vesselbend;
+% the abscissa curve_* sits on. Beside the table rather than inside it, because it is
+% one vector shared by every row and by vessel_pool
+result.fwhmrelation.grid_x = grid_x;
 % the settings that produced the three, so a figure can label them without
 % restating a threshold this file chose
 result.fwhmrelation.param = param;
+result.fwhmrelation.filt = filt;
 
 fprintf('\nbend per vessel, the same fit off three different column statistics\n');
 fprintf('%-10s %8s %12s %10s %10s %10s\n', 'statistic', 'vessels', 'constricted', ...
@@ -360,9 +377,7 @@ end
 % tree open these files with load(path).save_content, tablegeneration_main writes
 % them the same way, and renaming it here would break every one of them silently --
 % load() of a missing field errors nowhere near the file that changed it.
-%   caution  this overwrites. The product is the pipeline's own, so overwriting is
-%            allowed, but the copy on disk is the only record of which param built
-%            it, and a run with one setting changed is indistinguishable afterwards
+%   caution  this overwrites, and the copy on disk is the only record of which param built it
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 if ~isfolder(dirs.out)
     mkdir(dirs.out)
@@ -390,173 +405,140 @@ for field_name = string(fieldnames(result))'
 end
 
 %% ---------------------------------------------------------------- helpers
-function row = sample_heatmap(pax_idx, um_per_px, y_series, sample_mask)
+function destination = spread_rows(destination, measured_row, boxed)
+%SPREAD_ROWS  One table column per field of the measured row struct.
+%   IN   destination   table       the rows these fields belong to
+%        measured_row  Nx1 struct  one element per row of destination
+%        boxed         1xB str     fields that are not scalars, kept in a cell
+%   OUT  destination   table
+    % fieldnames answers a COLUMN, and a for over a column takes it in one go
+    for name = string(fieldnames(measured_row))'
+        if ismember(name, boxed)
+            destination.(name) = {measured_row.(name)}';
+        else
+            destination.(name) = [measured_row.(name)]';
+        end
+    end
+end
+
+function row = sample_heatmap(bv_px, eps_px, y_series, um_per_px, sample_mask)
 %SAMPLE_HEATMAP  One heatmap over a set of samples, and what is read off it.
-%   A sample is one FWHM readout: one kymograph column, one set of four boundaries,
-%   one (bv, pvs) pair. That is 1:1 with an acquired frame, but what is counted and
-%   fitted here is the readout, and a readout can be missing where a frame is not.
-%   The heatmap measures itself -- slopes, spread, the column counts a caller needs to
-%   decide whether a slope is worth having. What is added here is the sample-level
-%   pair, which reads every sample rather than the binned map, and the copy of the
-%   map's numbers up into the row so the table can be queried without unpacking it.
-%
-%   IN   pax_idx     1x1 struct   the four boundary rows
+
+%   IN   bv_px       1xT double   lumen diameter, px
+%        eps_px      1xT double   outer diameter, px
+%        y_series    1x1 str      which series goes on y. "eps" or "totalpvs"
 %        um_per_px   1x1 double   this session's scale
-%        y_series    1x1 str      which of fwhm_thickness's series goes on y
-%        sample_mask 1xT logical  which samples to read. [] = all of them. This is
-%                                 what makes a sleep state a call rather than a
-%                                 second function: the same measurement, fewer samples
+%        sample_mask 1xT logical  which samples to read. [] = all of them
 %   OUT  row         1x1 struct   the twenty-three fields, declared on the first line
     row = struct('n_sample', 0, 'bv_range', NaN, 'cond_sd', NaN, 'sample_slope', NaN, ...
         'sample_r', NaN, 'mode_slope', NaN, 'slope_constricted', NaN, ...
         'slope_dilated', NaN, 'n_constricted', 0, 'n_dilated', 0, ...
-        'beta_ratio', NaN, 'beta_gap', NaN, 'bv_anchor', NaN, 'pvs_anchor', NaN, ...
-        'area_rest', NaN, ...
+        'beta_ratio', NaN, 'beta_gap', NaN, 'bv_sessionmedian', NaN, 'y_sessionmedian', NaN, ...
+        'eps_sessionmedian', NaN, ...
+        'area_baseline_sample', NaN, ...
         'area_gap_constricted', NaN, 'area_gap_dilated', NaN, ...
         'area_gapfrac_constricted', NaN, 'area_gapfrac_dilated', NaN, ...
-        'bv_ref', NaN, 'bv_rest', NaN, 'pvs_rest', NaN, 'heat', []);
+        'bv_heatmedian', NaN, 'baseline_bv', NaN, 'baseline_y', NaN, 'heat', []);
+    
+    % COLUMNS from here down. robustfit and corr both read a column and answer a
+    % matrix, not a number, on a row
+    bv_px = bv_px(:);
+    eps_px = eps_px(:);
+    pvs_px = eps_px - bv_px;
 
-    thickness = fwhm_thickness(pax_idx);
-    % COLUMNS from here down. The four boundary rows are stored as rows and
-    % fwhm_thickness only subtracts, so it hands that shape straight through;
-    % robustfit and corr both read a column and answer a matrix, not a number, on
-    % a row. Forced here, at the reader, so line_fwhm keeps the shape it has
-    % always returned
-    bv_px = thickness.bv(:);
-    pvs_px = thickness.(y_series)(:);
-    % The anchor is the WHOLE session's median and it is computed before the mask,
-    % so every state of this session and the session row itself land on one axis.
-    % Median rather than the modal bin: the mode is one bin's worth of counts and
-    % moves with the binning, and a state's own mode is a thing being measured here
-    % rather than a thing to measure against.
-    both_finite = isfinite(bv_px) & isfinite(pvs_px);
-    x_origin = median(bv_px(both_finite)) * um_per_px;
-    y_origin = median(pvs_px(both_finite)) * um_per_px;
+    % what the histogram bins on y, and the lumen it dropped to get there
+    if y_series == "totalpvs"
+        y_px = pvs_px;
+        lumen_removed = 1;
+    else
+        y_px = eps_px;
+        lumen_removed = 0;
+    end
 
+    % Filter NaN
+    both_finite = isfinite(bv_px) & isfinite(eps_px);
     good = both_finite;
     if ~isempty(sample_mask)
         good = good & sample_mask(:);
     end
-    row.n_sample = sum(good);
-    bv_good = bv_px(good);
-    pvs_good = pvs_px(good);
-
-
-    [bin_counts, x_edge, y_edge] = histcounts2(bv_good, pvs_good, ...
+    bv_good = bv_px(good); y_good = y_px(good); eps_good = eps_px(good);
+    row.n_sample = sum(good);   
+    
+    [bin_counts, x_edge, y_edge] = histcounts2(bv_good, y_good, ...
         'BinWidth', [1 1], 'Normalization', 'percentage');
-    % straight through, with the edges scaled -- everything the map returns is then
-    % already micrometres. was xy2heatmap; see CLAUDE_LOG.md
+
+    % the shared zero for every state of this session: computed before the mask
+    bv_sessionmedian = median(bv_px(both_finite)) * um_per_px;
+    y_sessionmedian = median(y_px(both_finite)) * um_per_px;
+    % y is eps only when y_series says so, and bv/eps needs eps either way
+    eps_sessionmedian = median(eps_px(both_finite)) * um_per_px;
+
+    % the map, then the three measurements, each on its own input
     heat = heatmap_postprocessing(bin_counts, x_edge * um_per_px, y_edge * um_per_px, ...
-        x_origin, y_origin);
+        bv_sessionmedian, y_sessionmedian);
+
+    % the mode curve in absolute um, and the eps it implies
+    bv_heatmedian = median(bv_good) * um_per_px - bv_sessionmedian;
+    bv_column = bv_sessionmedian + heat.x_baseceneters;
+    y_column = y_sessionmedian + heat.mode_curve;
+    eps_column = y_column + lumen_removed * bv_column;
+
+    slope = heatmap_modeslope(heat.x_baseceneters, heat.mode_curve, 2);
+    area = heatmap_area(heat.x_baseceneters, bv_column, eps_column, bv_heatmedian);
+    fitted = sample_fit(bv_good, y_good, eps_good);
+
+    row.bv_sessionmedian = bv_sessionmedian;
+    row.y_sessionmedian = y_sessionmedian;
+    row.eps_sessionmedian = eps_sessionmedian;
     row.bv_range = range(heat.x_baseceneters);
-
-    % up into the row, so the table answers without opening the map
     row.cond_sd = heat.column_std;
-    row.mode_slope = heat.mode_slope;
-    row.slope_constricted = heat.slope_constricted;
-    row.slope_dilated = heat.slope_dilated;
-    row.n_constricted = heat.n_constricted;
-    row.n_dilated = heat.n_dilated;
-    % where THIS row rests, on the session's shared axis. Two states of one vessel
-    % have the same anchor and different rests, and the pair (bv_rest, pvs_rest) is
-    % the only thing that separates them in the diameter plane
-    row.bv_rest = heat.x_mode;
-    row.pvs_rest = heat.y_mode;
+    row.baseline_bv = heat.x_mode;
+    row.baseline_y = heat.y_mode;
+    row.bv_heatmedian = bv_heatmedian;
 
-    % Whether the annulus keeps its area, fitted in SQUARED coordinates. The
-    % area-conserving family is eps^2 - bv^2 = const, so opening it to
-    % eps^2 = beta_ratio*bv^2 + c makes the null a straight line and the fit an
-    % ordinary one. Differentiating gives beta = beta_ratio * (bv/eps): the measured
-    % slope is that constant multiple of the no-flux slope AT EVERY DIAMETER, which
-    % is why one number covers a range over which bv/eps itself runs 0.42 to 0.65.
-    %   why  samples and not the mode curve : the mode jumps from column to column
-    %        and a derivative of it is noise. Squaring first, robustfit does the
-    %        rest, and nothing has to be binned
-    %   note  eps, never y_series. With totalpvs on y the same hypothesis sits one
-    %         lower on that axis, and that shift belongs to whoever draws it
-    eps_px = thickness.eps(:);
-    eps_good = eps_px(good);
-    % same reason as mode_slope in heatmap_postprocessing: a few-second state has
-    % too few samples for a robust scale
-    if numel(bv_good) >= 4
-        area_fit = robustfit(bv_good.^2, eps_good.^2);
-        row.beta_ratio = area_fit(2);
-    end
+    row.mode_slope = slope.whole;
+    row.slope_constricted = slope.constricted;
+    row.slope_dilated = slope.dilated;
+    row.n_constricted = slope.n_constricted;
+    row.n_dilated = slope.n_dilated;
 
-    % where this row rests, and how much annulus it has there. The anchors are the
-    % SESSION's, shared by every state of it so the axes line up; area_rest is this
-    % row's own, from the samples the mask left
-    row.bv_anchor = x_origin;
-    row.pvs_anchor = y_origin;
-    row.area_rest = (pi/4) * ((median(eps_good) * um_per_px)^2 - ...
+    row.beta_ratio = fitted.beta_ratio;
+    row.sample_slope = fitted.slope;
+    row.sample_r = fitted.r;
+
+    row.area_gap_constricted = area.gap_constricted;
+    row.area_gap_dilated = area.gap_dilated;
+    row.area_gapfrac_constricted = area.gapfrac_constricted;
+    row.area_gapfrac_dilated = area.gapfrac_dilated;
+    row.beta_gap = (fitted.beta_ratio - 1) * area.bv_baseline / area.eps_baseline;
+    % from the median sample geometry, not from the curve above
+    row.area_baseline_sample = (pi/4) * ((median(eps_good) * um_per_px)^2 - ...
         (median(bv_good) * um_per_px)^2);
 
-    % The annulus area along the mode curve, ABSOLUTE and column by column. Stored
-    % absolute and not as a departure because two states of one session would
-    % otherwise each be measured against their own zero, and the difference between
-    % them -- which is the thing being asked about -- would go into the subtraction.
-    % Whoever draws it picks the baseline.
-    bv_column = row.bv_anchor + heat.x_baseceneters;
-    y_column = row.pvs_anchor + heat.modepvs;
-    if y_series == "totalpvs"
-        eps_column = bv_column + y_column;
-    else
-        eps_column = y_column;
-    end
-    heat.area_curve = (pi/4) * (eps_column.^2 - bv_column.^2);
+    heat.area_curve = area.curve;
     row.heat = heat;
+end
 
-    % How far the area sits from keeping itself, averaged over the columns THIS row
-    % reached. A mean and not an endpoint difference: the mean is already divided by
-    % the interval, so a row that swung further is not automatically further from
-    % no flux. The reference is the curve at x = 0, not area_rest -- the curve is
-    % built on the mode and area_rest on the medians, and mixing them would put a
-    % constant offset into every departure.
-    %
-    % THE TWO SIDES ARE SEPARATE AND MUST STAY SEPARATE. dA/dbv = (pi/2)(beta-1)bv,
-    % so with beta < 1 the area falls monotonically with diameter: the departure is
-    % POSITIVE where the vessel is constricted and NEGATIVE where it is dilated, and
-    % one mean over both sides cancels them. Measured on this set that cancellation
-    % turned +3.3% and -4.0% into -1.4%, and what survived was not the physics but
-    % the reach being twice as long on the dilated side. see CLAUDE_LOG.md
-    %   caution  the columns are equally spaced, so these are means over DIAMETER and
-    %            not over time. A diameter the vessel barely visited weighs the same
-    %            as its resting one
-    %
-    % THE SPLIT IS AT THIS ROW'S OWN MEDIAN, not at the session zero. The axis is
-    % anchored on the session so the states can be read against each other, but a
-    % state does not sit at that anchor: REM rests about 4 um above it, so splitting
-    % at zero left 22 of its 32 rows with samples on one side only and no departure
-    % to measure. Constricted means constricted relative to where THAT state
-    % normally sits, and its no-flux hypothesis is that the area it has THERE is
-    % kept. Median and not the modal bin, for the reason the anchor uses one.
-    bv_ref = median(bv_good) * um_per_px - x_origin;
-    row.bv_ref = bv_ref;
-    area_at_rest = interp1(heat.x_baseceneters, heat.area_curve, bv_ref);
-    departure = heat.area_curve - area_at_rest;
-    on_constricted = heat.x_baseceneters < bv_ref;
-    on_dilated = heat.x_baseceneters > bv_ref;
-    row.area_gap_constricted = mean(departure(on_constricted), "omitnan");
-    row.area_gap_dilated = mean(departure(on_dilated), "omitnan");
-    row.area_gapfrac_constricted = row.area_gap_constricted / area_at_rest;
-    row.area_gapfrac_dilated = row.area_gap_dilated / area_at_rest;
+function fitted = sample_fit(bv_good, y_good, eps_good)
+%SAMPLE_FIT  The fits made on every sample rather than on the map's columns.
+%   Scale free, so pixels need no conversion.
+%   IN   bv_good     Nx1 double  lumen diameter, the samples that survived the mask
+%        y_good      Nx1 double  the series on y, same samples
+%        eps_good    Nx1 double  outer diameter, same samples
+%   OUT  fitted      1x1 struct  beta_ratio  1x1  slope of eps^2 against bv^2
+%                                slope       1x1  slope of y against bv
+%                                r           1x1  their correlation
+fitted = struct('beta_ratio', NaN, 'slope', NaN, 'r', NaN);
+if numel(bv_good) < 4
+    return
+end
 
-    % beta_ratio again as a DIFFERENCE, beta - beta_noflux, which is the form that
-    % walks straight into the area rate: dA/dbv = (pi/2)*eps*(beta - beta_noflux).
-    % beta_noflux is bv/eps and moves with diameter (0.42 to 0.65 across one panel),
-    % so a difference only means something with a diameter attached -- this one is
-    % at THIS row own rest. eps there is recovered exactly from the area, no second
-    % estimate and no stored intercept.
-    bv_at_rest = x_origin + bv_ref;
-    eps_at_rest = sqrt(bv_at_rest^2 + 4 * area_at_rest / pi);
-    row.beta_gap = (row.beta_ratio - 1) * bv_at_rest / eps_at_rest;
+area_fit = robustfit(bv_good.^2, eps_good.^2);
+fitted.beta_ratio = area_fit(2);
 
-    % the only pair the map cannot give: every sample, not every bin
-    if numel(bv_good) >= 4
-        sample_fit = robustfit(bv_good, pvs_good);
-        row.sample_slope = sample_fit(2);
-        row.sample_r = corr(bv_good, pvs_good);
-    end
+series_fit = robustfit(bv_good, y_good);
+fitted.slope = series_fit(2);
+fitted.r = corr(bv_good, y_good);
 end
 
 function trace = event_average(pax_idx, interval, onset_offset, half_width, um_per_px)
@@ -640,6 +622,50 @@ function [vessel_map, vessel_count] = pool_by_vessel(heat_cell, vessel_of, n_ves
             continue
         end
         vessel_map(:, reached, v) = vessel_sum(:, reached, v) ./ vessel_count(v, reached);
+    end
+end
+
+function [vessel_map, vessel_count] = pool_state_by_vessel(heat_cell, vessel_of, ...
+    n_vessel, grid_x, grid_y)
+%POOL_STATE_BY_VESSEL  Each session's heatmap on a common grid, normalised over the
+%   WHOLE map, summed within vessel, then divided by that vessel's session count.
+%   normalised over the whole map, not per column as pool_by_vessel does, so WHERE a
+%   state sits on the diameter axis survives; divided by the session count, not per column
+%   OUT  vessel_map    MxNxV double  sums to one per vessel; NaN for a vessel with
+%                                    no session in this state
+%        vessel_count  VxN double    how many of its sessions reached each column
+    [mesh_x, mesh_y] = meshgrid(grid_x, grid_y);
+    vessel_sum = zeros(numel(grid_y), numel(grid_x), n_vessel);
+    vessel_count = zeros(n_vessel, numel(grid_x));
+    session_count = zeros(n_vessel, 1);
+    for k = 1:numel(heat_cell)
+        source_x = heat_cell{k}.x_baseceneters;
+        source_y = heat_cell{k}.y_baseceneters;
+        counts = heat_cell{k}.xy_counts_clean;
+        counts(~isfinite(counts)) = 0;
+        column_total = sum(counts, 1);
+        filled = column_total > 0;
+
+        on_grid = interp2(source_x, source_y, counts, mesh_x, mesh_y, 'linear', 0);
+        % normalised AFTER the interpolation, so a session that loses weight off the
+        % edge of the shared grid still enters with the same total as every other
+        grid_total = sum(on_grid, 'all');
+        if grid_total <= 0
+            continue
+        end
+        on_grid = on_grid / grid_total;
+        reaches = interp1(source_x, double(filled), grid_x, 'nearest', 0) > 0.5;
+        v = vessel_of(k);
+        vessel_sum(:, :, v) = vessel_sum(:, :, v) + on_grid;
+        vessel_count(v, reaches) = vessel_count(v, reaches) + 1;
+        session_count(v) = session_count(v) + 1;
+    end
+    vessel_map = nan(numel(grid_y), numel(grid_x), n_vessel);
+    for v = 1:n_vessel
+        if session_count(v) == 0
+            continue
+        end
+        vessel_map(:, :, v) = vessel_sum(:, :, v) / session_count(v);
     end
 end
 
