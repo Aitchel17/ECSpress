@@ -25,6 +25,19 @@ ledger_quality(sessiondir);
 %%
 pax_fig = analysis_pax_makefig(session.pax_fwhm, session.pax_fwhm.t_axis,...
     session.img_param.pixel2um, session.dir_struct.figures_fwhm);
+
+%% the cluster panels. No stack is read: load_primary_results already brought
+% polarcluster.mat in, and t_axis and pixel2um stand in for twophoton_processed the
+% same way the pax call above does it
+analysis_cluster_makefig(session.polarcluster, session.roilist, session.pax_fwhm,...
+    session.pax_fwhm.t_axis, session.img_param.pixel2um,...
+    session.dir_struct.figures_polarcluster);
+
+%% the polar profiles. Only for a session that went through
+% analysis_clusterpolar_polarplot -- this reads pax_angle, polar_theta,
+% polar_profiles and polar_binstart_deg, and a polarcluster.mat saved before that
+% step carries none of the four
+analysis_polar_makefig(session.polarcluster, session.dir_struct.figures_polarcluster);
 %%
 
 %% Grade it. The note is in ENGLISH and says what the columns cannot see -- where the
