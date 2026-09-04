@@ -2,6 +2,7 @@ function [stack_span, span] = piv_getframescope(stack, from, to, halfwin)
 %PIV_GETFRAMESCOPE  The frames one event needs, cut out of the recording.
 %   from-halfwin : to+halfwin. An endpoint too close to either end is refused rather
 %   than moved, because moving it would change which frames the event is.
+%   Caller: piv_run_events, piv_integration_testbed
 %
 % IN   stack       H x W x T numeric   the recording, before any PIV preprocessing
 %      from        1 x 1 int           the earlier endpoint, a frame index into stack

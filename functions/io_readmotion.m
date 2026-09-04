@@ -1,5 +1,6 @@
 function [disp_row, disp_col, regerror, drift_fps] = io_readmotion(motion_path)
 %IO_READMOTION  One *_motion.txt as tissue displacement, sign corrected.
+%   Caller: centralize_drift
 %   The extractor writes seven lines: a header, driftestimation_fps, a table header,
 %   then regerror, diffphase, rowshift and colshift as mat2str of one row each.
 %
