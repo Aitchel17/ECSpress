@@ -1,5 +1,6 @@
 function slope = heatmap_modeslope(x_base, mode_curve, min_column)
 %HEATMAP_MODESLOPE  The mode curve's slope, whole and either side of zero.
+%   Caller: tablegeneration_fwhmrelation.sample_heatmap
 %   IN   x_base      1 x N double  column centres, on the anchored axis
 %        mode_curve  1 x N double  each column's most-occupied row, same axis
 %        min_column  1x1 double    columns a one-sided fit needs
