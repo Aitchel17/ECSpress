@@ -17,10 +17,10 @@ state_integrate.trim_to_duration(session.pax_fwhm.t_axis(end));
 
 
 %
-paxfwhm_state = state_linefwhm(state_integrate);
+paxfwhm_state = state_1d(state_integrate);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
 
-paxfwhm_state = state_linefwhm(state_integrate);
+paxfwhm_state = state_1d(state_integrate);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
 contents_types = {["thickness","eps","bv","totalpvs","uppvs","downpvs"],...
                 ["displacement","uppvs","downpvs","upbv","downbv"]};

@@ -18,7 +18,7 @@ function [row, failure] = centralize_statesession(k, pax_fwhm, score, primary_an
         try
             state_integrate = state_integration(score, primary_analog);
             state_integrate.trim_to_duration(pax_fwhm.t_axis(end));
-            paxfwhm_state = state_linefwhm(state_integrate);
+            paxfwhm_state = state_1d(state_integrate);
             paxfwhm_state.get_state_indices(pax_fwhm.t_axis, pax_fwhm.param.fs);
             for c = 1:size(contents, 1)
                 property = contents(c, 1);

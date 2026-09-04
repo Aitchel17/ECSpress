@@ -1,6 +1,8 @@
-classdef state_linefwhm < handle
-    %STATEANALYSIS_ABSTRACT Base class for sleep state analysis.
-    %   Coordinated by sleep_integration object.
+classdef state_1d < handle
+    %STATE_1D  Sleep-state statistics for any 1-D series on a shared time axis.
+    %   Caller: centralize_statesession, stateintegration_test
+    %   Coordinated by a state_integration object. The series is an argument, so a
+    %   thickness, a displacement and a drift component all take the same methods.
 
     properties
         sleep_obj   % Handle to sleep_integration object (Temporal Source of Truth)
@@ -30,7 +32,7 @@ classdef state_linefwhm < handle
     %   contents cannot end up describing different events.
 
     methods
-        function obj = state_linefwhm(state_integrate)
+        function obj = state_1d(state_integrate)
             % Constructor
             obj.sleep_obj = state_integrate;
         end
@@ -86,7 +88,7 @@ classdef state_linefwhm < handle
                 opt.post_s (1,1) double {mustBePositive}    = 30
             end
             if isempty(obj.eventlist)
-                error('state_linefwhm:noEvents', ...
+                error('state_1d:noEvents', ...
                     'call get_events first; the tables are built on its list.');
             end
             n_row = numel(obj.eventlist);
@@ -625,8 +627,8 @@ classdef state_linefwhm < handle
         end
 
         function save2disk(obj,name,savepath)
-            state_linefwhm = obj;
-            save(fullfile(savepath,[name,'.mat']),'state_linefwhm')
+            state_1d = obj;
+            save(fullfile(savepath,[name,'.mat']),'state_1d')
         end
 
 
