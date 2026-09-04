@@ -19,8 +19,9 @@
 % 1. Line full width halfmaximum (position-time) 3,4,5,7
 
 % Path setup
-addpath(fullfile(pwd, 'functions'));                    % where util_ecspath lives
-util_ecspath;                                          % three roots, minus zz_notinuse
+clc, clear
+addpath("G:\03_program\01_ecspress\09_dirstruct"); dirs_ecspath;
+
 %close all
 % Directory setup
 % sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';
@@ -37,8 +38,6 @@ else
     disp('no sleep_socre.mat')
 end
 %%
-
-
 session.stackch1 = session.loadstack('ch1');
 session.stackch2 = session.loadstack('ch2');
 % 2. Twophoton data FPS matching & preprocessing
@@ -76,9 +75,8 @@ session.pax_fwhm.getdisplacement;
 session.pax_fwhm.save2disk('paxfwhm',session.dir_struct.primary_analysis);
 session.roilist.save2disk(session.dir_struct.primary_analysis)
 %% 4.1.4 FWHM analysis figure generation
-close all
-pax_fig = analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis,...
-    twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
+pax_fig = analysis_pax_makefig(session.pax_fwhm, session.pax_fwhm.t_axis,...
+    session.img_param.pixel2um, session.dir_struct.figures_fwhm);
 
 
 
