@@ -1,190 +1,173 @@
-%TABLEGENERATION_DRIFT  drift_statetable : one row per (session x state x bout) of tissue drift.
-%   Reads centralized_drift.mat (the motion-correction series, sign flipped to tissue
-%   motion by io_readmotion) and centralized_sleep_score.mat, puts each session's
-%   scored bouts on the drift sample axis, and writes drift_statetable.mat beside the
-%   dataset. Every quantity is a difference; no absolute position leaves this file.
+%TABLEGENERATION_DRIFT  Centralized drift state analysis -> the two tables the drift
+%   figures read. Reads centralized_drift_state.mat, flattens its two nests, applies
+%   the same filters as tablegeneration_main plus one -- only recordings the FWHM
+%   pipeline has judged -- and writes drift_summary.mat and drift_transition.mat
+%   beside the dataset, with param and filt saved beside each table.
 %
-%   ROW = (session, state, bout)
-%     lvl_row / lvl_col   bout median minus the baseline : the quiet samples of the
-%                         flanks, param.flank_s either side, same-state bouts excluded
-%     net_row / net_col   median of the last edge_frac of the bout minus the first
-%     speed_med           median per-sample step, px/s
-%     net_mag / net_angle hypot and atan2d of net_row, net_col. Average the components,
-%                         never the angle
-%     flank_ok            both flanks lie inside the recording
+%   A copy of tablegeneration_main with three differences: the input file, the two
+%   output names, and no awake-normalised arm -- a drift baseline is a position, not
+%   a magnitude, so a ratio against it has no meaning. The two files are meant to be
+%   folded into one function once this one has a figure on it; see CLAUDE_LOG.md
 %
-%   AXES  +col = column index up = image right = lateral; +row = row index up = image
-%         down = caudal. rostral is -row and is applied by the figure layer, not here.
-%     caution  the OUTPUT lands in the dataset folder
+%   The first version of this file built its own bout table by hand with a local
+%   quiet-flank baseline. That is superseded: the series is now flattened by
+%   detrend in centralize_driftsession and goes through state_1d like a thickness.
 clc, clear
 addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 
-%% settings
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';
+    param.dataset = 'merged_igkl_igkltdt';      % or '00_igkl' / '01_igkltdt'
 end
-param.state_names = ["awake", "nrem", "rem", "drowsy", "uarousal"];   % time_table fields read (str)
-param.flank_s     = 180;      % Flank either side of a bout, the baseline is read there (s)
-param.quiet_pct   = 15;       % Flank samples kept for the baseline, by step size, both axes (pct)
-param.min_quiet   = 10;       % Quiet samples a baseline needs, else NaN (count)
-param.edge_frac   = 0.10;     % Share of the bout at each end that net_* compares (frac)
-param.control_state = "nrem"; % The state a figure reads REM against (str)
-
-filt.session_type = "sleep";  % Session type kept (str), "" = every type
-filt.drop_backup  = true;     % Drop a row whose folder says backup (logical)
-
 dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 
-%% Read the two centralized products
-in_path = fullfile(dirs.central, "centralized_" + ["drift", "sleep_score"] + ".mat");
-for k = 1:numel(in_path)
-    if ~isfile(in_path(k))
-        error('tablegeneration_drift:noCentral', 'run centralize_primary / centralize_drift first; %s is missing', in_path(k));
+param.nest_names = ["state_summary", "transition"];
+param.key_columns = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
+    "NumericDepth", "NumericResolution"];
+
+%% Filters : which rows the tables are about
+filt.depth_thr    = 70;                                   % um   L1 / L2-3 boundary
+filt.min_bout_s   = 30;                                   % s    shorter is not a state
+filt.state_names  = ["awake", "drowsy", "nrem", "rem"];   % str  the scored states drawn
+filt.require_fwhm = true;                                 % bool only recordings the FWHM pipeline has judged
+
+%% Flatten the centralized state analysis
+central_path = fullfile(dirs.central, 'centralized_drift_state.mat');
+if ~isfile(central_path)
+    error('tablegeneration_drift:noCentral', ...
+        'run centralize_driftstate first; %s is missing', central_path);
+end
+loaded_central = load(central_path);
+central = loaded_central.central;
+clear loaded_central
+fprintf('centralized drift state : %d sessions\n   %s\n', height(central), central_path);
+
+key_table = central(:, param.key_columns);
+fwhm_state = load(fullfile(dirs.central, 'centralized_paxfwhm_state.mat')).central;
+key_fwhm = util_sessionkey(fwhm_state);
+clear fwhm_state
+n_session = height(central);
+subtable = struct();
+for name_idx = 1:numel(param.nest_names)
+    nest_name = param.nest_names(name_idx);
+    nest_cell = cell(n_session, 1);
+    for session_idx = 1:n_session
+        session_row = central.data{session_idx};
+        if isfield(session_row, nest_name)
+            nest_cell{session_idx} = session_row.(nest_name);
+        end
     end
+    subtable.(nest_name) = explode_nest(nest_cell, key_table);
+    fprintf('   %-14s %d rows\n', nest_name, height(subtable.(nest_name)));
 end
-drift_table = load(in_path(1)).central;
-score_table = load(in_path(2)).central;
-fprintf('centralized drift %d rows, sleep_score %d rows\n', height(drift_table), height(score_table));
+clear central
 
-%% Which sessions the table is about
-cond.right_type  = filt.session_type == "" | string(drift_table.SessionType) == filt.session_type;
-cond.not_backup  = ~filt.drop_backup | ~contains(string(drift_table.Directory), "backup", 'IgnoreCase', true);
-key_drift = util_sessionkey(drift_table);
-key_score = util_sessionkey(score_table);
-cond.has_score   = ismember(key_drift, key_score);
-keep_session = cond.right_type & cond.not_backup & cond.has_score;
-fprintf('drift_statetable : %d of %d sessions kept (type %d | not backup %d | scored %d)\n', ...
-    sum(keep_session), numel(keep_session), sum(cond.right_type), sum(cond.not_backup), sum(cond.has_score));
-filtered = drift_table(keep_session, :);
-key_filtered = key_drift(keep_session);
+%% State summary analysis
+analysis_table = subtable.state_summary;
+vessel_id = string(analysis_table.VesselID);
+is_artery = contains(vessel_id, "PA", 'IgnoreCase', true);
+is_layer1 = analysis_table.NumericDepth < filt.depth_thr;
+is_longbout = analysis_table.bout_duration > filt.min_bout_s;
+is_scored = ismember(analysis_table.state_name, filt.state_names);
+has_fwhm = ismember(util_sessionkey(analysis_table), key_fwhm) | ~filt.require_fwhm;
+keep_summary = is_artery & is_layer1 & is_longbout & is_scored & has_fwhm;
+fprintf('state_summary : %d of %d rows kept\n', sum(keep_summary), numel(keep_summary));
+summary_filtered = analysis_table(keep_summary, :);
 
-%% One row per bout, every session
-gathered = cell(height(filtered), 1);
-for k = 1:height(filtered)
-    series = filtered.data{k};
-    score = score_table.data{key_score == key_filtered(k)};
-    % the drift sample axis : seconds from the recording's first frame, the clock
-    % the score's time tables are on
-    t_drift = (0:series.drift_n - 1) / series.drift_fps;
-    state_integrate = state_integration(score, []);
-    evalc('state_integrate.trim_to_duration(t_drift(end));');   % it prints three lines
-    img_state = state_image(state_integrate);
-    evalc('img_state.get_state_indices(t_drift, series.drift_fps);');   % add_taxis prints every field
-    gathered{k} = drift_bouts(series.disp_row, series.disp_col, series.regerror, ...
-        series.drift_fps, img_state.state_idx, param);
-    if mod(k, 25) == 0
-        fprintf('   %d/%d sessions\n', k, height(filtered));
-    end
-end
-n_row_session = cellfun(@numel, gathered);
+%% Absolute analysis, px -> um
+data_colnames = {"raw_data"};
+numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var'};
+summarystatAnalyzer = tableAnalyzer(summary_filtered, struct());
+summarystatAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames,"division");
+summarystatAnalyzer = common_summarystat_analysis(summarystatAnalyzer);
+result.drift_summary.abs_numeric = summarystatAnalyzer.numeric_tables;
 
-%% The table
-key_names = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", "Depth", "Cohort", "Directory"];
-key_names = intersect(key_names, string(filtered.Properties.VariableNames), 'stable');
-session_of = repelem((1:height(filtered))', n_row_session);
-keys = filtered(session_of, key_names);
-keys.vessel_key = string(keys.MouseID) + "_" + string(keys.VesselID);
-bout_rows = struct2table([gathered{:}]');
-drift_statetable = [keys, bout_rows];
-fprintf('drift_statetable : %d rows over %d sessions, %d vessels\n', height(drift_statetable), ...
-    height(filtered), numel(unique(drift_statetable.vessel_key)));
-for state_name = param.state_names
-    on_state = drift_statetable.state_name == state_name;
-    fprintf('   %-9s %4d bouts | flank_ok %4d | baseline %4d\n', state_name, sum(on_state), ...
-        sum(on_state & drift_statetable.flank_ok), sum(on_state & isfinite(drift_statetable.lvl_row)));
-end
+%% Awake subtraction
+tmp.awakenumtable = result.drift_summary.abs_numeric.bout_idx_ave(result.drift_summary.abs_numeric.bout_idx_ave.state_name=="awake",:);
+tmp.key_cols = ["MouseID","Date","VesselID","DataType"];
+tmp.awake_baseline = tmp.awakenumtable(:, [tmp.key_cols,"Q2Q3_mean"]);
+tmp.awake_baseline.Properties.VariableNames("Q2Q3_mean") = "awake_boutq2q3mean";
 
-%% Save
-%   caution  this overwrites, and the copy on disk is the only record of which param built it
+summarystat_awake = outerjoin(result.drift_summary.abs_numeric.filtered_table, tmp.awake_baseline, ...
+    'MergeKeys', true, ...
+    'LeftKeys', tmp.key_cols, ...
+    'RightKeys', tmp.key_cols);
+awakesubtract_summarystatAnalyzer = tableAnalyzer(summarystat_awake, struct());
+awakesubtract_summarystatAnalyzer.scale_table("awake_boutq2q3mean",data_colnames,numeric_colnames,"subtraction");
+awakesubtract_summarystatAnalyzer = common_summarystat_analysis(awakesubtract_summarystatAnalyzer);
+result.drift_summary.awakesubtract_numeric = awakesubtract_summarystatAnalyzer.numeric_tables;
+
+%% Transition analysis, sleep recordings only
+analysis_table = subtable.transition;
+vessel_id = string(analysis_table.VesselID);
+is_artery = contains(vessel_id, "PA", 'IgnoreCase', true);
+is_layer1 = analysis_table.NumericDepth < filt.depth_thr;
+session_type = string(analysis_table.SessionType);
+is_sleep = session_type == "sleep";
+has_fwhm = ismember(util_sessionkey(analysis_table), key_fwhm) | ~filt.require_fwhm;
+keep_transition = is_artery & is_layer1 & is_sleep & has_fwhm;
+dropped_type = unique(session_type(~is_sleep));
+fprintf('SessionType : sleep %d rows | dropped %d (%s)\n', ...
+    nnz(is_sleep), nnz(~is_sleep), strjoin(dropped_type(:).', ','));
+fprintf('transition : %d of %d rows kept\n', sum(keep_transition), numel(keep_transition));
+transition_filtered = analysis_table(keep_transition, :);
+
+data_colnames = {"data"};
+numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
+                'post_mean','post_median','post_q1','post_q3', 'post_var'};
+transitionAnalyzer = tableAnalyzer(transition_filtered, struct());
+transitionAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames,"division");
+transitionAnalyzer = common_transition_analysis(transitionAnalyzer);
+result.drift_transition.abs_numeric = transitionAnalyzer.numeric_tables;
+result.drift_transition.abs_data = transitionAnalyzer.data_tables;
+
+transition_awake = outerjoin(result.drift_transition.abs_numeric.filtered_table, tmp.awake_baseline, ...
+    'MergeKeys', true, ...
+    'LeftKeys', tmp.key_cols, ...
+    'RightKeys', tmp.key_cols);
+awakesubtracted_transitionAnalyzer = tableAnalyzer(transition_awake, struct());
+awakesubtracted_transitionAnalyzer.scale_table("awake_boutq2q3mean", data_colnames, numeric_colnames,"subtraction");
+awakesubtracted_transitionAnalyzer = common_transition_analysis(awakesubtracted_transitionAnalyzer);
+result.drift_transition.awakesubtract_numeric = awakesubtracted_transitionAnalyzer.numeric_tables;
+result.drift_transition.awakesubtract_data = awakesubtracted_transitionAnalyzer.data_tables;
+
+%% saving mechanism
 if ~isfolder(dirs.out)
     mkdir(dirs.out)
 end
-save_content = struct('drift_statetable', drift_statetable, 'param', param, 'filt', filt);
-out_path = fullfile(dirs.out, 'drift_statetable.mat');
-save(out_path, "save_content")
-listing = dir(out_path);
-fprintf('%.1f MB -> %s\n', listing.bytes / 1e6, out_path);
+tmp.savefieldnames = fieldnames(result);
+tmp.savefilenames = strcat(string(tmp.savefieldnames),'.mat');
+tmp.savepaths = fullfile(dirs.out, string(tmp.savefilenames));
 
-%% ---------------------------------------------------------------- helpers
-function rows = drift_bouts(disp_row, disp_col, regerror, fps, state_idx, param)
-%DRIFT_BOUTS  One session's rows : every bout of every state in param.state_names.
-%   IN   disp_row, disp_col  N x 1 double  tissue displacement, px
-%        regerror            N x 1 double  registration residual
-%        fps                 1 x 1 double  drift samples per second
-%        state_idx           struct        <state> = B x 2 sample indices, from state_image
-%        param               struct        flank_s, quiet_pct, min_quiet, edge_frac, state_names
-%   OUT  rows                1 x R struct  the columns of drift_statetable after the keys
-    n_sample = numel(disp_row);
-    flank_n = round(param.flank_s * fps);
-    step_row = [NaN; abs(diff(disp_row(:)))];
-    step_col = [NaN; abs(diff(disp_col(:)))];
-    rows = struct('state_name', {}, 'bout_idx', {}, 'n_bout', {}, 'bout_start_s', {}, ...
-        'bout_end_s', {}, 'bout_duration_s', {}, 'n_sample', {}, 'n_quiet', {}, 'flank_ok', {}, ...
-        'lvl_row', {}, 'lvl_col', {}, 'net_row', {}, 'net_col', {}, 'net_mag', {}, ...
-        'net_angle', {}, 'speed_med', {}, 'regerror_med', {}, 'regerror_p95', {}, 'drift_fps', {});
-    for state_name = param.state_names
-        if ~isfield(state_idx, state_name)
-            continue
-        end
-        bouts = state_idx.(state_name);
-        n_bout = size(bouts, 1);
-        % every sample inside any bout of THIS state, so a flank never reads one
-        in_state = false(n_sample, 1);
-        for b = 1:n_bout
-            in_state(bouts(b, 1):bouts(b, 2)) = true;
-        end
-        for b = 1:n_bout
-            first = bouts(b, 1);
-            last = bouts(b, 2);
-            inside = first:last;
-            % 1. the flanks, minus the same state
-            before = max(1, first - flank_n) : first - 1;
-            after = last + 1 : min(n_sample, last + flank_n);
-            flank = [before, after];
-            flank = flank(~in_state(flank));
-            % 2. the quiet samples of the flanks : small steps on both axes
-            quiet = false(size(flank));
-            if ~isempty(flank)
-                cut_row = prctile(step_row(flank), param.quiet_pct);
-                cut_col = prctile(step_col(flank), param.quiet_pct);
-                quiet = step_row(flank) <= cut_row & step_col(flank) <= cut_col;
-            end
-            baseline_row = NaN;
-            baseline_col = NaN;
-            if nnz(quiet) >= param.min_quiet
-                baseline_row = median(disp_row(flank(quiet)));
-                baseline_col = median(disp_col(flank(quiet)));
-            end
-            % 3. the two edges of the bout
-            n_edge = max(1, round(param.edge_frac * numel(inside)));
-            head = inside(1:n_edge);
-            tail = inside(end - n_edge + 1:end);
-            net_row = median(disp_row(tail)) - median(disp_row(head));
-            net_col = median(disp_col(tail)) - median(disp_col(head));
-            step_inside = hypot(diff(disp_row(inside)), diff(disp_col(inside)));
-            rows(end+1) = struct( ...
-                'state_name',      state_name, ...
-                'bout_idx',        b, ...
-                'n_bout',          n_bout, ...
-                'bout_start_s',    (first - 1) / fps, ...
-                'bout_end_s',      (last - 1) / fps, ...
-                'bout_duration_s', (last - first) / fps, ...
-                'n_sample',        numel(inside), ...
-                'n_quiet',         nnz(quiet), ...
-                'flank_ok',        first - flank_n >= 1 && last + flank_n <= n_sample, ...
-                'lvl_row',         median(disp_row(inside)) - baseline_row, ...
-                'lvl_col',         median(disp_col(inside)) - baseline_col, ...
-                'net_row',         net_row, ...
-                'net_col',         net_col, ...
-                'net_mag',         hypot(net_row, net_col), ...
-                'net_angle',       atan2d(net_row, net_col), ...
-                'speed_med',       median(step_inside) * fps, ...
-                'regerror_med',    median(regerror(inside)), ...
-                'regerror_p95',    prctile(regerror(inside), 95), ...
-                'drift_fps',       fps); %#ok<AGROW>
-        end
-    end
+for save_idx = 1:numel(tmp.savefieldnames)
+    save_content = result.(tmp.savefieldnames{save_idx});
+    save(tmp.savepaths{save_idx}, "save_content", "param", "filt")
+    fprintf('wrote %s\n', tmp.savepaths{save_idx});
+end
+
+
+function tableAnalyzer = common_summarystat_analysis(tableAnalyzer)
+    tableAnalyzer.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
+    tableAnalyzer.addPrctilecol("raw_data","prctile_95", 95);
+    tableAnalyzer.addPrctilecol("raw_data","prctile_5",5);
+    tableAnalyzer.numeric_tables.filtered_table = tableAnalyzer.filtered_table;
+    tableAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session
+    tableAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session
+    tableAnalyzer.get_numericsummary("VesselID","Date_ave") % Vessel
+    tableAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse
+end
+
+
+function tableAnalyzer = common_transition_analysis(tableAnalyzer)
+    tableAnalyzer.numeric_tables.filtered_table = tableAnalyzer.filtered_table;
+    tableAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session bout average
+    tableAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session average
+    tableAnalyzer.get_numericsummary("VesselID","Date_ave") % within mouse vessel average
+    tableAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse average
+    tableAnalyzer.get_datasummary("bout_idx","filtered_table")
+    tableAnalyzer.get_datasummary("Date","bout_idx_ave")
+    tableAnalyzer.get_datasummary("VesselID","Date_ave")
+    tableAnalyzer.get_datasummary("MouseID","VesselID_ave")
 end
