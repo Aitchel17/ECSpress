@@ -66,8 +66,8 @@ switch param.reason
         for k = candidate'
             state_path = fullfile(char(dir_table.Directory(k)), 'state_analysis', ...
                 'paxfwhm_state.mat');
-            loaded = load(state_path, 'state_linefwhm');
-            obj = loaded.state_linefwhm;
+            loaded = load(state_path, 'state_1d');
+            obj = loaded.state_1d;
             trans_fields = fieldnames(obj.transition);
             n_point = numel(obj.transition.(trans_fields{1}).data{1});
             window_s = obj.sleep_obj.param.transition_window;

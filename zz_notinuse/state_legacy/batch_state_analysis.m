@@ -75,8 +75,8 @@ for row_i = 1:numel(target_rows)
         % -> 짧은 쪽(이미징 끝시간)에 맞춰 time_table 클립
         state_integrate.trim_to_duration(pax_fwhm.t_axis(end));
 
-        %% 3. Build state_linefwhm and attach time axis
-        paxfwhm_state = state_linefwhm(state_integrate);
+        %% 3. Build state_1d and attach time axis
+        paxfwhm_state = state_1d(state_integrate);
         paxfwhm_state.get_state_indices(pax_fwhm.t_axis, pax_fwhm.param.fs);
 
         %% 4. Run analysis for each content type
