@@ -35,7 +35,7 @@ param.contents = [ ...
     "displacement", "upbv"; ...
     "displacement", "downbv"];
 
-% Bump when what is taken off state_linefwhm changes, or when any of the five
+% Bump when what is taken off state_1d changes, or when any of the five
 % analysis methods changes what it produces. The inputs are untouched by such a
 % change, so no stamp can see it.
 %   2  the four boundary rows are carried alongside the results

@@ -1,6 +1,6 @@
 %% Example: Plot Transition Analysis
 % This script demonstrates how to use plot_transition to visualize
-% before/after transition statistics from state_linefwhm objects
+% before/after transition statistics from state_1d objects
 
 % Assuming you have already run the transition analysis:
 % paxfwhm_state.get_transitionsummary('BV_thickness', session.pax_fwhm.thickness.bv)

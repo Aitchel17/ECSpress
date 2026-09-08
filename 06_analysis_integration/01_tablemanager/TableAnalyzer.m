@@ -157,7 +157,7 @@ classdef tableAnalyzer < handle
 
             % Traces of different LENGTH but the same DURATION cannot be stacked.
             % why      the transition window is transition_window SECONDS wide for
-            %          every session (state_linefwhm line 203 cuts center+/-onset,
+            %          every session (state_1d line 203 cuts center+/-onset,
             %          onset = transition_window*fs/2), so only fs differs -- two
             %          sessions at different rates give different point counts for
             %          the same window (see FINDINGS.md). Putting them on one

@@ -2,7 +2,7 @@ function fig = plot_transition(state_obj, field_name, state_name, options)
 % PLOT_TRANSITION Plot before/after statistics from transition table
 %
 % Inputs:
-%   state_obj   - state_linefwhm object with transition data
+%   state_obj   - state_1d object with transition data
 %   field_name  - Name of the field in transition property (e.g., 'BV_thickness')
 %   state_name  - State to filter (e.g., 'WAKE_to_NREM_trans')
 %   options     - (optional) struct with plotting options

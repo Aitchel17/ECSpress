@@ -20,7 +20,7 @@ transition_table = load_struct.save_content;
 %      reads 50 s because get_transition takes +/-transition_window around the
 %      transition, and 41 or 46 s where the recording ran out. Building the axis
 %      from bout_duration(1) therefore drew whatever row 1 happened to be
-% why  the cut is state_linefwhm line 203, center_i +/- onset with
+% why  the cut is state_1d line 203, center_i +/- onset with
 %      onset = transition_window*fs/2 -- HALF the window again. So the trace spans
 %      transition_window seconds total, +/- half of it
 % caution  25 is state_integration.m line 203. If that changes, this must too:

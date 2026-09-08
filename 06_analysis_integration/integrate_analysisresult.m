@@ -114,7 +114,7 @@ fwhm_rederive(char(fullfile(dirs.working_root, param.cohorts(param.cohort_idx)))
 run(which('centralize_primary.m'));
 
 %% 3. State analysis for every session   [WRITES centralized_paxfwhm_state.mat]
-% state_integration -> state_linefwhm over the nine series, computed from the
+% state_integration -> state_1d over the nine series, computed from the
 % centralized inputs. Nothing is read from or written to the data tree.
 %   This replaced batch_state_analysis, which wrote paxfwhm_state.mat into each
 %   session folder and skipped any session that already had one -- so a re-scored
