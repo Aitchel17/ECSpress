@@ -16,9 +16,17 @@ end
 dirs = dirs_central();
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);
 
+%% Filters : which rows the figure is about
+filt.state_drawn = ["awake", "drowsy", "nrem"];   % which pooled states get a panel (str)
+
+%% Picture
 param.colormap = clee.gradient.inferno;   % a heatmap, so a perceptually ordered ramp
 param.fontsize = 11;
-param.state_label = ["Awake", "NREM", "REM"];   % what each panel is called (str)
+% keyed by the state's own name, so dropping one from filt.state_drawn cannot slide
+% the labels along by one
+param.state_label = struct('awake', "Awake", 'drowsy', "Drowsy", ...
+    'nrem', "NREM", 'rem', "REM");
+param.panel_widthpx = 405;   % px, one state column
 param.color_decade = 2.5;   % decades of weight the ramp spans, below the pooled max
 
 %% What is drawn
@@ -31,6 +39,10 @@ y_label = relation.param.y_series + ", um from its mode";
 
 fprintf('fwhmrelation %s\n   state_pool : %s\n', relation_path, ...
     strjoin(state_pool.state', ', '));
+is_drawn = ismember(state_pool.state, filt.state_drawn);
+fprintf('   drawing %s, dropping %s\n', strjoin(state_pool.state(is_drawn)', ', '), ...
+    strjoin(state_pool.state(~is_drawn)', ', '));
+state_pool = state_pool(is_drawn, :);
 disp(state_pool(:, ["state", "n_session", "n_vessel", "n_mouse", ...
     "bv_statemedian", "y_statemedian"]));
 
@@ -49,12 +61,18 @@ pooled_value = vertcat(drawn_map{:});
 pooled_value = pooled_value(isfinite(pooled_value) & pooled_value > 0);
 color_top = log10(max(pooled_value) + 1e-4);
 color_limit = [color_top - param.color_decade, color_top];
-x_limit = [min(grid_x), max(grid_x)];
+% the columns a drawn state actually reached, so dropping the widest state tightens
+% the axis onto the ones that are left
+reached = false(1, numel(grid_x));
+for k = 1:n_state
+    reached = reached | ~state_pool.thin_column{k};
+end
+x_limit = [min(grid_x(reached)), max(grid_x(reached))];
 y_limit = [min(grid_y), max(grid_y)];
 fprintf('colour axis log10 %.2f to %.2f, in multiples of a uniform map\n', color_limit);
 
 %% The board
-fig_state = figure('Color', 'w', 'Position', [60 60 1220 700], ...
+fig_state = figure('Color', 'w', 'Position', [60 60 param.panel_widthpx * n_state 700], ...
     'Name', 'fig_fwhm_statepool');
 layout_state = tiledlayout(fig_state, 2, n_state, 'TileSpacing', 'compact', ...
     'Padding', 'compact');
@@ -71,7 +89,7 @@ for k = 1:n_state
     clim(axis_map(k), color_limit);
     xlim(axis_map(k), x_limit);
     ylim(axis_map(k), y_limit);
-    title(axis_map(k), sprintf('%s   %d vessels, %d mice', param.state_label(k), ...
+    title(axis_map(k), sprintf('%s   %d vessels, %d mice', param.state_label.(state_pool.state(k)), ...
         state_pool.n_vessel(k), state_pool.n_mouse(k)));
     if k == 1
         ylabel(axis_map(k), y_label);

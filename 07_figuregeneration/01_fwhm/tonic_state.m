@@ -1,5 +1,7 @@
 clc, clear
 addpath(genpath('g:\03_program\01_ecspress\00_plotting'));
+addpath('g:/03_program/01_ecspress/09_dirstruct');    % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 clee = color_lee();
 % integrate_analysisresult sets these in the environment, which survives the clear
 % above; run this file on its own and the defaults below apply.
@@ -16,62 +18,46 @@ load_struct = load(table_path);
 statsummary_table = load_struct.save_content;
 
 
-%% Shared definitions
-states  = [ "drowsy", "nrem", "rem"];
-states_labels = ["Drowsy", "NREM", "REM"];
-data_types = ["thickness_bv", "thickness_totalpvs", "thickness_eps"];
-vessel_names = ["BV", "PVS", "EPS"];
+%% Filters : which rows the figure is about
+filt.state_drawn  = ["drowsy", "nrem", "rem"];    % one item per state, in this order (str)
+filt.series_drawn = ["thickness_bv", "thickness_totalpvs", "thickness_eps"];   % one tile each
 
-figconfig = struct();
-figconfig.bv.faint  = clee.lch(80, 130,  10);
-figconfig.bv.bold   = clee.lch(45, 150,  15);
-figconfig.pvs.faint = clee.lch(80, 130, 110);
-figconfig.pvs.bold  = clee.lch(45, 150, 115);
-figconfig.eps.faint = clee.lch(80, 130,  70);
-figconfig.eps.bold  = clee.lch(45, 120,  75);
-vessel_colors = {figconfig.bv, figconfig.pvs, figconfig.eps};
+%% Picture
+% Labels and colours are keyed by the name they belong to, not by position, so
+% dropping one from filt cannot slide the rest along by one.
+param.state_label = struct('awake', "Awake", 'drowsy', "Drowsy", ...
+    'nrem', "NREM", 'rem', "REM");
+param.series_label = struct('thickness_bv', "BV", 'thickness_totalpvs', "PVS", ...
+    'thickness_eps', "EPS");
+param.series_colour = struct( ...
+    'thickness_bv',       struct('faint', clee.lch(80, 130,  10), 'bold', clee.lch(45, 150,  15)), ...
+    'thickness_totalpvs', struct('faint', clee.lch(80, 130, 110), 'bold', clee.lch(45, 150, 115)), ...
+    'thickness_eps',      struct('faint', clee.lch(80, 130,  70), 'bold', clee.lch(45, 120,  75)));
 
-% Define labels explicitly
-norm_fields = ["abs_numeric", "awakenorm_numeric", "awakesubtract_numeric"];
+param.norm_field = "awakenorm_numeric";   % which arm of state_summary is drawn (str)
 
-%
-sess_ave  = statsummary_table.(norm_fields(2)).Date_ave;
-mouse_ave = statsummary_table.(norm_fields(2)).MouseID_ave;
-plotdata  = build_plotdata(sess_ave, mouse_ave, states, data_types);
-% ── Tiled Figure 1: Grouped by Transition (1 figure, 4 tiles) ─────────────
+%% One tile per series, one item per state
+% A first spec was built here and then overwritten by an identical block, and the
+% surviving one was rendered twice, so the file opened two identical windows.
+sess_ave  = statsummary_table.(param.norm_field).Date_ave;
+mouse_ave = statsummary_table.(param.norm_field).MouseID_ave;
+plotdata  = build_plotdata(sess_ave, mouse_ave, filt.state_drawn, filt.series_drawn);
+
 spec_states = struct();
 spec_states.title = "Q2Q3 mean Grouped by states";
-spec_states.tile_layout = [1 3];
-%
-for ti = 1:numel(states)
-    spec_states.tiles(ti).title = states_labels(ti);
-    for vi = 1:numel(data_types)
-        spec_states.tiles(ti).items(vi).states = states(ti);
-        spec_states.tiles(ti).items(vi).datatype   = data_types(vi);
-        spec_states.tiles(ti).items(vi).color      = vessel_colors{vi};
-        spec_states.tiles(ti).items(vi).label      = vessel_names(vi);
+spec_states.tile_layout = [1 numel(filt.series_drawn)];
+spec_states.tiles = struct('title', {}, 'items', {});
+for vi = 1:numel(filt.series_drawn)
+    series_name = filt.series_drawn(vi);
+    spec_states.tiles(vi).title = param.series_label.(series_name);
+    for ti = 1:numel(filt.state_drawn)
+        state_name = filt.state_drawn(ti);
+        spec_states.tiles(vi).items(ti).states   = state_name;
+        spec_states.tiles(vi).items(ti).datatype = series_name;
+        spec_states.tiles(vi).items(ti).color    = param.series_colour.(series_name);
+        spec_states.tiles(vi).items(ti).label    = param.state_label.(state_name);
     end
 end
-
-%% ── Tiled Figure 1: Grouped by Transition (1 figure, 4 tiles) ─────────────
-spec_states = struct();
-spec_states.title = "Q2Q3 mean Grouped by states";
-spec_states.tile_layout = [1 3];
-for ti = 1:numel(states)
-    spec_states.tiles(ti).title = vessel_names(ti);
-    for vi = 1:numel(data_types)
-        spec_states.tiles(vi).items(ti).states = states(ti);
-        spec_states.tiles(vi).items(ti).datatype   = data_types(vi);
-        spec_states.tiles(vi).items(ti).color      = vessel_colors{vi};
-        spec_states.tiles(vi).items(ti).label      = states_labels(ti);
-    end
-end
-render_scatter_figure(spec_states, plotdata);
-
-
-
-
-%%
 render_scatter_figure(spec_states, plotdata);
 
 

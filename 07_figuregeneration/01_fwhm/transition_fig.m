@@ -1,5 +1,7 @@
 clc, clear
 addpath(genpath('g:\03_program\01_ecspress\00_plotting'));
+addpath('g:/03_program/01_ecspress/09_dirstruct');    % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 clee = color_lee();
 % Which dataset to draw. tablegeneration_main writes transition.mat beside the
 % dirtable it was pointed at, so this must name the same folder.
@@ -30,18 +32,6 @@ t_axis.duration = param.transition_window;
 t_axis.dpoints = size(transition_table.abs_numeric.filtered_table.data{1});
 t_axis.tpoints = linspace(-t_axis.duration/2,t_axis.duration/2, t_axis.dpoints(2));
 
-% Color config
-figconfig = struct();
-
-figconfig.bv.faint  = clee.lch(80, 130,  10);
-figconfig.bv.bold   = clee.lch(45, 150,  15);
-
-figconfig.pvs.faint = clee.lch(80, 130, 110);
-figconfig.pvs.bold  = clee.lch(45, 150, 115);
-
-figconfig.eps.faint = clee.lch(80, 130,  70);
-figconfig.eps.bold  = clee.lch(45, 120,  75);
-
 % Figure sizing. These land in a slide at roughly half their drawn width, so a
 % point size that reads on screen is half that once pasted.
 %   see FINDINGS.md
@@ -52,11 +42,18 @@ param.fontsize       = 14;
 param.tile_widthinch = 2.2;
 param.tile_heightinch = 3.4;
 
-% Shared definitions
-transitions  = ["an_trans", "na_trans", "nr_trans", "ra_trans"];
-data_types = ["thickness_bv", "thickness_totalpvs", "thickness_eps"];
-vessel_names = ["BV", "PVS", "EPS"];
-vessel_colors = {figconfig.bv, figconfig.pvs, figconfig.eps};
+%% Filters : which rows the figure is about
+filt.transition_drawn = ["an_trans", "na_trans", "nr_trans", "ra_trans"];   % one tile each
+filt.series_drawn = ["thickness_bv", "thickness_totalpvs", "thickness_eps"];  % one figure each
+
+% Labels and colours are keyed by the name they belong to, not by position, so
+% dropping one from filt cannot slide the rest along by one.
+param.series_label = struct('thickness_bv', "BV", 'thickness_totalpvs', "PVS", ...
+    'thickness_eps', "EPS");
+param.series_colour = struct( ...
+    'thickness_bv',       struct('faint', clee.lch(80, 130,  10), 'bold', clee.lch(45, 150,  15)), ...
+    'thickness_totalpvs', struct('faint', clee.lch(80, 130, 110), 'bold', clee.lch(45, 150, 115)), ...
+    'thickness_eps',      struct('faint', clee.lch(80, 130,  70), 'bold', clee.lch(45, 120,  75)));
 
 label_map = struct( ...
     'an_trans', struct('pre',"Awake",'post',"NREM"), ...
@@ -65,31 +62,31 @@ label_map = struct( ...
     'ra_trans', struct('pre',"REM",  'post',"Awake") ...
 );
 
-% ── Generate figures for each normalization type ───────────────────────
-
-norm_fields = ["abs_data", "awakenorm_data", "awakesubtract_data"];
-norm_labels = ["absolute", "awake-normalized", "awake-subtracted"];
 % Every normalisation, not one. Absolute and relative have both been wanted from
 % the start, and which one reads better depends on the panel.
-param.norms = [1 2 3];
+param.norm_drawn = ["abs_data", "awakenorm_data", "awakesubtract_data"];
+param.norm_label = struct('abs_data', "absolute", ...
+    'awakenorm_data', "awake-normalized", 'awakesubtract_data', "awake-subtracted");
 
-%% ── Per-vessel figures (4 transition tiles each) ───────────────────
-for ni = param.norms
-    sess_ave  = transition_table.(norm_fields(ni)).Date_ave;
-    mouse_ave = transition_table.(norm_fields(ni)).MouseID_ave;
-    plotdata  = build_plotdata(sess_ave, mouse_ave, transitions, data_types);
+%% ── Per-vessel figures, one transition tile each ───────────────────
+for ni = 1:numel(param.norm_drawn)
+    norm_field = param.norm_drawn(ni);
+    sess_ave  = transition_table.(norm_field).Date_ave;
+    mouse_ave = transition_table.(norm_field).MouseID_ave;
+    plotdata  = build_plotdata(sess_ave, mouse_ave, filt.transition_drawn, filt.series_drawn);
 
     spec = struct();
-    spec.tile_layout = [1 4];
+    spec.tile_layout = [1 numel(filt.transition_drawn)];
     spec.fontsize    = param.fontsize;
     spec.tile_inch   = [param.tile_widthinch param.tile_heightinch];
-    for vi = 1:numel(data_types)
-        spec.title = vessel_names(vi) + " – " + norm_labels(ni);
+    for vi = 1:numel(filt.series_drawn)
+        series_name = filt.series_drawn(vi);
+        spec.title = param.series_label.(series_name) + " – " + param.norm_label.(norm_field);
         spec.tiles = struct('transition', {}, 'datatype', {}, 'color', {});
-        for ti = 1:numel(transitions)
-            spec.tiles(ti).transition = transitions(ti);
-            spec.tiles(ti).datatype   = data_types(vi);
-            spec.tiles(ti).color      = vessel_colors{vi};
+        for ti = 1:numel(filt.transition_drawn)
+            spec.tiles(ti).transition = filt.transition_drawn(ti);
+            spec.tiles(ti).datatype   = series_name;
+            spec.tiles(ti).color      = param.series_colour.(series_name);
         end
         render_figure(spec, plotdata, t_axis.tpoints, label_map);
     end

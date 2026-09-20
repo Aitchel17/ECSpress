@@ -23,21 +23,25 @@ table_path = fullfile(exp_path, "drift_transition.mat");
 load_struct = load(table_path);
 transition_table = load_struct.save_content;
 
-%% Shared definitions
-% +row is image-down, which is caudal. The axis reads rostral-positive, so row is
-% negated here and nowhere else.
-components       = ["drift_row", "drift_col"];
-component_labels = ["rostral − caudal", "lateral − medial"];
-component_sign   = [-1, 1];
+%% Filters : which rows the figure is about
+filt.component_drawn = ["drift_row", "drift_col"];   % one tile each (str)
+filt.transition_drawn = ["an_trans", "na_trans", "nr_trans", "ra_trans"];   % one item each
 
-transitions = ["an_trans", "na_trans", "nr_trans", "ra_trans"];
-transition_labels = ["Awake-NREM", "NREM-Awake", "NREM-REM", "REM-Awake"];
-transition_enters = ["nrem", "awake", "rem", "awake"];
+% Keyed by the name, not by position, so dropping one from filt cannot slide the
+% rest along by one. +row is image-down, which is caudal, and the axis reads
+% rostral-positive, so the sign flips here and nowhere else.
+param.component_label = struct('drift_row', "rostral − caudal", ...
+    'drift_col', "lateral − medial");
+param.component_sign = struct('drift_row', -1, 'drift_col', 1);
+param.transition_label = struct('an_trans', "Awake-NREM", 'na_trans', "NREM-Awake", ...
+    'nr_trans', "NREM-REM", 'ra_trans', "REM-Awake");
+param.transition_enters = struct('an_trans', "nrem", 'na_trans', "awake", ...
+    'nr_trans', "rem", 'ra_trans', "awake");
 
 % post minus pre cancels any per-session constant, so the awake-subtracted arm
 % is the absolute one again and is not drawn
-norm_fields = "abs_numeric";
-norm_labels = "absolute";
+param.norm_drawn = "abs_numeric";
+param.norm_label = struct('abs_numeric', "absolute");
 
 param.fontsize        = 14;
 param.tile_widthinch  = 2.8;
@@ -45,24 +49,28 @@ param.jitter_seed     = 1;      % count  so the jitter redraws the same
 param.match_ylim      = true;   % both tiles are um on orthogonal axes of one vector
 
 %% One figure per normalisation, tiles = components, items = transitions
-for ni = 1:numel(norm_fields)
-    vessel_ave = transition_table.(norm_fields(ni)).Date_ave;
+for ni = 1:numel(param.norm_drawn)
+    norm_field = param.norm_drawn(ni);
+    vessel_ave = transition_table.(norm_field).Date_ave;
     spec = struct();
-    spec.title       = "Drift post − pre by transition – " + norm_labels(ni);
+    spec.title       = "Drift post − pre by transition – " + param.norm_label.(norm_field);
     spec.ylabel      = "post − pre (um)";
-    spec.tile_layout = [1 numel(components)];
+    spec.tile_layout = [1 numel(filt.component_drawn)];
     spec.fontsize    = param.fontsize;
     spec.tile_width  = param.tile_widthinch;
     spec.match_ylim  = param.match_ylim;
     spec.tiles = struct('title', {}, 'items', {});
-    for ci = 1:numel(components)
-        spec.tiles(ci).title = component_labels(ci);
-        for ti = 1:numel(transitions)
-            on_item = vessel_ave.state_name == transitions(ti) & vessel_ave.DataType == components(ci);
+    for ci = 1:numel(filt.component_drawn)
+        component_name = filt.component_drawn(ci);
+        spec.tiles(ci).title = param.component_label.(component_name);
+        for ti = 1:numel(filt.transition_drawn)
+            transition_name = filt.transition_drawn(ti);
+            on_item = vessel_ave.state_name == transition_name & vessel_ave.DataType == component_name;
             rows = vessel_ave(on_item, :);
-            spec.tiles(ci).items(ti).values = component_sign(ci) * (rows.post_median - rows.pre_median)';
-            spec.tiles(ci).items(ti).color  = state_color(clee, transition_enters(ti));
-            spec.tiles(ci).items(ti).label  = transition_labels(ti);
+            spec.tiles(ci).items(ti).values = param.component_sign.(component_name) ...
+                * (rows.post_median - rows.pre_median)';
+            spec.tiles(ci).items(ti).color  = state_color(clee, param.transition_enters.(transition_name));
+            spec.tiles(ci).items(ti).label  = param.transition_label.(transition_name);
         end
     end
     rng(param.jitter_seed)

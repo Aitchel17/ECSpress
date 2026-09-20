@@ -21,18 +21,25 @@ table_path = fullfile(exp_path, "drift_summary.mat");
 load_struct = load(table_path);
 summary_table = load_struct.save_content;
 
-%% Shared definitions
-% +row is image-down, which is caudal. The axis reads rostral-positive, so row is
-% negated here and nowhere else.
-components       = ["drift_row", "drift_col"];
-component_labels = ["rostral − caudal", "lateral − medial"];
-component_sign   = [-1, 1];
-
-norm_fields = ["abs_numeric", "awakesubtract_numeric"];
-norm_labels = ["absolute", "awake-subtracted"];
+%% Filters : which rows the figure is about
+filt.component_drawn = ["drift_row", "drift_col"];   % one tile each (str)
 % awake is a structural zero once subtracted, so it is drawn only on the absolute
-norm_states = {["awake", "drowsy", "nrem", "rem"], ["drowsy", "nrem", "rem"]};
-state_labels = struct('awake', "Awake", 'drowsy', "Drowsy", 'nrem', "NREM", 'rem', "REM");
+filt.state_drawn = struct( ...
+    'abs_numeric',           ["awake", "drowsy", "nrem", "rem"], ...
+    'awakesubtract_numeric', ["drowsy", "nrem", "rem"]);
+
+% Keyed by the name, not by position, so dropping one from filt cannot slide the
+% rest along by one. +row is image-down, which is caudal, and the axis reads
+% rostral-positive, so the sign flips here and nowhere else.
+param.component_label = struct('drift_row', "rostral − caudal", ...
+    'drift_col', "lateral − medial");
+param.component_sign = struct('drift_row', -1, 'drift_col', 1);
+param.state_label = struct('awake', "Awake", 'drowsy', "Drowsy", ...
+    'nrem', "NREM", 'rem', "REM");
+
+param.norm_drawn = ["abs_numeric", "awakesubtract_numeric"];
+param.norm_label = struct('abs_numeric', "absolute", ...
+    'awakesubtract_numeric', "awake-subtracted");
 
 param.fontsize        = 14;
 param.tile_widthinch  = 2.8;
@@ -40,24 +47,28 @@ param.jitter_seed     = 1;      % count  so the jitter redraws the same
 param.match_ylim      = true;   % both tiles are um on orthogonal axes of one vector
 
 %% One figure per normalisation
-for ni = 1:numel(norm_fields)
-    vessel_ave = summary_table.(norm_fields(ni)).Date_ave;
-    states = norm_states{ni};
+for ni = 1:numel(param.norm_drawn)
+    norm_field = param.norm_drawn(ni);
+    vessel_ave = summary_table.(norm_field).Date_ave;
+    states = filt.state_drawn.(norm_field);
     spec = struct();
-    spec.title       = "Drift level by state – " + norm_labels(ni);
+    spec.title       = "Drift level by state – " + param.norm_label.(norm_field);
     spec.ylabel      = "level (um)";
-    spec.tile_layout = [1 numel(components)];
+    spec.tile_layout = [1 numel(filt.component_drawn)];
     spec.fontsize    = param.fontsize;
     spec.tile_width  = param.tile_widthinch;
     spec.match_ylim  = param.match_ylim;
     spec.tiles = struct('title', {}, 'items', {});
-    for ci = 1:numel(components)
-        spec.tiles(ci).title = component_labels(ci);
+    for ci = 1:numel(filt.component_drawn)
+        component_name = filt.component_drawn(ci);
+        spec.tiles(ci).title = param.component_label.(component_name);
         for si = 1:numel(states)
-            on_item = vessel_ave.state_name == states(si) & vessel_ave.DataType == components(ci);
-            spec.tiles(ci).items(si).values = component_sign(ci) * vessel_ave.Q2Q3_mean(on_item)';
-            spec.tiles(ci).items(si).color  = state_color(clee, states(si));
-            spec.tiles(ci).items(si).label  = state_labels.(states(si));
+            state_name = states(si);
+            on_item = vessel_ave.state_name == state_name & vessel_ave.DataType == component_name;
+            spec.tiles(ci).items(si).values = param.component_sign.(component_name) ...
+                * vessel_ave.Q2Q3_mean(on_item)';
+            spec.tiles(ci).items(si).color  = state_color(clee, state_name);
+            spec.tiles(ci).items(si).label  = param.state_label.(state_name);
         end
     end
     rng(param.jitter_seed)
