@@ -17,8 +17,8 @@ function polarcluster = analysis_clusterpolar_contour(polarcluster, roilist)
 %   polarcluster: Updated struct with 'manual_roi' containing filtered EdgeMask.
 
 % Check if 4D data exists
-if ~isfield(polarcluster, 'cluster_bvcsf_constdil')
-    error('polarcluster must contain cluster_bvcsf_constdil (x,y,ch,state).');
+if ~isfield(polarcluster, 'cluster_bvcsf_state')
+    error('polarcluster must contain cluster_bvcsf_state (x,y,ch,state).');
 end
 
 % Initialize manual_roi if not exists
@@ -26,14 +26,14 @@ if ~isfield(polarcluster, 'manual_roi')
     polarcluster.manual_roi = struct();
 end
 
-state_names = {'constricted', 'dilated'};
+state_names = {'constricted', 'intermediate', 'dilated'};
 ch_names    = {'bv', 'pvs'};
 
-% Counter for linear indexing (1 to 4)
+% Counter for linear indexing over state x channel
 counter = 0;
 
-% Iterate through States (1=Constricted, 2=Dilated) and Channels (1=BV, 2=PVS)
-for state_idx = 1:2
+% Iterate through States (1=Constricted, 2=Intermediate, 3=Dilated) and Channels (1=BV, 2=PVS)
+for state_idx = 1:numel(state_names)
     for ch_idx = 1:2
         counter = counter + 1;
 
@@ -42,8 +42,11 @@ for state_idx = 1:2
         disp_msg     = sprintf('%s %s', state_names{state_idx}, ch_names{ch_idx});
 
         % Extract Image: (x, y, ch, state)
-        img = polarcluster.cluster_bvcsf_constdil(:,:,ch_idx,state_idx);
-        img_norm = mat2gray(img);
+        img = polarcluster.cluster_bvcsf_state(:,:,ch_idx,state_idx);
+        % Window on the tissue, not on the zeros. Registration fill and the area outside the
+        % polar region are exact 0, and anchoring a display range on them puts the tissue in
+        % the top few percent of the greys; see CLAUDE_LOG.md
+        disp_lim = prctile(img(img > 0), [1 99]);
 
         % 1. Auto-detect edges
         disp(['Auto-detecting edges for: ' disp_msg '...']);
@@ -68,7 +71,10 @@ for state_idx = 1:2
 
         % 3. Open Figure for Selection
         hF = figure('Name', ['Select Edges: ' disp_msg], 'NumberTitle', 'off');
-        imshow(img_norm, []);
+        hIm = imshow(img, disp_lim);
+        uicontrol(hF, 'Style', 'pushbutton', 'String', 'Contrast', ...
+            'Units', 'normalized', 'Position', [0.005 0.005 0.09 0.05], ...
+            'Callback', @(~,~) imcontrast(hIm));   % its own window, so drawpolygon keeps the focus
         hold on;
 
         % Overlay detected edges in Red

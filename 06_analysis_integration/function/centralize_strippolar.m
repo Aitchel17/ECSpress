@@ -4,13 +4,14 @@ function out = centralize_strippolar(polarcluster)
 %   OUT  out           1x1 struct
 
     % Everything except clust_med_bv and clust_med_csf, which are the per-cluster
-    % median image stacks and hold almost the whole file. cluster_bvcsf_constdil
-    % is kept: it is the same kind of thing but only the constricted and dilated
-    % pair, and the contour work reads it.
+    % median image stacks and hold almost the whole file. cluster_bvcsf_state
+    % is kept: it is the same kind of thing but only the three chosen states, and
+    % the contour work reads it.
     keep = ["polar_profiles", "polar_theta", "cluster_summary", ...
         "cluster_num", "clusterboundary", "filtered_clusteridx", ...
         "constricted_cluster_idx", "dilated_cluster_idx", ...
-        "constricted_medianimg", "dilated_medianimg", "cluster_bvcsf_constdil"];
+        "intermediate_cluster_idx", "state_cluster_idx", ...
+        "constricted_medianimg", "dilated_medianimg", "cluster_bvcsf_state"];
 
     out = struct();
     for f = keep

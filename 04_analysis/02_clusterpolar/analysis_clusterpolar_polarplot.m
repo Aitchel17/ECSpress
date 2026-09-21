@@ -8,7 +8,7 @@ function polarcluster = analysis_clusterpolar_polarplot(polarcluster, roilist)
 %   stored polar_binstart_deg. Rendering is done by analysis_polar_makefig.
 %
 %   Inputs:
-%       polarcluster: Struct with manual_roi + cluster_bvcsf_constdil
+%       polarcluster: Struct with manual_roi + cluster_bvcsf_state
 %       roilist: roi_handle object (needed for PAX angle + contour masks)
 %   Output:
 %       polarcluster: same struct with added fields
@@ -29,8 +29,8 @@ if isempty(roilist) || ~all(ismember(contour_labels, roilist.list()))
     return;
 end
 
-if ~isfield(polarcluster, 'cluster_bvcsf_constdil')
-    warning('polarcluster.cluster_bvcsf_constdil missing. Skipping polar transform.');
+if ~isfield(polarcluster, 'cluster_bvcsf_state')
+    warning('polarcluster.cluster_bvcsf_state missing. Skipping polar transform.');
     return;
 end
 
@@ -49,7 +49,7 @@ try
         end
     else
         warning('Constricted BV mask found but empty. Using cluster data size for center.');
-        sz = size(polarcluster.cluster_bvcsf_constdil);
+        sz = size(polarcluster.cluster_bvcsf_state);
         Center = [sz(2), sz(1)] / 2;
         img_size = [sz(1), sz(2)];
     end
@@ -89,7 +89,7 @@ angle_map  = frame.angle_map;
 %% 3. Per-condition transform (heavy loop) -> binned polar profiles
 % Order matches the color order used in analysis_polar_makefig:
 %   1: CBV, 2: CPVS, 3: DBV, 4: DPVS
-state_indices = [1, 1, 2, 2]; % 1=Constricted, 2=Dilated
+state_indices = [1, 1, 3, 3]; % 1=Constricted, 2=Intermediate, 3=Dilated
 ch_indices    = [1, 2, 1, 2]; % 1=BV, 2=PVS
 roi_names_map = { ...
     'constrictedBV_contour', ...  % 1
@@ -112,7 +112,7 @@ for i = 1:4
     end
 
     % Raw image + edge detection (same params as contour script)
-    img = polarcluster.cluster_bvcsf_constdil(:, :, ch_indices(i), state_indices(i));
+    img = polarcluster.cluster_bvcsf_state(:, :, ch_indices(i), state_indices(i));
     try
         edges = edge(imgaussfilt(double(img), 3), 'log', 0.005);
     catch

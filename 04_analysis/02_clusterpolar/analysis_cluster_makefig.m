@@ -55,8 +55,8 @@ end
 
 clee = color_lee;
 %% Median Images - Constricted
-constricted_bv = double(polarcluster.cluster_bvcsf_constdil(:,:,1,1));
-constricted_pvs = double(polarcluster.cluster_bvcsf_constdil(:,:,2,1));
+constricted_bv = double(polarcluster.cluster_bvcsf_state(:,:,1,1));
+constricted_pvs = double(polarcluster.cluster_bvcsf_state(:,:,2,1));
 
 fig_cluster_c = make_fig('cluster_constricted_images');
 fig_cluster_c.update_figsize([12 4]);
@@ -97,8 +97,8 @@ fig_cluster_c.save2svg(save_dir);
 
 
 %% Median Images - Dilated
-dilated_bv = double(polarcluster.cluster_bvcsf_constdil(:,:,1,2));
-dilated_pvs = double(polarcluster.cluster_bvcsf_constdil(:,:,2,2));
+dilated_bv = double(polarcluster.cluster_bvcsf_state(:,:,1,3));
+dilated_pvs = double(polarcluster.cluster_bvcsf_state(:,:,2,3));
 
 fig_cluster_d = make_fig('cluster_dilated_images');
 fig_cluster_d.update_figsize([12 4]);

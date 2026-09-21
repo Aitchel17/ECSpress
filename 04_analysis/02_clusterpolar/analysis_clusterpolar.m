@@ -69,12 +69,35 @@ polarcluster.dilated_cluster_idx = polarcluster.filtered_clusteridx(temp_dil_idx
 polarcluster.constricted_medianimg = polarcluster.clust_med_csf(:,:,polarcluster.constricted_cluster_idx);
 polarcluster.dilated_medianimg = polarcluster.clust_med_csf(:,:,polarcluster.dilated_cluster_idx);
 
-%% 7. (x,y,bv/csf,constricted/dilated)
-polarcluster.cluster_bvcsf_constdil = zeros([size(tmp.rearanged_bvstack,1,2),2,2]); % (x,y,bv/csf,constricted/dilated)
-polarcluster.cluster_bvcsf_constdil(:,:,1,1) = polarcluster.clust_med_bv(:,:,polarcluster.constricted_cluster_idx);
-polarcluster.cluster_bvcsf_constdil(:,:,2,1) = polarcluster.clust_med_csf(:,:,polarcluster.constricted_cluster_idx);
-polarcluster.cluster_bvcsf_constdil(:,:,1,2) = polarcluster.clust_med_bv(:,:,polarcluster.dilated_cluster_idx);
-polarcluster.cluster_bvcsf_constdil(:,:,2,2) = polarcluster.clust_med_csf(:,:,polarcluster.dilated_cluster_idx);
+%% 6b. Intermediate cluster, chosen rather than picked
+% Two states fix one area ratio; a third says whether the contour area follows the FWHM
+% diameter squared. It is the cluster nearest the median diameter, among those whose median
+% image averages at least as many frames as the thinner of the two picks.
+cluster_diameter = [polarcluster.cluster_summary.mean_diameter];
+cluster_duration = [polarcluster.cluster_summary.duration];
+picked_idx = [polarcluster.constricted_cluster_idx, polarcluster.dilated_cluster_idx];
+frame_floor = min(cluster_duration(picked_idx));
+target_diameter = median(cluster_diameter(polarcluster.filtered_clusteridx));
+is_long_enough = cluster_duration(polarcluster.filtered_clusteridx) >= frame_floor;
+is_unpicked = ~ismember(polarcluster.filtered_clusteridx, picked_idx);
+keep_candidate = is_long_enough & is_unpicked;
+candidate_idx = polarcluster.filtered_clusteridx(keep_candidate);
+[~, nearest] = min(abs(cluster_diameter(candidate_idx) - target_diameter));
+polarcluster.intermediate_cluster_idx = candidate_idx(nearest);
+fprintf('intermediate cluster : %d of %d candidates, %d frames, %.2f px against a median of %.2f\n', ...
+    polarcluster.intermediate_cluster_idx, numel(candidate_idx), ...
+    cluster_duration(polarcluster.intermediate_cluster_idx), ...
+    cluster_diameter(polarcluster.intermediate_cluster_idx), target_diameter);
+
+%% 7. (x,y,bv/csf,state), state 1 constricted, 2 intermediate, 3 dilated
+polarcluster.state_cluster_idx = [polarcluster.constricted_cluster_idx, ...
+    polarcluster.intermediate_cluster_idx, polarcluster.dilated_cluster_idx];
+polarcluster.cluster_bvcsf_state = zeros([size(tmp.rearanged_bvstack,1,2),2,numel(polarcluster.state_cluster_idx)]);
+for state_idx = 1:numel(polarcluster.state_cluster_idx)
+    cluster_idx = polarcluster.state_cluster_idx(state_idx);
+    polarcluster.cluster_bvcsf_state(:,:,1,state_idx) = polarcluster.clust_med_bv(:,:,cluster_idx);
+    polarcluster.cluster_bvcsf_state(:,:,2,state_idx) = polarcluster.clust_med_csf(:,:,cluster_idx);
+end
 
 %% Output
 if ~exist(output_dir, 'dir')
