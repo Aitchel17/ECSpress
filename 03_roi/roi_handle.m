@@ -26,7 +26,7 @@ classdef roi_handle < handle
                 obj
                 ref_stack (:,:,:) {mustBeNumeric}
                 label (1,:) char
-                roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','line'})}
+                roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','circle','line'})}
                 stack2 = []   % optional co-registered 2nd channel (ch2) for reflect view
             end
             try
@@ -42,7 +42,7 @@ classdef roi_handle < handle
                 obj
                 ref_stack (:,:,:) {mustBeNumeric}
                 label   (1,:) char
-                roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','line'})}
+                roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','circle','line'})}
                 stack2 = []
             end
             % 라벨 중복 금지
@@ -75,7 +75,7 @@ classdef roi_handle < handle
                 obj
                 rgb_img (:,:,:) {mustBeNumeric}
                 label   (1,:) char
-                roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','line'})}
+                roimode (1,:) char {mustBeMember(roimode, {'rectangle','polygon','circle','line'})}
             end
             if any(strcmp({obj.ROIs.Label}, label))
                 error('ROI label "%s" already exists.', label);
@@ -207,13 +207,30 @@ classdef roi_handle < handle
 
 
         function roistack = applyvertices(obj, stack, label)
+            %APPLYVERTICES  The stack inside one ROI : NaN outside its polygon, cropped to its box.
+            %   Caller: analysis_radon
+            %
+            % IN   stack     H x W x n numeric   frames on the grid the ROI was drawn on
+            %      label     1 x m char          which ROI
+            % OUT  roistack  h x w x n double    the box around the polygon, NaN outside it on every frame
             arguments
                 obj
                 stack (:,:,:) {mustBeNumeric}
                 label (1,:) char
             end
             i = obj.findLabel(label);
-            roistack = roi_applyvertices(stack, obj.ROIs(i).Vertices);
+            vertices = obj.ROIs(i).Vertices;                % k x 2 double    [x y] on the stack's grid
+            [n_row, n_col, n_page] = size(stack);
+            [col_grid, row_grid] = meshgrid(1:n_col, 1:n_row);
+            inside   = inpolygon(col_grid, row_grid, vertices(:, 1), vertices(:, 2));   % H x W logical
+            outside  = repmat(~inside, [1, 1, n_page]);     % H x W x n logical
+            row_lim  = round([min(vertices(:, 2)), max(vertices(:, 2))]);
+            col_lim  = round([min(vertices(:, 1)), max(vertices(:, 1))]);
+            row_lim  = min(max(row_lim, 1), n_row);         % a vertex can sit off the image
+            col_lim  = min(max(col_lim, 1), n_col);
+            roistack = double(stack);
+            roistack(outside) = NaN;
+            roistack = roistack(row_lim(1):row_lim(2), col_lim(1):col_lim(2), :);
         end
 
         function vertices = getvertices(obj, label)

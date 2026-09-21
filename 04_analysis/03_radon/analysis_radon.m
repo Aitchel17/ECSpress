@@ -6,6 +6,7 @@ classdef analysis_radon < handle
     properties
         radon_result
         roi_image
+        roi_mask     % h x w logical   the ROI on roi_image's grid, true inside
         channel
         param
     end
@@ -32,11 +33,19 @@ classdef analysis_radon < handle
                 error('Failed to extract Radon ROI. Ensure "radon" ROI exists. Error: %s', ME.message);
             end
 
+            % The ROI is read back off the NaN applyvertices left, rather than rebuilt here.
+            % The chord analyze_radon divides by has to be the outline the pixels were cut
+            % to, and reading it back is what makes the two the same object by construction.
+            obj.roi_mask = ~isnan(obj.roi_image(:, :, 1));
+            obj.roi_image(isnan(obj.roi_image)) = 0;
+
             % Run the analysis function (Stats only)
             disp('Running Radon Analysis (Stats)...');
             obj.param.radon_angle = 0:1:180; % 1:1:180
             obj.param.threshold = 0.5; % half max
-            obj.radon_result = analyze_radon(obj.roi_image,obj.param.radon_angle,obj.param.threshold);
+            obj.param.min_chord = 10; % Shortest ROI crossing a bin may be measured on (px)
+            obj.radon_result = analyze_radon(obj.roi_image, obj.param.radon_angle, ...
+                obj.param.threshold, obj.roi_mask, obj.param.min_chord);
             
             % Get_massshift table
             disp('Get massshift table...');

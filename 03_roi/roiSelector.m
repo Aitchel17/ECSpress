@@ -34,6 +34,7 @@ classdef roiSelector < handle
         maxIntensity = 65535;
         fontsize = 14
         nframe = 0;
+        n_circlevertex = 64;   % count   polygon points a circle ROI is stored as
     end
     properties (Access=private)
         FrameSlider
@@ -227,6 +228,10 @@ classdef roiSelector < handle
                         end
                     case 'polygon'
                         roi = drawpolygon(obj.HAxes,'Position',obj.PreexistingVertices);
+                    case 'circle'
+                        center = mean(obj.PreexistingVertices, 1);                       % 1 x 2 double
+                        radius = mean(vecnorm(obj.PreexistingVertices - center, 2, 2));
+                        roi = drawcircle(obj.HAxes,'Center',center,'Radius',radius);
                     case 'line'
                         roi = drawline(obj.HAxes,'Color','m', ...
                             'LineWidth',obj.WSlider.Value,'LabelVisible','off','Position',obj.PreexistingVertices(1:2,1:2));
@@ -246,6 +251,8 @@ classdef roiSelector < handle
                         roi = drawrectangle(obj.HAxes);
                     case 'polygon'
                         roi = drawpolygon(obj.HAxes);
+                    case 'circle'
+                        roi = drawcircle(obj.HAxes);
                     case 'line'
                         roi = drawline(obj.HAxes,'Color','m', ...
                             'LineWidth',obj.WSlider.Value,'LabelVisible','off');
@@ -320,6 +327,16 @@ classdef roiSelector < handle
         end
 
         function vertices = getVertices(obj)
+            if strcmp(obj.ROIType, 'circle')
+                % a Circle ROI carries Center/Radius, not Position. Store it as the polygon
+                % every reader here already takes, and keep it unrounded: rounding a 64-gon
+                % to pixels is what would make the centre and radius unrecoverable.
+                theta = linspace(0, 2*pi, obj.n_circlevertex + 1)';   % k+1 x 1, last repeats the first
+                theta(end) = [];
+                unit_circle = [cos(theta), sin(theta)];               % k x 2 double
+                vertices = obj.TheROI.Center + obj.TheROI.Radius * unit_circle;
+                return
+            end
             vertices = round(obj.TheROI.Position);
             if strcmp(obj.ROIType, 'rectangle')
                 x1 = vertices(1); y1 = vertices(2);
@@ -497,7 +514,11 @@ classdef roiSelector < handle
                 delete(old(isvalid(old)));
             end
             obj.ReflectOverlay = gobjects(0);
-            if ~isempty(obj.TheROI) && isvalid(obj.TheROI)
+            if ~isempty(obj.TheROI) && isvalid(obj.TheROI) && strcmp(obj.ROIType, 'circle')
+                box = [obj.TheROI.Center - obj.TheROI.Radius, 2*obj.TheROI.Radius*[1 1]];
+                obj.ReflectOverlay = rectangle(obj.ReflectAx, 'Position', box, ...
+                    'Curvature', [1 1], 'EdgeColor','m', 'LineWidth',1.5);
+            elseif ~isempty(obj.TheROI) && isvalid(obj.TheROI)
                 v = obj.TheROI.Position;
                 switch obj.ROIType
                     case 'line'

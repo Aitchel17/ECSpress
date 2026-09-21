@@ -132,7 +132,7 @@ save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcl
 %% 7. PIV analysis
 
 %% 8. Radon Analysis (Only capable for clear images without debris around artery)
-session.roilist.addormodifyroi(twophoton_processed_asym.ch1,'radon','rectangle');
+session.roilist.addormodifyroi(twophoton_processed_asym.ch1,'radon','circle');
 %%
 session.radon_analysis = analysis_radon(twophoton_processed_sym, session.roilist, 'ch1');
 

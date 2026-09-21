@@ -116,7 +116,7 @@ save("fwhm_grab_pvs","save_struct")
 %% 7. PIV analysis
 
 %% 8. Radon Analysis (Only capable for clear images without debris around artery)
-session.roilist.addormodifyroi(twophoton_processed.ch1,'radon','rectangle');
+session.roilist.addormodifyroi(twophoton_processed.ch1,'radon','circle');
 session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, 'ch1');
 
 %% 8.2 Radon figures

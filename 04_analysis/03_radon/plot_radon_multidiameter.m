@@ -11,12 +11,13 @@ function radon_multidia = plot_radon_multidiameter(t_axis,diameters,var_diameter
     radon_multidia.reset_axis
     tmp.init_val = 0;
     for angleidx = 0:5
-        tmp.plot_angle = mod(maxvar_angle+angleidx*30,180);
+        tmp.plot_angle = mod(maxvar_angle+angleidx*30-1,180)+1;  % row of diameters; mod alone reaches 0
+        tmp.plot_deg = tmp.plot_angle - 1;                       % the_angles is 0:1:180, so row k is k-1 deg
         tmp.hue_angle = angleidx*50+5;
-        tmp.init_val = 30*angleidx - diameters(tmp.plot_angle,1); 
+        tmp.init_val = 30*angleidx - diameters(tmp.plot_angle,1);
         tmp.plot_data = diameters(tmp.plot_angle,:) +tmp.init_val;
         plot(radon_multidia.ax,t_axis, tmp.plot_data.*pixel2um , color = clee.lch(45,80,tmp.hue_angle))
-        text(radon_multidia.ax,-10,(tmp.plot_data(1)+5).*pixel2um ,strcat('Angle',string(tmp.plot_angle)), "HorizontalAlignment",'right')
+        text(radon_multidia.ax,-10,(tmp.plot_data(1)+5).*pixel2um ,strcat('Angle',string(tmp.plot_deg)), "HorizontalAlignment",'right')
     end
     %%
     radon_multidia.change_xylim([-80 max(t_axis)],...
