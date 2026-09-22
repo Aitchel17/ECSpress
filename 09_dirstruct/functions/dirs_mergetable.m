@@ -2,14 +2,14 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
 %DIRS_MERGETABLE  Scan each cohort, write its sheet, join them into one.
 
 %
-%   IN   working_root    1x1 str    the live data tree, one folder per cohort
+%   IN   working_root    1xK str    the mounted data trees, each one folder per cohort
 %        secondary_root  1x1 str    where the sheets go. NOT the data
 %        cohorts         1xN str    cohort folder names, in the order they join
 %        dataset         1x1 str    names the output folder and the merged sheet
 %   OUT  info  struct
 %          .sheet_path   1x1 str    the merged sheet this wrote
 %          .n_scanned    1xN double sessions the walk found, per cohort
-%          .n_offtree    1xN double rows dropped as not under working_root
+%          .n_offtree    1xN double rows dropped as under none of working_root
 %          .n_duplicate  1x1 double rows dropped as a repeated Directory
 %          .n_stale      1x1 double rows dropped as a dead twin of a live session
 %          .collision    1xC str    keys that name more than one LIVE folder, so
@@ -17,7 +17,7 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
 %          .n_row        1x1 double rows in the merged sheet
 
     arguments
-        working_root   (1,1) string
+        working_root   (1,:) string
         secondary_root (1,1) string
         cohorts        (1,:) string
         dataset        (1,1) string
@@ -39,16 +39,19 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
     n_scanned = zeros(1, n_cohort);
     n_offtree = zeros(1, n_cohort);
 
-    %% 1. Scan each cohort and write its sheet
+    %% 1. Scan each cohort under every root and write its sheet
     % READ ONLY under working_root. The only writes are the per-cohort workbook and
-    % its MDF metadata cache, both under secondary_root.
+    % its MDF metadata cache, both under secondary_root. The cache is keyed by the
+    % session's full path, so one file serves every root.
     cohort_sheet = strings(1, n_cohort);
     for cohort_idx = 1:n_cohort
         cohort = cohorts(cohort_idx);
-        cohort_dir = fullfile(working_root, cohort);
+        cohort_dir = fullfile(working_root, cohort);        % 1xK, one per root
         cohort_out = fullfile(secondary_root, cohort);
-        if ~isfolder(cohort_dir)
-            error('dirs_mergetable:noCohort', 'cohort folder not found: %s', cohort_dir);
+        has_cohort = isfolder(cohort_dir);
+        if ~any(has_cohort)
+            error('dirs_mergetable:noCohort', 'cohort folder %s under none of: %s', ...
+                cohort, strjoin(working_root, ', '));
         end
         if ~isfolder(cohort_out)
             mkdir(cohort_out)
@@ -57,12 +60,16 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
         cache_path = fullfile(cohort_out, cohort + "_dircache.mat");
 
         scan_start = tic;
-        scanned_table = dirs_mapstruct(char(cohort_dir), primary_map, ...
-            peripheral_map, stateanalysis_map, char(cache_path));
+        scanned = cell(1, numel(cohort_dir));
+        for root_idx = find(has_cohort)
+            scanned{root_idx} = dirs_mapstruct(char(cohort_dir(root_idx)), primary_map, ...
+                peripheral_map, stateanalysis_map, char(cache_path));
+        end
+        scanned_table = vertcat(scanned{has_cohort});
         dirs_writetable(scanned_table, char(cohort_sheet(cohort_idx)));
         n_scanned(cohort_idx) = height(scanned_table);
-        fprintf('%-12s scanned %d sessions in %.1f s\n', cohort, ...
-            n_scanned(cohort_idx), toc(scan_start));
+        fprintf('%-12s scanned %d sessions under %d root(s) in %.1f s\n', cohort, ...
+            n_scanned(cohort_idx), nnz(has_cohort), toc(scan_start));
     end
 
     %% 2. Join the cohort sheets
@@ -75,8 +82,9 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
         n_offtree(cohort_idx) = nnz(~on_working);
         % which line a row came from, kept for per-cohort counts downstream
         cohort_table.Cohort = repmat(cohorts(cohort_idx), height(cohort_table), 1);
-        fprintf('%-12s %4d rows | on %s %4d | dropped %d\n', cohorts(cohort_idx), ...
-            height(cohort_table), working_root, nnz(on_working), n_offtree(cohort_idx));
+        fprintf('%-12s %4d rows | under %s %4d | dropped %d\n', cohorts(cohort_idx), ...
+            height(cohort_table), strjoin(working_root, ' + '), nnz(on_working), ...
+            n_offtree(cohort_idx));
         part{cohort_idx} = cohort_table(on_working, :);
     end
     merged_table = vertcat(part{:});

@@ -52,8 +52,13 @@ session_proto = struct( ...
 param.smooth_deg = 15;    % circular moving-average width for the alignment measurement
 
 %% 1. Find every session that has both files
-file_list = dir(fullfile(dirs.working_root, '**', 'polarcluster.mat'));
-fprintf('polarcluster.mat found : %d under %s\n', numel(file_list), dirs.working_root);
+found = cell(1, numel(dirs.working_root));
+for root_idx = 1:numel(dirs.working_root)
+    found{root_idx} = dir(fullfile(dirs.working_root(root_idx), '**', 'polarcluster.mat'));
+end
+file_list = vertcat(found{:});
+fprintf('polarcluster.mat found : %d under %s\n', numel(file_list), ...
+    strjoin(dirs.working_root, ' + '));
 
 sessions = session_proto([]);
 skipped  = strings(0, 2);

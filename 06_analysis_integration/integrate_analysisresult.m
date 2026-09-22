@@ -45,9 +45,9 @@ clc, clear
 % Where the analysis products live. Not the data.
 dirs = dirs_central();
 
-% The live data tree comes from dirs_central and is "" off the rig.
-% E:\ is the BACKUP drive -- a cohort path under it produces rows that
-% duplicate the same sessions under G:\tmp. see CLAUDE_LOG.md
+% The data trees come from dirs_central, one per mounted root (the work drive and
+% the archive), and are empty off the rig. E:\ is the BACKUP drive -- a cohort
+% path under it produces rows that duplicate the same sessions. see CLAUDE_LOG.md
 
 % Cohorts, as <folder under dirs.working_root>. Only cell 1 reads this, and only
 % to pick which tree to rename videos in. Which cohorts go into the DATASET is
@@ -64,7 +64,7 @@ setenv('ECSPRESS_DATASET', param.dataset);
 
 dataset_dir = fullfile(dirs.secondary_root, param.dataset);
 fprintf('root    %s\n', dirs.secondary_root);
-fprintf('data    %s\n', dirs.working_root);
+fprintf('data    %s\n', strjoin(dirs.working_root, ' + '));
 fprintf('dataset %s\n', param.dataset);
 
 %% 0.1 What already exists -- run this before anything, it writes nothing
@@ -84,22 +84,29 @@ fprintf('%d of %d missing -- the stage that writes each is in the header above\n
 
 %% 1. Legacy AVI names   [WRITES INTO THE DATA TREE]
 % eye.avi / whisker.avi -> prefix_eye.avi, so the scan can tell which session a
-% video belongs to. The only cell in this file that touches G:, which is why it is
+% video belongs to. The only cell in this file that touches the data trees, so it is
 % on its own and never runs as part of anything else.
 %   Set param.cohort_idx and run this cell once per cohort. It only has to run
 %   after an acquisition that produced the legacy names.
 param.cohort_idx = 2;
-cohort_dir = fullfile(dirs.working_root, param.cohorts(param.cohort_idx));
-if ~isfolder(cohort_dir)
-    error('integrate:noCohort', 'cohort folder not found: %s', cohort_dir);
+cohort_dir = fullfile(dirs.working_root, param.cohorts(param.cohort_idx));   % one per root
+cohort_dir = cohort_dir(isfolder(cohort_dir));
+if isempty(cohort_dir)
+    error('integrate:noCohort', 'cohort folder not found under any root: %s', ...
+        param.cohorts(param.cohort_idx));
 end
-rename_avi_files(char(cohort_dir));
+for root_idx = 1:numel(cohort_dir)
+    rename_avi_files(char(cohort_dir(root_idx)));
+end
 
 %% 1.1 Field drift in stored objects -- run when stage 4 fails on a flatten
 % One session saved before getdiameter gained eps/epschanges is enough to make
 % struct2table wrap every row in a cell, and explode_nest then fails.
 % see CLAUDE_LOG.md. dryrun lists what would change and writes nothing.
-fwhm_rederive(char(fullfile(dirs.working_root, param.cohorts(param.cohort_idx))), dryrun = true);
+cohort_dir = fullfile(dirs.working_root, param.cohorts(param.cohort_idx));   % one per root
+for root_idx = find(isfolder(cohort_dir))
+    fwhm_rederive(char(cohort_dir(root_idx)), dryrun = true);
+end
 
 %% 2. Gather the per-session products   [WRITES under dirs.secondary_root]
 % Scans both cohorts and rebuilds the sheets first (dirs_mergetable, about a
