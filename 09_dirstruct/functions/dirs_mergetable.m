@@ -66,6 +66,11 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
                 peripheral_map, stateanalysis_map, char(cache_path));
         end
         scanned_table = vertcat(scanned{has_cohort});
+        repeated = rootoverlap(string(scanned_table.Directory));
+        if ~isempty(repeated)
+            error('dirs_mergetable:overlap', 'session folders under more than one root:\n%s', ...
+                strjoin(repeated, newline));
+        end
         dirs_writetable(scanned_table, char(cohort_sheet(cohort_idx)));
         n_scanned(cohort_idx) = height(scanned_table);
         fprintf('%-12s scanned %d sessions under %d root(s) in %.1f s\n', cohort, ...
@@ -156,9 +161,8 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
         height(merged_table), nnz(has_fwhm), nnz(has_score), nnz(has_fwhm & has_score));
 
     %% 4. Write the merged sheet
-    % caution  writetable does not clear the sheet first, so a shorter table would
-    %          leave the old tail behind. The file has to go -- back it up, do not
-    %          just delete, the way fwhm_rederive does
+    % overwritesheet clears the reference sheet first, so a shorter table leaves no old
+    % tail, and the backup sheet dirs_hashstate keeps in the same workbook stays
     dataset_dir = fullfile(secondary_root, dataset);
     if ~isfolder(dataset_dir)
         mkdir(dataset_dir)
@@ -168,10 +172,9 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
         stamp = string(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
         backup_path = fullfile(dataset_dir, dataset + "_dirtable_backup_" + stamp + ".xlsx");
         copyfile(sheet_path, backup_path);
-        delete(sheet_path);
         fprintf('backed up previous sheet to %s\n', backup_path);
     end
-    writetable(merged_table, sheet_path, 'Sheet', 'reference');
+    writetable(merged_table, sheet_path, 'Sheet', 'reference', 'WriteMode', 'overwritesheet');
     fprintf('wrote %s\n', sheet_path);
 
     session_type = string(merged_table.SessionType);
@@ -188,4 +191,17 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
     info.n_stale = n_stale;
     info.collision = collision;
     info.n_row = height(merged_table);
+end
+
+function repeated = rootoverlap(directory)
+%ROOTOVERLAP  Session folders the scan found under more than one root, the letter removed.
+%   Caller: dirs_mergetable
+%
+% IN   directory  N x 1 str   Directory of every scanned row, all roots together
+% OUT  repeated   M x 1 str   the rows whose path below the letter appeared already
+below_letter = lower(extractAfter(directory, ':'));
+[~, first_idx] = unique(below_letter, 'stable');
+is_repeat = true(numel(directory), 1);
+is_repeat(first_idx) = false;
+repeated = directory(is_repeat);
 end
