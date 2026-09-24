@@ -1,17 +1,24 @@
-%ARCHIVE_SESSION  Dormant recordings off the work drive onto the archive drive, cell by cell.
-%   The work drive is the NVMe every stage reads from. What clogs it is not the
+%ARCHIVE_SESSION  Mirror, hash, then dormant recordings off the work disks onto the archive disks, cell by cell.
+%   Scheduled: schtasks /Create /TN archive_session /SC DAILY /ST 03:00
+%              /TR "\"C:\Program Files\MATLAB\R2024b\bin\matlab.exe\" -batch archive_session"
+%   Unattended it mirrors, hashes, copies and verifies; the removal cell wants a typed
+%   word and returns without it, so a daily run leaves the data tree as it was.
+%   The work volumes are the disks every stage reads from. What clogs them is not the
 %   finished work but the recordings that were extracted and then never taken up:
 %   a recording centralize_primary has not gathered months after it was made is not
 %   being worked on, and its TIFFs are what makes it large.
 %
-%   A recording folder is archived when all three hold:
+%   A recording folder is archived when all four hold:
 %     it was made at least filt.min_age_month months ago
 %     centralized_<filt.central_product>.mat does not list it
 %     no .mdf sits inside it -- the .mdf go to the queue drive, not here
+%     the backup sheet of the dirtable says the mirror holds it byte-identical, so a
+%     verified copy exists somewhere before the work copy goes
 %
-%   Cells 0-2 and 4 touch nothing. Cell 3 writes under dirs.archive_root. CELL 5 IS
-%   THE ONLY ONE THAT DELETES, it deletes in the DATA TREE, and it deletes only what
-%   cell 4 verified in the same MATLAB session.
+%   Cell 1 writes to the mirror disks, cell 2 the backup sheet of the dirtable, cell 5
+%   under the archive disks. Cells 0, 3, 4 and 6 touch nothing. CELL 7 IS THE ONLY ONE
+%   THAT DELETES, it deletes in the DATA TREE, and it deletes only what cell 6 verified
+%   in the same MATLAB session.
 %
 %   The date comes from the date folder above the recording, so a recording under
 %   <mouse>\zstack\ has none and is never archived. dirs_mergetable has to read the
@@ -20,46 +27,81 @@
 
 %% 0. Configuration -- the only cell that decides anything
 clc, clear
-addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_central lives
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;
 
 resolved = dirs_central();
 dirs.central      = resolved.central;            % char   where centralized_*.mat live
-dirs.work_root    = 'G:\tmp';                    % char   the NVMe the stages read from
-dirs.archive_root = 'H:\tmp';                    % char   where a dormant recording goes
+dirs.work_root    = resolved.work_root;          % 1 x K str  every disk declaring work, by its beacon
+dirs.archive_root = resolved.archive_root;       % 1 x K str  every disk declaring archive, by its beacon
+dirs.lto_root     = resolved.lto_root;           % 1 x K str  the lto folders of those
+dirs.mirror_root  = resolved.mirror_root;        % 1 x M str  every disk declaring mirror
 dirs.robocopy_log = fullfile(tempdir, 'archive_session.log');   % char
 
 filt.min_age_month   = 2;           % archive a recording this many months after it was made
 filt.central_product = "paxfwhm";   % a recording listed in centralized_<this>.mat is kept
 
+param.dataset        = "merged_igkl_igkltdt";   % str    the dirtable whose backup sheet says what the mirror verified
+param.n_scrub        = NaN;                     % count  sessions read back from the mirror; NaN = one in thirty
 param.robocopy_flags = {'/E', '/R:2', '/W:5', '/ETA', '/TEE'};   % 1 x n cell
+dirs.dirtable = fullfile(resolved.secondary_root, param.dataset, param.dataset + "_dirtable.xlsx");   % derived
 
-fprintf('work    %s\narchive %s\n', dirs.work_root, dirs.archive_root);
+if ~any(isfolder(dirs.archive_root))
+    error('archive_session:noArchive', 'no archive root is mounted');
+end
+fprintf('work    %s\narchive %s\nmirror  %s\n', strjoin(dirs.work_root, ' | '), ...
+    strjoin(dirs.archive_root, ' | '), strjoin(dirs.mirror_root, ' | '));
 
-%% 1. Every recording on the work drive, and what centralize has gathered   [READ ONLY]
-record_table = recordingtable(dirs.work_root);
+%% 1. Mirror: every live item onto the mirror disks   [WRITES under dirs.mirror_root]
+live_root = [dirs.work_root, dirs.archive_root, dirs.lto_root];
+mirror_info = dirs_mirror(live_root, dirs.mirror_root);
+
+%% 2. Hash: a content hash per session and the mirror's state, into the backup sheet   [WRITES dirs.dirtable]
+live_tmp = [dirs.work_root, dirs.archive_root];
+hash_info = dirs_hashstate(dirs.dirtable, live_tmp, fullfile(dirs.mirror_root, "tmp"), param.n_scrub);
+fprintf('mirror %d items | hashed %d | scrubbed %d | mismatch %d\n', numel(mirror_info.pass), ...
+    hash_info.n_hashed, hash_info.n_scrubbed, hash_info.n_mismatch);
+
+%% 3. Every recording on the work disks, what centralize gathered, what the mirror holds verified   [READ ONLY]
+record_part = cell(1, numel(dirs.work_root));
+for root_idx = 1:numel(dirs.work_root)
+    record_part{root_idx} = recordingtable(dirs.work_root(root_idx));
+end
+record_table = vertcat(record_part{:});
 central_path = fullfile(dirs.central, "centralized_" + filt.central_product + ".mat");
 stored = load(central_path, 'central');
 gathered_dir = string(stored.central.Directory);
-fprintf('%d recordings, %.1f GB | %s lists %d\n', height(record_table), ...
-    sum(record_table.GB), filt.central_product, numel(gathered_dir));
+verified_rel = strings(0, 1);
+if isfile(dirs.dirtable) && ismember("backup", sheetnames(dirs.dirtable))
+    backup_sheet = readtable(dirs.dirtable, 'Sheet', 'backup', 'TextType', 'string');
+    is_match = string(backup_sheet.HashMatch) == "true";
+    verified_rel = backup_sheet.RelativePath(is_match);
+end
+fprintf('%d recordings, %.1f GB | %s lists %d | mirror verified %d\n', height(record_table), ...
+    sum(record_table.GB), filt.central_product, numel(gathered_dir), numel(verified_rel));
 
-%% 2. Which recordings archive   [READ ONLY]
+%% 4. Which recordings archive   [READ ONLY]
 is_old       = record_table.AgeMonth >= filt.min_age_month;
 is_gathered  = ismember(lower(record_table.Source), lower(gathered_dir));
 has_mdf      = record_table.MdfGB > 0;
-keep_archive = is_old & ~is_gathered & ~has_mdf;
+is_verified  = ismember(lower(record_table.Rel), lower(verified_rel));
+keep_archive = is_old & ~is_gathered & ~has_mdf & is_verified;
 
-fprintf('older than %d months %d | gathered %d | carries .mdf %d\n', ...
-    filt.min_age_month, sum(is_old), sum(is_gathered), sum(has_mdf));
+fprintf('older than %d months %d | gathered %d | carries .mdf %d | mirror verified %d\n', ...
+    filt.min_age_month, sum(is_old), sum(is_gathered), sum(has_mdf), sum(is_verified));
 fprintf('archive : %d of %d recordings, %.1f GB\n', sum(keep_archive), ...
     height(record_table), sum(record_table.GB(keep_archive)));
 
 move_table = record_table(keep_archive, :);
-move_table.Target = replace(move_table.Source, dirs.work_root, dirs.archive_root);
+move_table.Target = strings(height(move_table), 1);
+for move_idx = 1:height(move_table)
+    target_root = dirs_pickroot(dirs.archive_root, move_table.Rel(move_idx));
+    move_table.Target(move_idx) = fullfile(target_root, move_table.Rel(move_idx));
+end
 move_table = sortrows(move_table, 'GB', 'descend');
 disp(move_table(:, {'GB', 'AgeMonth', 'Rel'}))
 
-%% 3. Copy to the archive   [WRITES under dirs.archive_root]
+%% 5. Copy to the archive   [WRITES under dirs.archive_root]
 % Nothing is removed here. Re-running skips what robocopy finds already identical.
 copy_start = tic;
 done_gb = 0;
@@ -75,7 +117,7 @@ for move_idx = 1:height(move_table)
 end
 fprintf('copy finished in %.1f h\n', toc(copy_start) / 3600);
 
-%% 4. Verify every file, name and size   [READ ONLY]
+%% 6. Verify every file, name and size   [READ ONLY]
 move_table.Verified = false(height(move_table), 1);
 for move_idx = 1:height(move_table)
     move_table.Verified(move_idx) = samefiles(move_table.Source(move_idx), ...
@@ -86,11 +128,15 @@ end
 fprintf('verified : %d of %d, %.1f GB\n', sum(move_table.Verified), height(move_table), ...
     sum(move_table.GB(move_table.Verified)));
 
-%% 5. Remove the source   [DELETES IN THE DATA TREE]
-% Only rows cell 4 verified, and each is checked again at the moment it is removed.
+%% 7. Remove the source   [DELETES IN THE DATA TREE]
+% Only rows cell 6 verified, and each is checked again at the moment it is removed.
 remove_table = move_table(move_table.Verified, :);
 fprintf('about to remove %d recording folders, %.1f GB, under %s\n', ...
-    height(remove_table), sum(remove_table.GB), dirs.work_root);
+    height(remove_table), sum(remove_table.GB), strjoin(dirs.work_root, ' | '));
+if batchStartupOptionUsed
+    fprintf('unattended run: nothing removed\n');
+    return
+end
 if ~strcmp(input('type REMOVE to proceed: ', 's'), 'REMOVE')
     fprintf('nothing removed\n');
     return
