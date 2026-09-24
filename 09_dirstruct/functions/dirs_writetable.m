@@ -46,6 +46,12 @@ function load_and_update_tables(dirstruct_table, dirtable_dir)
             end
         end
         
+        % a sheet from before VolumeSerial existed gets the column, blank, typed like the scan's
+        if ~ismember('VolumeSerial', ref_table.Properties.VariableNames)
+            ref_table.VolumeSerial = repmat({''}, height(ref_table), 1);
+            log_table.VolumeSerial = repmat(datetime("now"), height(log_table), 1);
+        end
+
         % Define Columns
         meta_cols = {'VesselID', 'Power', 'Depth', 'Notes', 'Wavelength', 'xlocation', 'ylocation', 'zlocation', 'PercentPower', 'Zoom', 'Resolution'};
         all_cols = dirstruct_table.Properties.VariableNames;
@@ -86,14 +92,14 @@ function [ref_table, log_table, changed] = process_session_update(ref_table, log
 %   appended, so the caller can skip rewriting the workbook on no-op runs.
 
     changed = false;
-    key = new_row.Directory; % Unique Key
-    
-    % Find match in reference table
+    % Directory below the drive letter: a session moved to another volume is the same row
+    key = new_row.Directory;
     if iscell(key)
         key = key{1};
     end
-    
-    match_idx = find(strcmpi(ref_table.Directory, key), 1);
+    key_below_letter = extractAfter(key, ':');
+    ref_below_letter = extractAfter(string(ref_table.Directory), ':');
+    match_idx = find(strcmpi(ref_below_letter, key_below_letter), 1);
 
     if ~isempty(match_idx)
         % --- EXISTING SESSION ---

@@ -8,6 +8,14 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_m
         cache_path = '';
     end
 
+    % The volume this scan reads, by serial: the letter in Directory is today's, the serial stays
+    volume = dirs_volumeletter();
+    is_root = volume.letter == extractBefore(experiment_folder, 3);
+    volume_serial = '';
+    if any(is_root)
+        volume_serial = char(volume.serial(is_root));
+    end
+
     % --- Load MDF metadata cache (immutable per session -> parse once) ---
     meta_cache = containers.Map('KeyType', 'char', 'ValueType', 'any');
     if ~isempty(cache_path) && isfile(cache_path)
@@ -36,6 +44,7 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_m
     cols.SessionType = {};
     cols.SessionID = {};
     cols.Directory = {};
+    cols.VolumeSerial = {};
     
     % Metadata
     cols.VesselID = {};
@@ -165,6 +174,7 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_m
                 cols.SessionType{end+1,1} = current.sessiontype;
                 cols.SessionID{end+1,1} = current_session_id;
                 cols.Directory{end+1,1} = session.directory;
+                cols.VolumeSerial{end+1,1} = volume_serial;
     
                 % Metadata (maps to specific column names)
                 cols.VesselID{end+1,1} = session_data.vesselID;
