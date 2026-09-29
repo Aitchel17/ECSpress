@@ -1,10 +1,13 @@
-function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_map, state_map, cache_path)
+function dirstruct_table = dirs_mapstruct(experiment_folder, cache_path)
 %DIRS_MAPSTRUCT Build the session directory table by scanning experiment_folder.
+%   Caller: dirs_scantable
+%   Which product file fills which analysis column is decided here, in the three
+%   maps beside the column declarations, and nowhere else.
 %   cache_path (optional): path to a .mat file caching immutable MDF metadata
 %   per session directory. When given, each session's MDF info is parsed at
 %   most once ever -- subsequent runs reuse the cached metadata and skip the
 %   expensive mdfExtractLoader read. Pass '' to disable caching (full parse).
-    if nargin < 5
+    if nargin < 2
         cache_path = '';
     end
 
@@ -71,6 +74,19 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_m
     cols.PrimaryAnalysis = {};
     cols.StateAnalysis = {};
     
+    % the product file behind each analysis column; dirs_scananalysis returns its path
+    % or 'NA' under the first column's name
+    primary_map = { ...
+        'RadonResult',  'radon_result.mat'; ...
+        'RoiList',      'roilist.mat'; ...
+        'PolarCluster', 'polarcluster.mat'; ...
+        'PaxFWHM',      'paxfwhm.mat'};
+    peripheral_map = { ...
+        'AnalogAnalysis',   'analysis_analog.mat'; ...
+        'BehaviorAnalysis', 'analysis_camera.mat'; ...
+        'SleepScore',       'sleep_score.mat'};
+    stateanalysis_map = {'paxfwhm_state', 'paxfwhm_state.mat'};
+
     % Primary Analysis Files
     cols.Primary_RadonResult = {};
     cols.Primary_RoiList = {};
@@ -154,17 +170,17 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_m
                 % --- Scan Peripheral Folder ---
                 if ~strcmp(session_data.Peripheral, 'NA')
                     p_dir = fullfile(session.directory, session_data.Peripheral);
-                    found_peri = dirs_scananalysis(p_dir, peri_map);
+                    found_peri = dirs_scananalysis(p_dir, peripheral_map);
                 else
-                    found_peri = dirs_scananalysis('NA', peri_map);
+                    found_peri = dirs_scananalysis('NA', peripheral_map);
                 end
     
                 % --- Scan State Analysis Folder ---
                 if isfield(session_data, 'State_analysis') && ~strcmp(session_data.State_analysis, 'NA')
                     p_dir = fullfile(session.directory, session_data.State_analysis);
-                    found_state = dirs_scananalysis(p_dir, state_map);
+                    found_state = dirs_scananalysis(p_dir, stateanalysis_map);
                 else
-                    found_state = dirs_scananalysis('NA', state_map);
+                    found_state = dirs_scananalysis('NA', stateanalysis_map);
                 end
     
                 % --- Append Data to Columns ---
@@ -209,7 +225,7 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, primary_map, peri_m
                 cols.Primary_RadonResult{end+1,1} = found_primary.RadonResult;
                 cols.Primary_RoiList{end+1,1} = found_primary.RoiList;
                 cols.Primary_PolarCluster{end+1,1} = found_primary.PolarCluster;
-                cols.Primary_paxFWHM{end+1,1} = found_primary.PaxFWHM; % Maps 'PaxFWHM' to 'LineFWHM' column
+                cols.Primary_paxFWHM{end+1,1} = found_primary.PaxFWHM;
     
                 % Peripheral Files
                 cols.Peripheral_AnalogAnalysis{end+1,1} = found_peri.AnalogAnalysis;

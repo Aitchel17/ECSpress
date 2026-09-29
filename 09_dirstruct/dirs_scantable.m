@@ -17,17 +17,6 @@ arguments
     cohort (1, 1) string
 end
 
-primary_map = { ...
-    'RadonResult',  'radon_result.mat'; ...
-    'RoiList',      'roilist.mat'; ...
-    'PolarCluster', 'polarcluster.mat'; ...
-    'PaxFWHM',      'paxfwhm.mat'};
-peripheral_map = { ...
-    'AnalogAnalysis',   'analysis_analog.mat'; ...
-    'BehaviorAnalysis', 'analysis_camera.mat'; ...
-    'SleepScore',       'sleep_score.mat'};
-stateanalysis_map = {'paxfwhm_state', 'paxfwhm_state.mat'};
-
 cohort_dir = fullfile(working_root, cohort);        % 1xK, one per root
 cohort_out = fullfile(secondary_root, cohort);
 has_cohort = isfolder(cohort_dir);
@@ -44,8 +33,7 @@ cache_path = fullfile(cohort_out, cohort + "_dircache.mat");
 scan_start = tic;
 scanned = cell(1, numel(cohort_dir));
 for root_idx = find(has_cohort)
-    scanned{root_idx} = dirs_mapstruct(char(cohort_dir(root_idx)), primary_map, ...
-        peripheral_map, stateanalysis_map, char(cache_path));
+    scanned{root_idx} = dirs_mapstruct(char(cohort_dir(root_idx)), char(cache_path));
 end
 scanned_table = vertcat(scanned{has_cohort});
 repeated = rootoverlap(string(scanned_table.Directory));
