@@ -8,10 +8,13 @@ if ~isfolder(dirs.central)
     fprintf('created %s\n', dirs.central);
 end
 %% refresh the directory table
-% cohorts is the only place the dataset's membership is decided -- dirs_mergetable
-% takes it as an argument rather than keeping a second copy
+% cohorts is the only place the dataset's membership is decided -- dirs_scantable and
+% dirs_mergetable take it as an argument rather than keeping a second copy
 dataset     = "merged_igkl_igkltdt";
 cohorts     = ["00_igkl", "01_igkltdt"];
+for cohort = cohorts
+    dirs_scantable(dirs.working_root, dirs.secondary_root, cohort);
+end
 sheet_info = dirs_mergetable(dirs.working_root, dirs.secondary_root, ...
     cohorts, dataset);
 %% read directory table and extract keys

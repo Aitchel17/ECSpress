@@ -18,7 +18,8 @@
 %   another dataset is one edit.
 %
 %   Stage 2 rebuilds the directory sheets before it reads them, by running
-%   dirs_mergetable, so a recording added since the last run cannot go unnoticed.
+%   dirs_scantable per cohort and then dirs_mergetable, so a recording added since
+%   the last run cannot go unnoticed.
 %   The rescan does not overwrite metadata corrected by hand: dirs_writetable
 %   updates only the file columns of a row that already exists.
 %
@@ -109,7 +110,7 @@ for root_idx = find(isfolder(cohort_dir))
 end
 
 %% 2. Gather the per-session products   [WRITES under dirs.secondary_root]
-% Scans both cohorts and rebuilds the sheets first (dirs_mergetable, about a
+% Scans both cohorts and rebuilds the sheets first (dirs_scantable, dirs_mergetable, about a
 % second), then reads paxfwhm.mat, polarcluster.mat, roilist.mat, sleep_score.mat
 % and analysis_analog.mat out of every session that sheet lists and writes one
 % table per product. The LAST stage that opens a session folder. Incremental: a

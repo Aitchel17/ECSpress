@@ -1,14 +1,15 @@
 function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
-%DIRS_MERGETABLE  Scan each cohort, write its sheet, join them into one.
-
+%DIRS_MERGETABLE  Join each cohort's own sheet into the dataset sheet.
+%   Caller: dirtable_main, centralize_primary, centralize_drift
+%   Reads <secondary_root>\<cohort>\<cohort>_dirtable.xlsx as dirs_scantable last wrote it;
+%   the caller scans first.
 %
 %   IN   working_root    1xK str    the mounted data trees, each one folder per cohort
-%        secondary_root  1x1 str    where the sheets go. NOT the data
+%        secondary_root  1x1 str    where the cohort sheets are and the dataset sheet goes
 %        cohorts         1xN str    cohort folder names, in the order they join
 %        dataset         1x1 str    names the output folder and the merged sheet
 %   OUT  info  struct
 %          .sheet_path   1x1 str    the merged sheet this wrote
-%          .n_scanned    1xN double sessions the walk found, per cohort
 %          .n_offtree    1xN double rows dropped as under none of working_root
 %          .n_duplicate  1x1 double rows dropped as a repeated Directory
 %          .n_stale      1x1 double rows dropped as a dead twin of a live session
@@ -24,60 +25,11 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
     end
 
 
-    primary_map = { ...
-        'RadonResult',  'radon_result.mat'; ...
-        'RoiList',      'roilist.mat'; ...
-        'PolarCluster', 'polarcluster.mat'; ...
-        'PaxFWHM',      'paxfwhm.mat'};
-    peripheral_map = { ...
-        'AnalogAnalysis',   'analysis_analog.mat'; ...
-        'BehaviorAnalysis', 'analysis_camera.mat'; ...
-        'SleepScore',       'sleep_score.mat'};
-    stateanalysis_map = {'paxfwhm_state', 'paxfwhm_state.mat'};
-
     n_cohort = numel(cohorts);
-    n_scanned = zeros(1, n_cohort);
     n_offtree = zeros(1, n_cohort);
+    cohort_sheet = fullfile(secondary_root, cohorts, cohorts + "_dirtable.xlsx");
 
-    %% 1. Scan each cohort under every root and write its sheet
-    % READ ONLY under working_root. The only writes are the per-cohort workbook and
-    % its MDF metadata cache, both under secondary_root. The cache is keyed by the
-    % session's full path, so one file serves every root.
-    cohort_sheet = strings(1, n_cohort);
-    for cohort_idx = 1:n_cohort
-        cohort = cohorts(cohort_idx);
-        cohort_dir = fullfile(working_root, cohort);        % 1xK, one per root
-        cohort_out = fullfile(secondary_root, cohort);
-        has_cohort = isfolder(cohort_dir);
-        if ~any(has_cohort)
-            error('dirs_mergetable:noCohort', 'cohort folder %s under none of: %s', ...
-                cohort, strjoin(working_root, ', '));
-        end
-        if ~isfolder(cohort_out)
-            mkdir(cohort_out)
-        end
-        cohort_sheet(cohort_idx) = fullfile(cohort_out, cohort + "_dirtable.xlsx");
-        cache_path = fullfile(cohort_out, cohort + "_dircache.mat");
-
-        scan_start = tic;
-        scanned = cell(1, numel(cohort_dir));
-        for root_idx = find(has_cohort)
-            scanned{root_idx} = dirs_mapstruct(char(cohort_dir(root_idx)), primary_map, ...
-                peripheral_map, stateanalysis_map, char(cache_path));
-        end
-        scanned_table = vertcat(scanned{has_cohort});
-        repeated = rootoverlap(string(scanned_table.Directory));
-        if ~isempty(repeated)
-            error('dirs_mergetable:overlap', 'session folders under more than one root:\n%s', ...
-                strjoin(repeated, newline));
-        end
-        dirs_writetable(scanned_table, char(cohort_sheet(cohort_idx)));
-        n_scanned(cohort_idx) = height(scanned_table);
-        fprintf('%-12s scanned %d sessions under %d root(s) in %.1f s\n', cohort, ...
-            n_scanned(cohort_idx), nnz(has_cohort), toc(scan_start));
-    end
-
-    %% 2. Join the cohort sheets
+    %% 1. Join the cohort sheets
 
     part = cell(1, n_cohort);
     for cohort_idx = 1:n_cohort
@@ -185,23 +137,9 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
 
     info = struct();
     info.sheet_path = sheet_path;
-    info.n_scanned = n_scanned;
     info.n_offtree = n_offtree;
     info.n_duplicate = n_duplicate;
     info.n_stale = n_stale;
     info.collision = collision;
     info.n_row = height(merged_table);
-end
-
-function repeated = rootoverlap(directory)
-%ROOTOVERLAP  Session folders the scan found under more than one root, the letter removed.
-%   Caller: dirs_mergetable
-%
-% IN   directory  N x 1 str   Directory of every scanned row, all roots together
-% OUT  repeated   M x 1 str   the rows whose path below the letter appeared already
-below_letter = lower(extractAfter(directory, ':'));
-[~, first_idx] = unique(below_letter, 'stable');
-is_repeat = true(numel(directory), 1);
-is_repeat(first_idx) = false;
-repeated = directory(is_repeat);
 end

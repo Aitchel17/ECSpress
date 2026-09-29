@@ -33,6 +33,9 @@ dirs_ecspath;                                        % three roots, minus zz_not
 dirs = dirs_central();
 
 %% the sessions
+for cohort = cohorts
+    dirs_scantable(dirs.working_root, dirs.secondary_root, cohort);
+end
 sheet_info = dirs_mergetable(dirs.working_root, dirs.secondary_root, ...
     cohorts, param.dataset);
 dir_table = readtable(sheet_info.sheet_path, 'VariableNamingRule', 'preserve');
