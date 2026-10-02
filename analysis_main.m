@@ -123,19 +123,26 @@ imagesc(squeeze(tmp.data(:,:,1,2:4)))
 
 %% 4.2 Cluster polar analysis
 %% 5.1 Make cluster
-session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.dir_struct.primary_analysis);
+session.polarcluster = analysis_clusterpolar();
+bvch = session.pax_fwhm.param.channel_lumen;     % the stacks in the channel map FWHM recorded
+csfch = session.pax_fwhm.param.channel_pvs;
+session.polarcluster.cluster(session.pax_fwhm.kymograph.kgph_lumen_processed, ...
+    twophoton_processed.(bvch), twophoton_processed.(csfch), ...
+    session.pax_fwhm.idx.upperBVboundary, session.pax_fwhm.idx.lowerBVboundary);
+session.polarcluster.pickstate();
+session.polarcluster.save2disk(session.dir_struct.primary_analysis);
 %% 5.2 Make cluster figure
 analysis_cluster_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_polarcluster);
 %% 5.3 Manual Contour Correction
-session.polarcluster = analysis_clusterpolar_contour(session.polarcluster, session.roilist);
+session.polarcluster.drawcontour(session.roilist);
 %% 5.4 Polar transform of contours (cartesian -> polar profiles)
-session.polarcluster = analysis_clusterpolar_polarplot(session.polarcluster, session.roilist);
+session.polarcluster.transform(session.roilist);
 %% 5.4b Polar figure
 analysis_polar_makefig(session.polarcluster, session.dir_struct.figures_polarcluster);
 session.roilist.save2disk(session.dir_struct.primary_analysis);
 % 5.5 save polar cluster
 polarcluster = session.polarcluster;
-save(fullfile(session.dir_struct.primary_analysis, 'polarcluster.mat'), "polarcluster");
+session.polarcluster.save2disk(session.dir_struct.primary_analysis);
 %%
 figure()
 

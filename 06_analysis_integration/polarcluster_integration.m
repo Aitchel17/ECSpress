@@ -27,7 +27,7 @@ dirs.save_dir = fullfile(dirs.secondary_root, 'polar_ave');
 % readable without tracing which line wrote what.
 %   caution  index k of every r_*_px is the bin whose CENTER is (k-0.5) + bin_start
 %            degrees. bin_start is the same for every session (-7.5, pax-independent
-%            since analysis_clusterpolar_polarplot stopped baking PAX in), so the
+%            since the polar transform stopped baking PAX in), so the
 %            offset is common and cancels once each session is rotated to its own
 %            max-dilation axis
 session_proto = struct( ...
@@ -78,11 +78,14 @@ for file_idx = 1:numel(file_list)
     loaded_rl = load(roi_path);
     polarcluster = loaded_pc.polarcluster;
     roilist      = loaded_rl.roilist;
+    if isstruct(polarcluster)
+        polarcluster = analysis_clusterpolar.from_struct(polarcluster);
+    end
 
-    % 1.1 the transform itself -- the SAME function the per-session figure uses,
+    % 1.1 the transform itself -- the SAME method the per-session figure uses,
     %     so a row here and that session's polar figure cannot drift apart
-    polarcluster = analysis_clusterpolar_polarplot(polarcluster, roilist);
-    if ~isfield(polarcluster, 'polar_profiles') || isempty(polarcluster.polar_profiles)
+    polarcluster.transform(roilist);
+    if isempty(polarcluster.polar_profiles)
         skipped(end+1, :) = [string(session_name), "transform declined"];  %#ok<SAGROW>
         continue
     end

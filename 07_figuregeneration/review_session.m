@@ -34,7 +34,7 @@ analysis_cluster_makefig(session.polarcluster, session.roilist, session.pax_fwhm
     session.dir_struct.figures_polarcluster);
 
 %% the polar profiles. Only for a session that went through
-% analysis_clusterpolar_polarplot -- this reads pax_angle, polar_theta,
+% analysis_clusterpolar.transform -- this reads pax_angle, polar_theta,
 % polar_profiles and polar_binstart_deg, and a polarcluster.mat saved before that
 % step carries none of the four
 analysis_polar_makefig(session.polarcluster, session.dir_struct.figures_polarcluster);

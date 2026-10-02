@@ -4,7 +4,7 @@
 %   Everything here is READ and DRAWN. Nothing is measured -- the heatmap, the mode
 %   curve and the annulus area were all computed by tablegeneration_fwhmrelation and
 %   are read back out of this session's row; the polar profiles come from
-%   analysis_clusterpolar_polarplot, which needs only the four contour ROIs.
+%   analysis_clusterpolar.transform, which needs only the four contour ROIs.
 %
 %   BEFORE RUNNING, in this order:
 %     02_othersignal/main_analog.m   cells 1 to the force/ball block, which is
@@ -44,15 +44,15 @@ analysis_cluster_makefig(session.polarcluster, session.roilist, session.pax_fwhm
     session.dir_struct.figures_polarcluster);
 
 %% 4. polar contours
-% analysis_clusterpolar_polarplot gates on the four contour labels in roilist, not on
-% polarcluster.manual_roi, so a session contoured in an earlier run goes straight
-% through and no polygon has to be redrawn
+% analysis_clusterpolar.transform gates on the four contour labels in roilist, so a
+% session contoured in an earlier run goes straight through and no polygon has to be
+% redrawn
 contour_labels = ["constrictedBV_contour", "constrictedPVS_contour", ...
                   "dilatedBV_contour",     "dilatedPVS_contour"];
 have_polar = false;
 if all(ismember(contour_labels, session.roilist.list()))
-    session.polarcluster = analysis_clusterpolar_polarplot(session.polarcluster, session.roilist);
-    have_polar = isfield(session.polarcluster, 'polar_profiles');
+    session.polarcluster.transform(session.roilist);
+    have_polar = ~isempty(session.polarcluster.polar_profiles);
     if have_polar
         analysis_polar_makefig(session.polarcluster, session.dir_struct.figures_polarcluster);
     end
