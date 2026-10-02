@@ -127,6 +127,10 @@ classdef ECSSession < mdfExtractLoader
                     end
                 end
             end
+            % A polarcluster.mat written before analysis_clusterpolar was a class holds a struct
+            if isstruct(obj.polarcluster)
+                obj.polarcluster = analysis_clusterpolar.from_struct(obj.polarcluster);
+            end
 
             % Radon
             % Try loading the new object-based file first
