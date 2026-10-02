@@ -5,7 +5,7 @@
 %   polar_ave_fig does that, so a colour or normalisation change never re-runs
 %   the edge detection.
 %
-%   why      the transform is the expensive half (edge detect x4 per session over
+%   why      the transform is the expensive half (edge detect x6 per session over
 %            the whole set); alignment and normalisation are arithmetic on 360
 %            numbers. Splitting there is what makes the figure script cheap to
 %            iterate on
@@ -37,17 +37,25 @@ session_proto = struct( ...
     'session_type',     "",  ...   % string           sleep | whiskerb | whisker
     'depth_um',         NaN, ...   % float um         from Comments, NaN if absent
     'pixel2um',         NaN, ...   % float um/px      from objpix, NaN if absent
-    'r_cbv_px',         [],  ...   % 1 x 360 float px constricted BV, NaN = empty bin
-    'r_cpvs_px',        [],  ...   % 1 x 360 float px constricted PVS
-    'r_dbv_px',         [],  ...   % 1 x 360 float px dilated BV
-    'r_dpvs_px',        [],  ...   % 1 x 360 float px dilated PVS
+    'r_constricted_bv_px',   [],  ...   % 1 x 360 float px constricted BV, NaN = empty bin
+    'r_constricted_pvs_px',  [],  ...   % 1 x 360 float px constricted PVS
+    'r_dilated_bv_px',       [],  ...   % 1 x 360 float px dilated BV
+    'r_dilated_pvs_px',      [],  ...   % 1 x 360 float px dilated PVS
+    'r_intermediate_bv_px',  [],  ...   % 1 x 360 float px intermediate BV, all NaN where not contoured
+    'r_intermediate_pvs_px', [],  ...   % 1 x 360 float px intermediate PVS
     'theta_maxdil_deg', NaN, ...   % float deg        dilation axis, 1st circ harmonic
     'theta_argmax_deg', NaN, ...   % float deg        smoothed peak, for comparison only
     'maxdil_px',        NaN, ...   % float px         peak of the smoothed dilation
     'dil_anisotropy',   NaN, ...   % float 0-1        0 = swells evenly, axis meaningless
-    'n_empty_bin',      [],  ...   % 1 x 4 int        empty bins per profile, of 360
-    'maxgap_deg',       [],  ...   % 1 x 4 int deg    longest contiguous empty run
+    'n_empty_bin',      [],  ...   % 1 x 6 int        empty bins per profile, of 360, in the r_* order above
+    'maxgap_deg',       [],  ...   % 1 x 6 int deg    longest contiguous empty run, same order
     'folder',           "");       % string           primary_analysis folder
+
+% The profiles a row carries, in the order polar_profiles, n_empty_bin and maxgap_deg use
+state_of   = ["constricted", "constricted", "dilated", "dilated", "intermediate", "intermediate"];
+channel_of = ["bv", "pvs", "bv", "pvs", "bv", "pvs"];
+want       = state_of + upper(channel_of) + "_contour";     % 1 x 6 string  roilist labels
+row_fields = "r_" + state_of + "_" + channel_of + "_px";    % 1 x 6 string  session_proto fields
 
 param.smooth_deg = 15;    % circular moving-average width for the alignment measurement
 
@@ -91,21 +99,20 @@ for file_idx = 1:numel(file_list)
     end
 
     % 1.2 unpack by label, not by position
-    profile_r = nan(4, 360);
-    want = {'constrictedBV_contour','constrictedPVS_contour', ...
-            'dilatedBV_contour','dilatedPVS_contour'};
+    profile_r = nan(numel(want), 360);
     labels_found = string({polarcluster.polar_profiles.roi_label});
-    for want_idx = 1:4
-        hit = find(labels_found == want{want_idx}, 1);
+    for want_idx = 1:numel(want)
+        hit = find(labels_found == want(want_idx), 1);
         if ~isempty(hit)
             profile_r(want_idx, :) = polarcluster.polar_profiles(hit).binned_r;
         end
     end
 
-    % 1.3 the dilation axis. Gaps are filled FIRST : a contour is a closed curve,
-    %     so an empty bin is a sampling gap, not a missing radius
-    r_cbv_filled = fill_circular(profile_r(1, :));
-    r_dbv_filled = fill_circular(profile_r(3, :));
+    % 1.3 the dilation axis, constricted BV against dilated BV. Gaps are filled
+    %     FIRST : a contour is a closed curve, so an empty bin is a sampling gap,
+    %     not a missing radius
+    r_cbv_filled = fill_circular(profile_r(row_fields == "r_constricted_bv_px", :));
+    r_dbv_filled = fill_circular(profile_r(row_fields == "r_dilated_bv_px", :));
     dilation_px  = r_dbv_filled - r_cbv_filled;
     [theta_maxdil, theta_argmax, maxdil, anisotropy] = dilation_axis(dilation_px, param.smooth_deg);
 
@@ -120,16 +127,15 @@ for file_idx = 1:numel(file_list)
     row.session_type     = info.session_type;
     row.depth_um         = info.depth_um;
     row.pixel2um         = info.pixel2um;
-    row.r_cbv_px         = profile_r(1, :);
-    row.r_cpvs_px        = profile_r(2, :);
-    row.r_dbv_px         = profile_r(3, :);
-    row.r_dpvs_px        = profile_r(4, :);
+    for field_idx = 1:numel(row_fields)
+        row.(row_fields(field_idx)) = profile_r(field_idx, :);
+    end
     row.theta_maxdil_deg = theta_maxdil;
     row.theta_argmax_deg = theta_argmax;
     row.maxdil_px        = maxdil;
     row.dil_anisotropy   = anisotropy;
     row.n_empty_bin      = sum(isnan(profile_r), 2)';
-    row.maxgap_deg       = arrayfun(@(k) longest_gap(profile_r(k, :)), 1:4);
+    row.maxgap_deg       = arrayfun(@(k) longest_gap(profile_r(k, :)), 1:numel(want));
     row.folder           = string(primary_dir);
     sessions(end+1) = row;  %#ok<SAGROW>
 
@@ -160,8 +166,7 @@ save(fullfile(dirs.save_dir, 'polar_ave.mat'), 'polar_ave');
 fprintf('\nwrote %s\n', fullfile(dirs.save_dir, 'polar_ave.mat'));
 
 % a table view for eyeballing, rows side by side
-summary_table = struct2table(rmfield(sessions, ...
-    {'r_cbv_px','r_cpvs_px','r_dbv_px','r_dpvs_px','folder'}));
+summary_table = struct2table(rmfield(sessions, [cellstr(row_fields), {'folder'}]));
 disp(summary_table)
 
 

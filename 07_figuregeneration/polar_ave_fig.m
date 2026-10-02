@@ -64,7 +64,9 @@ end
 if param.vessel_prefix ~= ""
     keep = keep & startsWith([sessions.vessel_id], param.vessel_prefix);
 end
-keep = keep & arrayfun(@(s) max(s.maxgap_deg) <= param.maxgap_deg, sessions);
+% the gate is on the four profiles drawn here; entries 5-6 are the intermediate,
+% which this figure does not use and which most sessions have not contoured
+keep = keep & arrayfun(@(s) max(s.maxgap_deg(1:4)) <= param.maxgap_deg, sessions);
 keep = keep & ~isnan([sessions.theta_maxdil_deg]);
 keep = keep & [sessions.dil_anisotropy] >= param.min_anisotropy;
 selected = sessions(keep);
@@ -76,7 +78,7 @@ n_bin = 360 / param.bin_deg;
 theta_deg = (0:n_bin-1) * param.bin_deg + param.bin_deg/2;      % bin centres
 n_sel = numel(selected);
 profile_fields = ["r_cbv", "r_cpvs", "r_dbv", "r_dpvs"];
-source_fields  = ["r_cbv_px", "r_cpvs_px", "r_dbv_px", "r_dpvs_px"];
+source_fields  = ["r_constricted_bv_px", "r_constricted_pvs_px", "r_dilated_bv_px", "r_dilated_pvs_px"];
 aligned = struct();
 for field_idx = 1:4
     aligned.(profile_fields(field_idx)) = nan(n_sel, n_bin);
@@ -84,7 +86,7 @@ end
 for sel_idx = 1:n_sel
     s = selected(sel_idx);
     % the divisor is the mean over MEASURED bins only
-    scale_px = mean(s.r_cbv_px, 'omitnan');
+    scale_px = mean(s.r_constricted_bv_px, 'omitnan');
     for field_idx = 1:4
         rotated = rotate_bins(s.(source_fields(field_idx)), s.theta_maxdil_deg);
         aligned.(profile_fields(field_idx))(sel_idx, :) = ...

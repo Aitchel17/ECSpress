@@ -4,7 +4,7 @@ function analysis_polar_makefig(polarcluster, save_dir)
 %   No transform here: it only iterates polarcluster.polar_profiles and plots.
 %
 %   Inputs:
-%       polarcluster: Struct with .polar_theta (1x360) and .polar_profiles (1x4)
+%       polarcluster: analysis_clusterpolar with .polar_theta (1x360) and .polar_profiles (1x6)
 %       save_dir: Output directory (skip save if empty)
 
 if isempty(polarcluster.polar_profiles)
@@ -18,9 +18,10 @@ if ~isempty(polarcluster.polar_binstart_deg)
     theta = theta + deg2rad(polarcluster.polar_binstart_deg);
 end
 
-% Presentation only: colors by condition order (CBV, CPVS, DBV, DPVS)
+% Presentation only: colors by condition order (CBV, CPVS, DBV, DPVS, IBV, IPVS)
 clee = color_lee;
-plot_colors = {clee.clist.red, clee.clist.darkgreen, clee.clist.magenta, clee.clist.green};
+plot_colors = {clee.clist.red, clee.clist.darkgreen, clee.clist.magenta, clee.clist.green, ...
+    clee.clist.pink, clee.clist.lightgreen};
 
 % Initialize polar figure
 fig = make_fig('cluster_polar_contours', 'polar');
