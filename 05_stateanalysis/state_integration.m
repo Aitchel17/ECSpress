@@ -1,6 +1,7 @@
 classdef state_integration < handle
-    %UNTITLED Summary of this class goes here
-    %   Detailed explanation goes here
+    %STATE_INTEGRATION  One recording's bout tables: the sleep score into state bouts, or the puff x locomotion bouts off the analog.
+    %   Caller: piv_integration_testbed, piv_transition_session, centralize_driftsession,
+    %           centralize_statesession, review_session, stateintegration_test
     %   This class is designed tobe initialize time_table and hold indices
     %   corresponding to time table using time_axis of target analysis
     %   Each
@@ -46,6 +47,17 @@ classdef state_integration < handle
         function awake_integration(obj, primary_analog)
             % primary_analog  struct   the primary_analog field of analysis_analog.mat,
             %                          already loaded. Only airtable and ball are read
+            %
+            % Bout tables, two anchors on one window of margin_s around every puff:
+            %   dur<X>                      every puff of that duration, as the airtable has it
+            %   puff_go_dur<X>              a puff with a run anywhere in its window
+            %   puff_nogo_dur<X>            a puff with none
+            %   go_puff / go_nopuff         the runs cut at the puff windows: the pieces inside
+            %                               one, and the pieces outside every one
+            %   nogo_puff / nogo_nopuff     the rests likewise; a rest's window is the puff and
+            %                               its after-margin only
+            %   <from>_<to>_trans           rest into a run or a puff, and back; the suffix is
+            %                               what get_transitionsummary selects on
             %% Whisker stimulation time table
             atable = primary_analog.airtable;
             atable.('rounded_duration')= round(atable.Duration);
@@ -71,80 +83,49 @@ classdef state_integration < handle
             gap_tolerance    = 3 * fs;
             binary_move      = get_binaryball(absball, binary_smooth, gap_tolerance);
 
-            % Convert binary to Nx2 [start, end] time table (min bout = 5 s)
-            move_table = logic2timetable(taxis, binary_move, 5);
-            %%
-            obj.time_table.move = move_table;
+            % Convert binary to Nx2 [start, end] time table
+            min_bout_s = 5;      % shortest run, rest, or piece of one that is kept (s)
+            move_table = logic2timetable(taxis, binary_move, min_bout_s);
+            rest_table = logic2timetable(taxis, ~binary_move, min_bout_s);
 
-            %% Per-duration merge: merged_durX = stim start + max(stim end, move end)
-            all_air = [];
-            all_merged = [];
+            %% Puff-anchored: each puff by whether a run falls in its window
+            margin_s = 10;
+            all_puff = [];
             for idx = 1:numel(unique_dur)
-                stim_dur  = unique_dur(idx);
-                dur_field = strcat("dur", string(stim_dur));
-                dur_air   = obj.time_table.(dur_field);  % Nx2 for this duration
-
-                % Merge this duration's stim intervals with movement table
-                merged_dur = merge_airtable_movtable(dur_air, move_table, 10);
-                obj.time_table.(strcat("merged_", dur_field)) = merged_dur;  % ← stored per duration
-
-                % Accumulate all stim intervals for pure_movement filtering
-                all_air = [all_air; dur_air]; %#ok<AGROW>
-
-                % Accumulate all merged intervals for all_merged_airpuff
-                if ~isempty(merged_dur)
-                    all_merged = [all_merged; merged_dur]; %#ok<AGROW>
-                end
+                dur_field = strcat("dur", string(unique_dur(idx)));
+                puff_table = obj.time_table.(dur_field);
+                is_go = bout_hasoverlap(puff_table, move_table, margin_s, margin_s);
+                obj.time_table.(strcat("puff_go_", dur_field)) = puff_table(is_go, :);
+                obj.time_table.(strcat("puff_nogo_", dur_field)) = puff_table(~is_go, :);
+                all_puff = [all_puff; puff_table]; %#ok<AGROW>
             end
 
-            % Save all merged air puffs sorted by start time
-            if ~isempty(all_merged)
-                [~, sort_idx] = sort(all_merged(:, 1));
-                all_merged = all_merged(sort_idx, :);
-            end
-            obj.time_table.all_merged_airpuff = all_merged;
+            %% Locomotion-anchored: each run and each rest cut at the puff windows
+            % a whole-bout label made one 30-min run go_puff for nine puffs; see CLAUDE_LOG.md
+            run_window = [all_puff(:, 1) - margin_s, all_puff(:, 2) + margin_s];
+            rest_window = [all_puff(:, 1), all_puff(:, 2) + margin_s];
+            [obj.time_table.go_puff, obj.time_table.go_nopuff] = ...
+                bout_cutwindows(move_table, run_window, min_bout_s);
+            [obj.time_table.nogo_puff, obj.time_table.nogo_nopuff] = ...
+                bout_cutwindows(rest_table, rest_window, min_bout_s);
 
-            %% pure_movement: all movement bouts that DO NOT overlap with any merged airpuff
-            is_pure = true(size(move_table, 1), 1);
-            for m = 1:size(move_table, 1)
-                m_start = move_table(m, 1);
-                m_end   = move_table(m, 2);
-                for a = 1:size(all_merged, 1)
-                    a_start = all_merged(a, 1);
-                    a_end   = all_merged(a, 2);
-                    % Check overlap (strict overlap)
-                    if m_start <= a_end && m_end >= a_start
-                        is_pure(m) = false;
-                        break;
-                    end
-                end
-            end
-            obj.time_table.pure_movement = move_table(is_pure, :);
-
-            %% static: inverse of binary move (minimum 5 seconds of rest)
-            obj.time_table.static = logic2timetable(taxis, ~binary_move, 5);
-
-            %% Transitions
+            %% Transitions out of and back into the plain rest
             if ~isfield(obj.param, 'transition_window')
                 obj.param.transition_window = 10;
             end
             trans_win = obj.param.transition_window;
-
-            % pure <-> static transitions
-            obj.time_table.trans_static2pure = get_transition(trans_win, obj.time_table.static, obj.time_table.pure_movement, 0.5);
-            obj.time_table.trans_pure2static = get_transition(trans_win, obj.time_table.pure_movement, obj.time_table.static, 0.5);
-
-            % merged_durX <-> static transitions
+            obj.time_table.nogo_nopuff_go_nopuff_trans = ...
+                get_transition(trans_win, obj.time_table.nogo_nopuff, obj.time_table.go_nopuff, 0.5);
+            obj.time_table.go_nopuff_nogo_nopuff_trans = ...
+                get_transition(trans_win, obj.time_table.go_nopuff, obj.time_table.nogo_nopuff, 0.5);
             for idx = 1:numel(unique_dur)
-                stim_dur = unique_dur(idx);
-                merged_field = strcat("merged_dur", string(stim_dur));
-
-                if isfield(obj.time_table, merged_field)
-                    obj.time_table.(strcat("static_",merged_field,"_trans")) = ...
-                        get_transition(trans_win, obj.time_table.static, obj.time_table.(merged_field), 0.5);
-
-                    obj.time_table.(strcat(merged_field, "_static","_trans")) = ...
-                        get_transition(trans_win, obj.time_table.(merged_field), obj.time_table.static, 0.5);
+                dur_field = strcat("dur", string(unique_dur(idx)));
+                for puff_kind = ["puff_go_", "puff_nogo_"]
+                    puff_field = strcat(puff_kind, dur_field);
+                    obj.time_table.(strcat("nogo_nopuff_", puff_field, "_trans")) = ...
+                        get_transition(trans_win, obj.time_table.nogo_nopuff, obj.time_table.(puff_field), 0.5);
+                    obj.time_table.(strcat(puff_field, "_nogo_nopuff_trans")) = ...
+                        get_transition(trans_win, obj.time_table.(puff_field), obj.time_table.nogo_nopuff, 0.5);
                 end
             end
 
@@ -258,4 +239,3 @@ classdef state_integration < handle
 
     end
 end
-
