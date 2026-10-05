@@ -1,6 +1,6 @@
 function [folder_hash, file_hash] = dirs_queryhash(folder_path, relative_path)
 %DIRS_QUERYHASH  SHA-256 of a folder's files, one per file and one over all of them.
-%   Caller: dirs_hashstate
+%   Caller: dirs_hashstate, archive_session
 %   The folder hash is the SHA-256 of the sorted "relative path|file hash" lines, so the
 %   order the files are listed in cannot move it. A file is opened for reading with others
 %   allowed only to read, so a file being written throws instead of hashing half of it.

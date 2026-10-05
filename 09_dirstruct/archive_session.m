@@ -17,8 +17,9 @@
 %
 %   Cell 1 writes to the mirror disks, cell 2 the backup sheet of the dirtable, cell 5
 %   under the archive disks. Cells 0, 3, 4 and 6 touch nothing. CELL 7 IS THE ONLY ONE
-%   THAT DELETES, it deletes in the DATA TREE, and it deletes only what cell 6 verified
-%   in the same MATLAB session.
+%   THAT DELETES, it deletes in the DATA TREE, and it deletes a recording only after
+%   reading its work copy, its archive copy and its mirror copy in full, at that moment,
+%   and finding the three hash the same.
 %
 %   The date comes from the date folder above the recording, so a recording under
 %   <mouse>\zstack\ has none and is never archived. dirs_mergetable has to read the
@@ -129,7 +130,8 @@ fprintf('verified : %d of %d, %.1f GB\n', sum(move_table.Verified), height(move_
     sum(move_table.GB(move_table.Verified)));
 
 %% 7. Remove the source   [DELETES IN THE DATA TREE]
-% Only rows cell 6 verified, and each is checked again at the moment it is removed.
+% Rows cell 6 verified. Each is read in full here: the work copy, its archive copy and
+% its mirror copy must hash the same, or the row is skipped. Nothing stored earlier is trusted.
 remove_table = move_table(move_table.Verified, :);
 fprintf('about to remove %d recording folders, %.1f GB, under %s\n', ...
     height(remove_table), sum(remove_table.GB), strjoin(dirs.work_root, ' | '));
@@ -142,8 +144,22 @@ if ~strcmp(input('type REMOVE to proceed: ', 's'), 'REMOVE')
     return
 end
 for remove_idx = 1:height(remove_table)
-    if ~samefiles(remove_table.Source(remove_idx), remove_table.Target(remove_idx))
-        fprintf('SKIP no longer verifies  %s\n', remove_table.Rel(remove_idx));
+    mirror_rel  = fullfile("tmp", remove_table.Rel(remove_idx));
+    mirror_disk = dirs_pickroot(dirs.mirror_root, mirror_rel);
+    mirror_path = fullfile(mirror_disk, mirror_rel);
+    if strlength(mirror_disk) == 0 || ~isfolder(mirror_path)
+        fprintf('SKIP no mirror copy        %s\n', remove_table.Rel(remove_idx));
+        continue
+    end
+    source_hash  = dirs_queryhash(remove_table.Source(remove_idx));
+    archive_hash = dirs_queryhash(remove_table.Target(remove_idx));
+    mirror_hash  = dirs_queryhash(mirror_path);
+    if archive_hash ~= source_hash
+        fprintf('SKIP archive copy differs  %s\n', remove_table.Rel(remove_idx));
+        continue
+    end
+    if mirror_hash ~= source_hash
+        fprintf('SKIP mirror copy differs   %s\n', remove_table.Rel(remove_idx));
         continue
     end
     rmdir(remove_table.Source(remove_idx), 's');
