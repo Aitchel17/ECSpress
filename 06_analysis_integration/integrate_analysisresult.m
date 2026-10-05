@@ -4,15 +4,14 @@
 %   cell calls the stage that owns the work.
 %
 %   THE CHAIN, and what each stage leaves on disk
-%     1  rename_avi_files          nothing -- it renames video files in the DATA tree
 %     2  centralize_primary        <cohort>_dirtable.xlsx, <dataset>_dirtable.xlsx and
 %                                  centralized/centralized_<product>.mat, five of them
 %     3  centralize_paxfwhmstate   centralized/centralized_paxfwhm_state.mat
 %     4  tablegeneration_main      state_summary.mat, transition.mat
 %     5  figures                   svg in the dataset folder, and figure windows
 %
-%   CELL 1 IS THE ONLY ONE THAT WRITES INTO THE DATA TREE, and it only renames
-%   videos. Everything else writes under dirs.secondary_root alone. Stage 2 is the
+%   Nothing here writes into the DATA tree; everything writes under
+%   dirs.secondary_root alone. Stage 2 is the
 %   last stage that so much as opens a session folder; 3 onward work from what it
 %   gathered. Cell 0 is the only place a path is decided, so pointing this at
 %   another dataset is one edit.
@@ -83,27 +82,11 @@ check_exists = util_checkdirstat(check_paths);
 fprintf('%d of %d missing -- the stage that writes each is in the header above\n', ...
     sum(~check_exists), numel(check_exists));
 
-%% 1. Legacy AVI names   [WRITES INTO THE DATA TREE]
-% eye.avi / whisker.avi -> prefix_eye.avi, so the scan can tell which session a
-% video belongs to. The only cell in this file that touches the data trees, so it is
-% on its own and never runs as part of anything else.
-%   Set param.cohort_idx and run this cell once per cohort. It only has to run
-%   after an acquisition that produced the legacy names.
-param.cohort_idx = 2;
-cohort_dir = fullfile(dirs.working_root, param.cohorts(param.cohort_idx));   % one per root
-cohort_dir = cohort_dir(isfolder(cohort_dir));
-if isempty(cohort_dir)
-    error('integrate:noCohort', 'cohort folder not found under any root: %s', ...
-        param.cohorts(param.cohort_idx));
-end
-for root_idx = 1:numel(cohort_dir)
-    rename_avi_files(char(cohort_dir(root_idx)));
-end
-
 %% 1.1 Field drift in stored objects -- run when stage 4 fails on a flatten
 % One session saved before getdiameter gained eps/epschanges is enough to make
 % struct2table wrap every row in a cell, and explode_nest then fails.
 % see CLAUDE_LOG.md. dryrun lists what would change and writes nothing.
+param.cohort_idx = 2;   % which of param.cohorts, one per run
 cohort_dir = fullfile(dirs.working_root, param.cohorts(param.cohort_idx));   % one per root
 for root_idx = find(isfolder(cohort_dir))
     fwhm_rederive(char(cohort_dir(root_idx)), dryrun = true);

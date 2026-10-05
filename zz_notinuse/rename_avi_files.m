@@ -1,5 +1,6 @@
 function rename_avi_files(root_dir)
 % RENAME_AVI_FILES Recursively renames eye.avi and whisker.avi to match *info.txt prefix
+%   Caller: dirtable_main, integrate_analysisresult
 %
 % Usage: rename_avi_files('G:\path\to\start\folder')
 
