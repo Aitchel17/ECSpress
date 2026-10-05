@@ -34,31 +34,43 @@ param.series_colour = struct( ...
     'thickness_totalpvs', struct('faint', clee.lch(80, 130, 110), 'bold', clee.lch(45, 150, 115)), ...
     'thickness_eps',      struct('faint', clee.lch(80, 130,  70), 'bold', clee.lch(45, 120,  75)));
 
-param.norm_field = "awakenorm_numeric";   % which arm of state_summary is drawn (str)
+param.norm_drawn = ["abs_numeric", "awakenorm_numeric", "awakesubtract_numeric"];
+param.norm_label = struct('abs_numeric', "absolute", ...
+    'awakenorm_numeric', "awake-normalized", 'awakesubtract_numeric', "awake-subtracted");
+% The reference line is where a state that did nothing would sit, and each arm puts
+% that somewhere else: awake divides to exactly 1 and subtracts to exactly 0. The
+% absolute arm has no such fixed point -- micrometres of lumen are not read against
+% anything -- so it gets no line. NaN means none.
+param.norm_refline = struct('abs_numeric', NaN, ...
+    'awakenorm_numeric', 1, 'awakesubtract_numeric', 0);
 
-%% One tile per series, one item per state
+%% One figure per normalisation, one tile per series, one item per state
 % A first spec was built here and then overwritten by an identical block, and the
 % surviving one was rendered twice, so the file opened two identical windows.
-sess_ave  = statsummary_table.(param.norm_field).Date_ave;
-mouse_ave = statsummary_table.(param.norm_field).MouseID_ave;
-plotdata  = build_plotdata(sess_ave, mouse_ave, filt.state_drawn, filt.series_drawn);
+for ni = 1:numel(param.norm_drawn)
+    norm_field = param.norm_drawn(ni);
+    sess_ave  = statsummary_table.(norm_field).Date_ave;
+    mouse_ave = statsummary_table.(norm_field).MouseID_ave;
+    plotdata  = build_plotdata(sess_ave, mouse_ave, filt.state_drawn, filt.series_drawn);
 
-spec_states = struct();
-spec_states.title = "Q2Q3 mean Grouped by states";
-spec_states.tile_layout = [1 numel(filt.series_drawn)];
-spec_states.tiles = struct('title', {}, 'items', {});
-for vi = 1:numel(filt.series_drawn)
-    series_name = filt.series_drawn(vi);
-    spec_states.tiles(vi).title = param.series_label.(series_name);
-    for ti = 1:numel(filt.state_drawn)
-        state_name = filt.state_drawn(ti);
-        spec_states.tiles(vi).items(ti).states   = state_name;
-        spec_states.tiles(vi).items(ti).datatype = series_name;
-        spec_states.tiles(vi).items(ti).color    = param.series_colour.(series_name);
-        spec_states.tiles(vi).items(ti).label    = param.state_label.(state_name);
+    spec_states = struct();
+    spec_states.title = "Q2Q3 mean by state – " + param.norm_label.(norm_field);
+    spec_states.tile_layout = [1 numel(filt.series_drawn)];
+    spec_states.refline = param.norm_refline.(norm_field);
+    spec_states.tiles = struct('title', {}, 'items', {});
+    for vi = 1:numel(filt.series_drawn)
+        series_name = filt.series_drawn(vi);
+        spec_states.tiles(vi).title = param.series_label.(series_name);
+        for ti = 1:numel(filt.state_drawn)
+            state_name = filt.state_drawn(ti);
+            spec_states.tiles(vi).items(ti).states   = state_name;
+            spec_states.tiles(vi).items(ti).datatype = series_name;
+            spec_states.tiles(vi).items(ti).color    = param.series_colour.(series_name);
+            spec_states.tiles(vi).items(ti).label    = param.state_label.(state_name);
+        end
     end
+    render_scatter_figure(spec_states, plotdata);
 end
-render_scatter_figure(spec_states, plotdata);
 
 
 
@@ -95,12 +107,12 @@ function render_scatter_figure(spec, plotdata)
         ax = axes(Parent=tl);
         ax.Layout.Tile = i;
         tile = spec.tiles(i);
-        plot_scatter_tile(ax, tile, plotdata);
+        plot_scatter_tile(ax, tile, plotdata, spec.refline);
     end
 
 end
 
-function plot_scatter_tile(ax, tile, plotdata)
+function plot_scatter_tile(ax, tile, plotdata, refline)
     hold(ax, 'on');
     
     n_items = numel(tile.items);
@@ -145,8 +157,10 @@ function plot_scatter_tile(ax, tile, plotdata)
         x_labels(i) = item.label;
     end
     
-    % Draw 0-line
-    yline(ax, 1, '--k', 'Alpha', 0.3, 'LineWidth', 1);
+    % where a state that did nothing would sit, if the arm has such a place
+    if isfinite(refline)
+        yline(ax, refline, '--k', 'Alpha', 0.3, 'LineWidth', 1);
+    end
 
     % Configure Limits & Appearance
     title(ax, tile.title, 'FontWeight', 'normal');
