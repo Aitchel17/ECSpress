@@ -38,6 +38,17 @@ analysis_cluster_makefig(session.polarcluster, session.roilist, session.pax_fwhm
 % polar_profiles and polar_binstart_deg, and a polarcluster.mat saved before that
 % step carries none of the four
 analysis_polar_makefig(session.polarcluster, session.dir_struct.figures_polarcluster);
+
+%% the awake bouts, for a session with no sleep score. Puff x locomotion from the ball and
+% the airtable in peripheral/analysis_analog.mat, which peripheral_batch writes
+if ~exist('sleepscore', 'var')
+    primary_analog = analysis_analog.load_object(fullfile(sessiondir, "peripheral"));
+    awake_integrate = state_integration([], primary_analog);
+    awake_fig = analysis_awake_makefig(awake_integrate.time_table, session.pax_fwhm.t_axis, ...
+        session.pax_fwhm.thickness.bv, session.pax_fwhm.thickness.totalpvs, ...
+        session.img_param.pixel2um, primary_analog.ball.rs_taxis, primary_analog.ball.resampled_ball, ...
+        session.dir_struct.figures_fwhm);
+end
 %%
 
 %% Grade it. The note is in ENGLISH and says what the columns cannot see -- where the
