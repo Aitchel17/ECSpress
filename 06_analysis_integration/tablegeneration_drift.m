@@ -44,22 +44,12 @@ central = loaded_central.central;
 clear loaded_central
 fprintf('centralized drift state : %d sessions\n   %s\n', height(central), central_path);
 
-key_table = central(:, param.key_columns);
 fwhm_state = load(fullfile(dirs.central, 'centralized_paxfwhm_state.mat')).central;
 key_fwhm = util_sessionkey(fwhm_state);
 clear fwhm_state
-n_session = height(central);
-subtable = struct();
+subtable = flatten_state(central, param.key_columns, param.nest_names);
 for name_idx = 1:numel(param.nest_names)
     nest_name = param.nest_names(name_idx);
-    nest_cell = cell(n_session, 1);
-    for session_idx = 1:n_session
-        session_row = central.data{session_idx};
-        if isfield(session_row, nest_name)
-            nest_cell{session_idx} = session_row.(nest_name);
-        end
-    end
-    subtable.(nest_name) = explode_nest(nest_cell, key_table);
     fprintf('   %-14s %d rows\n', nest_name, height(subtable.(nest_name)));
 end
 clear central
@@ -71,7 +61,7 @@ is_artery = contains(vessel_id, "PA", 'IgnoreCase', true);
 is_layer1 = analysis_table.NumericDepth < filt.depth_thr;
 is_longbout = analysis_table.bout_duration > filt.min_bout_s;
 is_scored = ismember(analysis_table.state_name, filt.state_names);
-has_fwhm = ismember(util_sessionkey(analysis_table), key_fwhm) | ~filt.require_fwhm;
+has_fwhm = ismember(analysis_table.session_key, key_fwhm) | ~filt.require_fwhm;
 keep_summary = is_artery & is_layer1 & is_longbout & is_scored & has_fwhm;
 fprintf('state_summary : %d of %d rows kept\n', sum(keep_summary), numel(keep_summary));
 summary_filtered = analysis_table(keep_summary, :);
@@ -81,14 +71,12 @@ data_colnames = {"raw_data"};
 numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var'};
 summarystatAnalyzer = tableAnalyzer(summary_filtered, struct());
 summarystatAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames,"division");
-summarystatAnalyzer = common_summarystat_analysis(summarystatAnalyzer);
+summarystatAnalyzer = rollup_summary(summarystatAnalyzer);
 result.drift_summary.abs_numeric = summarystatAnalyzer.numeric_tables;
 
 %% Awake subtraction
-tmp.awakenumtable = result.drift_summary.abs_numeric.bout_idx_ave(result.drift_summary.abs_numeric.bout_idx_ave.state_name=="awake",:);
 tmp.key_cols = ["MouseID","Date","VesselID","DataType"];
-tmp.awake_baseline = tmp.awakenumtable(:, [tmp.key_cols,"Q2Q3_mean"]);
-tmp.awake_baseline.Properties.VariableNames("Q2Q3_mean") = "awake_boutq2q3mean";
+tmp.awake_baseline = extract_awakebaseline(result.drift_summary.abs_numeric.bout_idx_ave, tmp.key_cols);
 
 summarystat_awake = outerjoin(result.drift_summary.abs_numeric.filtered_table, tmp.awake_baseline, ...
     'MergeKeys', true, ...
@@ -96,7 +84,7 @@ summarystat_awake = outerjoin(result.drift_summary.abs_numeric.filtered_table, t
     'RightKeys', tmp.key_cols);
 awakesubtract_summarystatAnalyzer = tableAnalyzer(summarystat_awake, struct());
 awakesubtract_summarystatAnalyzer.scale_table("awake_boutq2q3mean",data_colnames,numeric_colnames,"subtraction");
-awakesubtract_summarystatAnalyzer = common_summarystat_analysis(awakesubtract_summarystatAnalyzer);
+awakesubtract_summarystatAnalyzer = rollup_summary(awakesubtract_summarystatAnalyzer);
 result.drift_summary.awakesubtract_numeric = awakesubtract_summarystatAnalyzer.numeric_tables;
 
 %% Transition analysis, sleep recordings only
@@ -106,7 +94,7 @@ is_artery = contains(vessel_id, "PA", 'IgnoreCase', true);
 is_layer1 = analysis_table.NumericDepth < filt.depth_thr;
 session_type = string(analysis_table.SessionType);
 is_sleep = session_type == "sleep";
-has_fwhm = ismember(util_sessionkey(analysis_table), key_fwhm) | ~filt.require_fwhm;
+has_fwhm = ismember(analysis_table.session_key, key_fwhm) | ~filt.require_fwhm;
 keep_transition = is_artery & is_layer1 & is_sleep & has_fwhm;
 dropped_type = unique(session_type(~is_sleep));
 fprintf('SessionType : sleep %d rows | dropped %d (%s)\n', ...
@@ -119,7 +107,7 @@ numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
                 'post_mean','post_median','post_q1','post_q3', 'post_var'};
 transitionAnalyzer = tableAnalyzer(transition_filtered, struct());
 transitionAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames,"division");
-transitionAnalyzer = common_transition_analysis(transitionAnalyzer);
+transitionAnalyzer = rollup_transition(transitionAnalyzer);
 result.drift_transition.abs_numeric = transitionAnalyzer.numeric_tables;
 result.drift_transition.abs_data = transitionAnalyzer.data_tables;
 
@@ -129,7 +117,7 @@ transition_awake = outerjoin(result.drift_transition.abs_numeric.filtered_table,
     'RightKeys', tmp.key_cols);
 awakesubtracted_transitionAnalyzer = tableAnalyzer(transition_awake, struct());
 awakesubtracted_transitionAnalyzer.scale_table("awake_boutq2q3mean", data_colnames, numeric_colnames,"subtraction");
-awakesubtracted_transitionAnalyzer = common_transition_analysis(awakesubtracted_transitionAnalyzer);
+awakesubtracted_transitionAnalyzer = rollup_transition(awakesubtracted_transitionAnalyzer);
 result.drift_transition.awakesubtract_numeric = awakesubtracted_transitionAnalyzer.numeric_tables;
 result.drift_transition.awakesubtract_data = awakesubtracted_transitionAnalyzer.data_tables;
 
@@ -145,29 +133,4 @@ for save_idx = 1:numel(tmp.savefieldnames)
     save_content = result.(tmp.savefieldnames{save_idx});
     save(tmp.savepaths{save_idx}, "save_content", "param", "filt")
     fprintf('wrote %s\n', tmp.savepaths{save_idx});
-end
-
-
-function tableAnalyzer = common_summarystat_analysis(tableAnalyzer)
-    tableAnalyzer.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
-    tableAnalyzer.addPrctilecol("raw_data","prctile_95", 95);
-    tableAnalyzer.addPrctilecol("raw_data","prctile_5",5);
-    tableAnalyzer.numeric_tables.filtered_table = tableAnalyzer.filtered_table;
-    tableAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session
-    tableAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session
-    tableAnalyzer.get_numericsummary("VesselID","Date_ave") % Vessel
-    tableAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse
-end
-
-
-function tableAnalyzer = common_transition_analysis(tableAnalyzer)
-    tableAnalyzer.numeric_tables.filtered_table = tableAnalyzer.filtered_table;
-    tableAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session bout average
-    tableAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session average
-    tableAnalyzer.get_numericsummary("VesselID","Date_ave") % within mouse vessel average
-    tableAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse average
-    tableAnalyzer.get_datasummary("bout_idx","filtered_table")
-    tableAnalyzer.get_datasummary("Date","bout_idx_ave")
-    tableAnalyzer.get_datasummary("VesselID","Date_ave")
-    tableAnalyzer.get_datasummary("MouseID","VesselID_ave")
 end

@@ -54,19 +54,9 @@ central = loaded_central.central;
 clear loaded_central
 fprintf('centralized state : %d sessions\n   %s\n', height(central), central_path);
 
-key_table = central(:, param.key_columns);
-n_session = height(central);
-subtable = struct();
+subtable = flatten_state(central, param.key_columns, param.nest_names);
 for name_idx = 1:numel(param.nest_names)
     nest_name = param.nest_names(name_idx);
-    nest_cell = cell(n_session, 1);
-    for session_idx = 1:n_session
-        session_row = central.data{session_idx};
-        if isfield(session_row, nest_name)
-            nest_cell{session_idx} = session_row.(nest_name);
-        end
-    end
-    subtable.(nest_name) = explode_nest(nest_cell, key_table);
     fprintf('   %-14s %d rows\n', nest_name, height(subtable.(nest_name)));
 end
 clear central
@@ -87,18 +77,14 @@ data_colnames = {"raw_data"};
 numeric_colnames = {'raw_mean','raw_median','raw_q1','raw_q3', 'raw_var'};
 summarystatAnalyzer = tableAnalyzer(summary_filtered, struct());
 summarystatAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames,"division");
-summarystatAnalyzer = common_summarystat_analysis(summarystatAnalyzer);
+summarystatAnalyzer = rollup_summary(summarystatAnalyzer);
 result.state_summary.abs_numeric = summarystatAnalyzer.numeric_tables;
 
 
 % Awake normalization/subtraction
-tmp.awakenumtable = result.state_summary.abs_numeric.bout_idx_ave(result.state_summary.abs_numeric.bout_idx_ave.state_name=="awake",:);
-
-% 0. Extract the denominator baseline
 tmp.key_cols = ["MouseID","Date","VesselID","DataType"];
-tmp.awake_baseline = tmp.awakenumtable(:, [tmp.key_cols,"Q2Q3_mean"]);
-tmp.awake_baseline.Properties.VariableNames("Q2Q3_mean") = "awake_boutq2q3mean";
-tmp.awake_baseline.awake_scale = 1./tmp.awake_baseline.awake_boutq2q3mean;
+tmp.awake_baseline = extract_awakebaseline(result.state_summary.abs_numeric.bout_idx_ave, tmp.key_cols);
+tmp.awake_baseline.awake_scale = 1 ./ tmp.awake_baseline.awake_boutq2q3mean;
 
 summarystat_awakenorm = outerjoin(result.state_summary.abs_numeric.filtered_table, tmp.awake_baseline, ...
     'MergeKeys', true, ...
@@ -107,13 +93,13 @@ summarystat_awakenorm = outerjoin(result.state_summary.abs_numeric.filtered_tabl
 % 1. get awake normalized table
 awakescaled_summarystatAnalyzer = tableAnalyzer(summarystat_awakenorm, struct());
 awakescaled_summarystatAnalyzer.scale_table("awake_scale",data_colnames,numeric_colnames,"division");
-awakescaled_summarystatAnalyzer = common_summarystat_analysis(awakescaled_summarystatAnalyzer);
+awakescaled_summarystatAnalyzer = rollup_summary(awakescaled_summarystatAnalyzer);
 result.state_summary.awakenorm_numeric = awakescaled_summarystatAnalyzer.numeric_tables;
 
 % 2. get awake subtracted table
 awakesubtract_summarystatAnalyzer = tableAnalyzer(summarystat_awakenorm, struct());
 awakesubtract_summarystatAnalyzer.scale_table("awake_boutq2q3mean",data_colnames,numeric_colnames,"subtraction");
-awakesubtract_summarystatAnalyzer = common_summarystat_analysis(awakesubtract_summarystatAnalyzer);
+awakesubtract_summarystatAnalyzer = rollup_summary(awakesubtract_summarystatAnalyzer);
 result.state_summary.awakesubtract_numeric = awakesubtract_summarystatAnalyzer.numeric_tables;
 
 
@@ -144,7 +130,7 @@ numeric_colnames = {'pre_mean','pre_median','pre_q1','pre_q3', 'pre_var',...
                 'post_mean','post_median','post_q1','post_q3', 'post_var'};
 transitionAnalyzer = tableAnalyzer(transition_filtered, struct());
 transitionAnalyzer.scale_table("NumericResolution",data_colnames,numeric_colnames,"division");
-transitionAnalyzer = common_transition_analysis(transitionAnalyzer);
+transitionAnalyzer = rollup_transition(transitionAnalyzer);
 result.transition.abs_numeric = transitionAnalyzer.numeric_tables;
 result.transition.abs_data = transitionAnalyzer.data_tables;
 
@@ -157,13 +143,13 @@ transition_awakenorm = outerjoin(result.transition.abs_numeric.filtered_table, t
 awakescaled_transitionAnalyzer = tableAnalyzer(transition_awakenorm, struct());
 awakescaled_transitionAnalyzer.scale_table("awake_scale", data_colnames, numeric_colnames,"division");
 % Re-calculate numeric and data summaries
-awakescaled_transitionAnalyzer = common_transition_analysis(awakescaled_transitionAnalyzer);
+awakescaled_transitionAnalyzer = rollup_transition(awakescaled_transitionAnalyzer);
 result.transition.awakenorm_numeric = awakescaled_transitionAnalyzer.numeric_tables;
 result.transition.awakenorm_data = awakescaled_transitionAnalyzer.data_tables;
 
 awakesubtracted_transitionAnalyzer = tableAnalyzer(transition_awakenorm, struct());
 awakesubtracted_transitionAnalyzer.scale_table("awake_boutq2q3mean", data_colnames, numeric_colnames,"subtraction");
-awakesubtracted_transitionAnalyzer = common_transition_analysis(awakesubtracted_transitionAnalyzer);
+awakesubtracted_transitionAnalyzer = rollup_transition(awakesubtracted_transitionAnalyzer);
 result.transition.awakesubtract_numeric = awakesubtracted_transitionAnalyzer.numeric_tables;
 result.transition.awakesubtract_data = awakesubtracted_transitionAnalyzer.data_tables;
 
@@ -180,30 +166,4 @@ for save_idx = 1:numel(tmp.savefieldnames)
     save_content = result.(tmp.savefieldnames{save_idx});
     save(tmp.savepaths{save_idx}, "save_content")
     fprintf('wrote %s\n', tmp.savepaths{save_idx});
-end
-
-
-function tableAnalyzer = common_summarystat_analysis(tableAnalyzer)
-    tableAnalyzer.meanFrom2("raw_data","Q2Q3_mean",0.25,0.75)
-    tableAnalyzer.addPrctilecol("raw_data","prctile_95", 95);
-    tableAnalyzer.addPrctilecol("raw_data","prctile_5",5);
-    tableAnalyzer.numeric_tables.filtered_table = tableAnalyzer.filtered_table;
-    tableAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session
-    tableAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session
-    tableAnalyzer.get_numericsummary("VesselID","Date_ave") % Vessel
-    tableAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse
-end
-
-
-
-function tableAnalyzer = common_transition_analysis(tableAnalyzer)
-    tableAnalyzer.numeric_tables.filtered_table = tableAnalyzer.filtered_table;
-    tableAnalyzer.get_numericsummary("bout_idx","filtered_table") % intra session bout average
-    tableAnalyzer.get_numericsummary("Date","bout_idx_ave") % inter session average
-    tableAnalyzer.get_numericsummary("VesselID","Date_ave") % within mouse vessel average
-    tableAnalyzer.get_numericsummary("MouseID","VesselID_ave") % mouse average
-    tableAnalyzer.get_datasummary("bout_idx","filtered_table")
-    tableAnalyzer.get_datasummary("Date","bout_idx_ave")
-    tableAnalyzer.get_datasummary("VesselID","Date_ave")
-    tableAnalyzer.get_datasummary("MouseID","VesselID_ave")
 end
