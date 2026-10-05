@@ -1,6 +1,12 @@
-function final_binary_movement = get_binaryball(absball, binary_smooth,gap_tolerance)
-%GET_BINARYBALL Summary of this function goes here
-%   Detailed explanation goes here
+function final_binary_movement = get_binaryball(absball, binary_smooth, gap_tolerance, thresh)
+%GET_BINARYBALL  Running or not, per ball sample: the smoothed threshold crossings, gaps under gap_tolerance filled, edges snapped to the raw threshold.
+%   Caller: state_integration.awake_integration
+%
+% IN   absball        N float cm/s   |speed| at the ball's resampled rate
+%      binary_smooth  N bool         the smoothed |speed| above thresh
+%      gap_tolerance  1 x 1 float    samples; a pause shorter than this joins the runs around it
+%      thresh         1 x 1 float    cm/s; each edge is moved to where the raw |speed| crosses it
+% OUT  final_binary_movement  N bool
 % 3. Fill gaps where time between a falling edge and next rising edge is < 3 seconds
 
            % 2. Detect rising and falling edges of the smoothed binary movement
@@ -20,14 +26,14 @@ function final_binary_movement = get_binaryball(absball, binary_smooth,gap_toler
             final_rise_idx = find(final_diff == 1);
             final_fall_idx = find(final_diff == -1);
             
-            % 5. Compensate for smoothing effect using absball > 0.02
+            % 5. Compensate for smoothing effect using absball > thresh
             % For each filled bout, shrink or expand the start/end indices 
-            % to perfectly match the raw absball > 0.02 boundaries.
-            raw_movement = absball > 0.02;
+            % to perfectly match the raw absball > thresh boundaries.
+            raw_movement = absball > thresh;
             
             for i = 1:length(final_rise_idx)
                 curr_rise = final_rise_idx(i);
-                curr_fall = final_fall_idx(i);
+                curr_fall = min(final_fall_idx(i), length(absball));   % a bout reaching the last sample has its edge one past it
                 
                 % --- Adjust Rising Edge (Onset) ---
                 if ~raw_movement(curr_rise)
