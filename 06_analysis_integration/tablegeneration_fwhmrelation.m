@@ -24,6 +24,7 @@ filt.max_pxsize = 0.3;         % Coarsest pixel size kept (um/px), Inf = every s
 filt.pool_pxsize = [];         % Pixel size required for pooling (um/px), [] = every size
 filt.pxsize_tol = 0.01;        % Pixel size tolerance (um/px)
 filt.min_vessel = 10;          % Minimum vessels behind a diameter column (count)
+filt.pool_common_vessel = true;% Pool every state on the vessels all of them have (logical)
 filt.min_column_session = 5;   % Minimum columns per side, one session (count)
 filt.min_column_vessel = 4;    % Minimum columns per side, one vessel (count)
 
@@ -33,9 +34,9 @@ param.column_stat = "median";  % Column statistic the vessel_pool curve uses (st
 param.event_half = 75;         % Half window, transitions (count)
 param.event_half_bout = 180;   % Half window, scored bouts (count)
 param.stat_name = ["mode", "centroid", "median"];
-param.state_name = ["awake", "nrem", "rem", "uarousal", ...
+param.state_name = ["awake", "drowsy", "nrem", "rem", "uarousal", ...
     "an_trans", "na_trans", "nr_trans", "ra_trans"];
-param.state_pooled = ["awake", "nrem", "rem"];   % states that get a pooled map (str)
+param.state_pooled = ["awake", "drowsy", "nrem", "rem"];   % states that get a pooled map (str)
 % filt forms a verdict over rows; param changes only the numbers in them. t = 0 is the
 % window start plus event_half for a _trans interval and the bout start for a bout;
 % a _trans row overlaps its two neighbours. Why +event_half: see FINDINGS.md
@@ -273,6 +274,22 @@ keep_pooled = state.drawn & ismember(state.vessel_key, vessel_name);
 state_drawn = state(keep_pooled, :);
 fprintf('\nfwhmrelation.state_pool : %d of %d state rows kept\n', ...
     sum(keep_pooled), numel(keep_pooled));
+
+% One state reaching further than another is the result. Left on their own vessel
+% sets that comparison is confounded : a state carried by fewer vessels loses its
+% outer columns to filt.min_vessel, so its curve is cut where the others are not.
+if filt.pool_common_vessel
+    common_vessel = unique(state_drawn.vessel_key(state_drawn.state == param.state_pooled(1)));
+    for name_idx = 2:numel(param.state_pooled)
+        in_this_state = unique(state_drawn.vessel_key(state_drawn.state == param.state_pooled(name_idx)));
+        common_vessel = intersect(common_vessel, in_this_state);
+    end
+    is_common = ismember(state_drawn.vessel_key, common_vessel);
+    fprintf('   on the %d vessels every state has, of %d : %d of %d rows\n', ...
+        numel(common_vessel), numel(unique(state_drawn.vessel_key)), ...
+        sum(is_common), numel(is_common));
+    state_drawn = state_drawn(is_common, :);
+end
 
 n_state = numel(param.state_pooled);
 state_pool = table(param.state_pooled(:), 'VariableNames', {'state'});
