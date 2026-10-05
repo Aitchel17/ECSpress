@@ -5,10 +5,14 @@ classdef analysis_radon < handle
 
     properties
         radon_result
-        roi_image
         roi_mask     % h x w logical   the ROI on roi_image's grid, true inside
         channel
         param
+    end
+
+    % read only by the constructor; saved, it put the object past 2 GB, see CLAUDE_LOG.md
+    properties (Transient)
+        roi_image    % h x w x n double   the ROI stack radon_result was measured from
     end
 
     methods
@@ -264,7 +268,7 @@ classdef analysis_radon < handle
             radon_analysis = obj; % Save the object itself
             save_path = fullfile(save_dir, 'radon_analysis.mat');
             disp(['Saving Radon results to: ' save_path]);
-            save(save_path, 'radon_analysis');
+            save(save_path, 'radon_analysis', '-v7.3');   % no 2 GB ceiling, see CLAUDE_LOG.md
         end
     end
 end
