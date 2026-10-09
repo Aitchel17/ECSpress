@@ -33,4 +33,4 @@ board.add(pax_fig.totalpvs_changes.ax, 'at', [1 2], 'label', "D");
 
 %% 6. write it
 dirs = dirs_central();
-board.save_figure(fullfile(dirs.secondary_root, "merged_igkl_igkltdt"), "fusion_example");
+board.save_figure(fullfile(dirs.secondary_root, "merged"), "fusion_example");

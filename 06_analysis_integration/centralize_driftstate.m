@@ -6,7 +6,6 @@
 %   Run centralize_drift first. This reads what that wrote.
 
 %% settings
-param.dataset      = "merged_igkl_igkltdt";
 param.key_columns  = ["MouseID", "Date", "SessionType", "SessionID"];
 param.rebuild      = false;         % bool  true recomputes every session
 

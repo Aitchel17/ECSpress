@@ -14,7 +14,7 @@ clee = color_lee();
 
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';
+    param.dataset = 'merged';
 end
 % Name and label side by side, matched by POSITION. The table stores an
 % identifier and an axis names the thing; a subset takes the same indices out of

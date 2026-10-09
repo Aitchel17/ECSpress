@@ -14,7 +14,6 @@
 %   Run centralize_primary first. This reads what that wrote.
 
 %% settings
-param.dataset      = "merged_igkl_igkltdt";
 % The columns the output table carries as its identity. util_sessionkey defines
 % what a session IS and builds the lookup string; this is only which of those
 % columns get written out beside the result, so the two are read together.

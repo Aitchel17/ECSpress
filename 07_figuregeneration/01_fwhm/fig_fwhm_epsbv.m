@@ -12,7 +12,7 @@ clee = color_lee();
 
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';
+    param.dataset = 'merged';
 end
 param.column_stat = "median";      % Which stored curve to draw (str), mode/centroid/median
 param.y_show = "totalpvs";         % Axis to draw on (str), "totalpvs" or "eps"

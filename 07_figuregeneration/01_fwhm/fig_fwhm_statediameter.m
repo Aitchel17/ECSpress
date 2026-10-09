@@ -17,7 +17,7 @@ dirs_ecspath;                                         % three roots, minus zz_no
 clee = color_lee();
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';
+    param.dataset = 'merged';
 end
 dirs = dirs_central();
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);

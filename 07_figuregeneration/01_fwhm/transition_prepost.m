@@ -9,7 +9,7 @@ clee = color_lee();
 % above; run this file on its own and the defaults below apply.
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';      % or '00_igkl' / '01_igkltdt'
+    param.dataset = 'merged';
 end
 dirs = dirs_central();
 exp_path = fullfile(dirs.secondary_root, param.dataset);

@@ -35,7 +35,7 @@ function record = ledger_quality(sessiondir, grade, note)
     dirs = dirs_central();
     dataset = string(getenv('ECSPRESS_DATASET'));
     if dataset == ""
-        dataset = "merged_igkl_igkltdt";
+        dataset = "merged";
     end
     register_path = fullfile(dirs.secondary_root, dataset, "session_quality.csv");
     register = read_register(register_path);

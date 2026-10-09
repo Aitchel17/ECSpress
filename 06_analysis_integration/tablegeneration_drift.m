@@ -18,14 +18,14 @@ dirs_ecspath;                                        % three roots, minus zz_not
 
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';      % or '00_igkl' / '01_igkltdt'
+    param.dataset = 'merged';
 end
 dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 
 param.nest_names = ["state_summary", "transition"];
 param.key_columns = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
-    "NumericDepth", "NumericResolution"];
+    "NumericDepth", "NumericResolution", "Cohort"];
 
 %% Filters : which rows the tables are about
 filt.depth_thr    = 70;                                   % um   L1 / L2-3 boundary

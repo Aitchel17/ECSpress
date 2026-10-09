@@ -29,7 +29,7 @@ dirs = dirs_central();
 
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';
+    param.dataset = 'merged';
 end
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);
 

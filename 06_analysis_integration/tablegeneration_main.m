@@ -24,7 +24,7 @@ dirs_ecspath;                                        % three roots, minus zz_not
 
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';      % or '00_igkl' / '01_igkltdt'
+    param.dataset = 'merged';
 end
 dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
@@ -37,7 +37,7 @@ param.nest_names = ["state_summary", "transition"];
 % columns. Every one is read below: the first four say which recording, VesselID and
 % NumericDepth are filtered on, NumericResolution is the pixel-to-micrometre scale.
 param.key_columns = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
-    "NumericDepth", "NumericResolution"];
+    "NumericDepth", "NumericResolution", "Cohort"];
 
 param.depth_thr  = 70;                                    % um  L1 / L2-3 boundary
 param.min_bout_s = 30;                                    % s   shorter is not a state

@@ -9,7 +9,7 @@ clee = color_lee();
 %   so the two figures were of different datasets. see CLAUDE_LOG.md
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';
+    param.dataset = 'merged';
 end
 dirs = dirs_central();
 exp_path = fullfile(dirs.secondary_root, param.dataset);

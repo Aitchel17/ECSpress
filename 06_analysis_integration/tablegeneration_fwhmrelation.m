@@ -9,7 +9,7 @@ dirs_ecspath;                                        % three roots, minus zz_not
 
 param.dataset = getenv('ECSPRESS_DATASET');
 if isempty(param.dataset)
-    param.dataset = 'merged_igkl_igkltdt';      % or '00_igkl' / '01_igkltdt'
+    param.dataset = 'merged';
 end
 
 %% Parameter
@@ -86,7 +86,7 @@ measured = vertcat(gathered{:});
 
 %% Make session table
 session = filtered(:, ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
-    "Directory", "NumericDepth", "NumericResolution"]);
+    "Directory", "NumericDepth", "NumericResolution", "Cohort"]);
 session.vessel_key = string(filtered.MouseID) + "_" + string(filtered.VesselID);
 session = spread_rows(session, measured, "heat");
 
