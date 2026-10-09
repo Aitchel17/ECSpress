@@ -1,11 +1,11 @@
 classdef state_1d < handle
-    %STATE_1D  Sleep-state statistics for any 1-D series on a shared time axis.
-    %   Caller: centralize_statesession, stateintegration_test
-    %   Coordinated by a state_integration object. The series is an argument, so a
-    %   thickness, a displacement and a drift component all take the same methods.
+    %STATE_1D  Centralize bout level analysis
+
+    %   Caller: centralize_statesession, centralize_driftsession, stateintegration_test
 
     properties
-        sleep_obj   % Handle to sleep_integration object (Temporal Source of Truth)
+        time_table         % 1x1 struct   table name -> N x 2 [start end] bouts in seconds, state_integration's
+        transition_window  % 1x1 float s  full width of a *_trans window, state_integration.param.transition_window
         t_axis      % Time axis for the specific data being analyzed
         state_idx
         param        % Name of this analysis instance
@@ -21,35 +21,26 @@ classdef state_1d < handle
         eventlist          % 1 x N struct  the detected events, ALL contents share them
         event              % struct        one table per content name, rows = events
     end
-    %   transition and event are not the same thing. transition splits each
-    %   *_trans scoring window at its centre and compares the halves, so its rows
-    %   are fixed windows the scoring drew. event's rows are places the diameter
-    %   actually moved, found by analysis_event, and a row is (state, pol):
-    %     'nrem2rem', 'dilation'   a state transition
-    %     'nrem',     'none'       a stable stretch, the control
-    %     'nrem',     'dilation'   a swing inside one state
-    %   eventlist is held once and every event.<name> table reads it, so the nine
-    %   contents cannot end up describing different events.
 
-    methods
-        function obj = state_1d(state_integrate)
-            % Constructor
-            obj.sleep_obj = state_integrate;
+
+    methods    % set-up and access
+        function obj = state_1d(bout_table, window_s)
+            % bout_table  1x1 struct   state_integration's time_table, trimmed to this series' record
+            % window_s    1x1 float s  state_integration.param.transition_window
+            obj.time_table = bout_table;
+            obj.transition_window = window_s;
         end
 
         function obj = get_state_indices(obj, t_axis,fs)
-            obj.state_idx =  obj.sleep_obj.add_taxis(t_axis); % from time axis (indice-time) get state indices
+            obj.state_idx = bout_frames(t_axis, obj.time_table);   % every bout table on this series' frames
             obj.t_axis = t_axis; % copy time axis
             obj.param.fs = fs; % copy sampling rate
         end
 
         function obj = get_events(obj, eventlist, event_info)
-        %GET_EVENTS  Hold the event list every event.<name> table will be built on.
-        %   Called ONCE, before get_eventsummary. analysis_event finds the events
-        %   on the caliber trace; every other content is measured over the SAME
-        %   windows, so the nine tables can be read side by side.
-        % IN   eventlist   1 x N struct, analysis_event's eventlist
-        %      event_info  struct, its info. [] = do not record one
+        %GET_EVENTS  Hold the event list get_eventsummary builds its tables on; call it first.
+        % IN   eventlist   1 x N struct   analysis_event's eventlist
+        %      event_info  struct         its info; [] = do not record one
             arguments
                 obj
                 eventlist  (1,:) struct
@@ -61,181 +52,22 @@ classdef state_1d < handle
             end
         end
 
-        function obj = get_eventsummary(obj, name, data1d, opt)
-        %GET_EVENTSUMMARY  What one content did over each event, as a table.
-        %   Row = event, in the order eventlist holds them. One table per content,
-        %   so a row can carry the ALIGNED SEGMENT as well as the scalars, and
-        %   groupsummary(T, 'polarity', 'mean', 'seg_px') is the polarity-averaged
-        %   trace with nothing to join.
-        %
-        %   THE FIVE THICKNESSES ARE THREE MEASUREMENTS. line_fwhm builds them from
-        %   four boundary positions, so totalpvs = uppvs + downpvs and eps =
-        %   totalpvs + bv are definitions. Reading bv, totalpvs and eps as three
-        %   findings counts one of them twice; bv, uppvs and downpvs are the
-        %   independent set.
-        %
-        % IN   name     char, the content's name, as get_summary uses it
-        %      data1d   1 x T float px, that content's trace
-        %      pre_s    float s, segment reach BEFORE the event start. Default 10
-        %      post_s   float s, segment reach AFTER it. Default 30
-        % OUT  obj.event.(name), a height x 10 table. The segment's time axis and
-        %      the anchor sit in its Properties.UserData
-            arguments
-                obj
-                name   (1,:) char
-                data1d (1,:) double
-                opt.pre_s  (1,1) double {mustBeNonnegative} = 10
-                opt.post_s (1,1) double {mustBePositive}    = 30
-            end
-            if isempty(obj.eventlist)
-                error('state_1d:noEvents', ...
-                    'call get_events first; the tables are built on its list.');
-            end
-            n_row = numel(obj.eventlist);
-            n_sample = numel(data1d);
-            fs = obj.param.fs;
-            % The segment window, in samples either side of the event's start
-            n_pre  = round(opt.pre_s  * fs);
-            n_post = round(opt.post_s * fs);
-            n_seg  = n_pre + n_post + 1;
-            seg_offset = -n_pre:n_post;
-
-            state         = strings(n_row, 1);
-            bout_idx      = zeros(n_row, 1);
-            bout_duration = zeros(n_row, 1);
-            total_bout    = zeros(n_row, 1);
-            polarity      = strings(n_row, 1);
-            from          = zeros(n_row, 1);
-            to            = zeros(n_row, 1);
-            rise_s        = zeros(n_row, 1);
-            d_px     = nan(n_row, 1);
-            range_px = nan(n_row, 1);
-            sd_px    = nan(n_row, 1);
-            mean_px  = nan(n_row, 1);
-            seg_px   = nan(n_row, n_seg);
-
-            % How many bouts each state has, so total_bout means the same thing
-            % here as in state_summary and powerdensity
-            n_bout_of = struct();
-            for f = string(fieldnames(obj.state_idx))'
-                n_bout_of.(f) = size(obj.state_idx.(f), 1);
-            end
-
-            for k = 1:n_row
-                row = obj.eventlist(k);
-                state(k)         = string(row.state);
-                polarity(k)      = string(row.pol);
-                bout_idx(k)      = row.bout;
-                bout_duration(k) = row.end_sec - row.start_sec;
-                if isfield(n_bout_of, row.state)
-                    total_bout(k) = n_bout_of.(row.state);
-                else
-                    total_bout(k) = NaN;
-                end
-                from(k)     = row.from;
-                to(k)       = row.to;
-                rise_s(k)   = row.rise_s;
-                span        = row.from:row.to;
-                span        = span(span >= 1 & span <= n_sample);
-                if isempty(span)
-                    continue
-                end
-                d_px(k)     = data1d(span(end)) - data1d(span(1));
-                range_px(k) = max(data1d(span)) - min(data1d(span));
-                sd_px(k)    = std(data1d(span));
-                mean_px(k)  = mean(data1d(span));
-                % The aligned segment. A window reaching past either end of the
-                % recording stays NaN there rather than being shifted inward,
-                % which would put a different lag in that row than in its
-                % neighbours and average two things together
-                idx  = row.from + seg_offset;
-                have = idx >= 1 & idx <= n_sample;
-                seg_px(k, have) = data1d(idx(have));
-            end
-
-            % state_name is deliberately NOT the name used here. In the bout
-            % tables that column is a state; this one holds a transition label on
-            % a transition row and a state name on the others, so giving it the
-            % same name would stack two vocabularies into one column
-            tbl = table(state, bout_idx, bout_duration, total_bout, ...
-                polarity, from, to, rise_s, ...
-                d_px, range_px, sd_px, mean_px);
-            tbl.seg_px = seg_px;
-            tbl.Properties.VariableUnits = {'', '', 's', '', ...
-                '', 'frame', 'frame', 's', ...
-                'px', 'px', 'px', 'px', 'px'};
-            tbl.Properties.UserData = struct( ...
-                'seg_time_s', seg_offset / fs, ...   % 1 x n_seg, 0 = the anchor
-                'seg_anchor', 'from', ...            % which endpoint index 0 is
-                'pre_s',  opt.pre_s, ...
-                'post_s', opt.post_s, ...
-                'fs',     fs);
-            obj.event.(name) = tbl;
+        function target_table = get_filtered_table(obj, prop_name, field_name, target_state)
+            %GET_FILTERED_TABLE Access a specific table and filter by State
+            %   tbl = obj.get_filtered_table('state_summary', 'bv_thickness', 'NREM')
+            target_table = obj.(prop_name).(field_name);
+            rows = target_table.state_name == string(target_state);
+            target_table = target_table(rows, :);
         end
 
-        function obj = get_powerdensity(obj, name, data1d)
-            % A bout too short for the tapers is SKIPPED, not shortened.
-            %   err       get_spectrogram asks for tapers [2 3], so dpss(N,2,3)
-            %             wants NW < N/2, i.e. N > 4. One 3-sample bout threw
-            %             "Time-bandwidth product NW must be less than N/2" and took
-            %             the whole session's state analysis with it
-            %   why       such a bout is a TRIM REMAINDER, not a scored state.
-            %             Scoring runs on a fixed grid, so at the imaging rate
-            %             every scored bout comes out a whole number of grid steps
-            %             long. The only short one is the last, whatever
-            %             trim_to_duration left at the end of the recording --
-            %             a fraction of a second nobody scored. see FINDINGS.md
-            %   caution   bout_idx keeps its ORIGINAL number. tablegeneration_main
-            %             groups on it (get_numericsummary("bout_idx",...)), so
-            %             renumbering would make powerdensity's bout 5 a different
-            %             bout from state_summary's
-            min_samples = 5;        % dpss(N,2,3) needs N > 2*NW = 4
-            n_skipped = 0;
-
-            sidx_fnames = fieldnames(obj.state_idx);
-            nsidx = length(sidx_fnames);
-            %%
-            state_name = [];
-            spectral_density = [];
-            spectral_frequency = [];
-            spectral_lognorm = [];
-            bout_duration = [];
-            bout_idx = [];
-            total_bout = [];
-
-            for sidx = 1:nsidx % loop here
-                sidx_fname = sidx_fnames{sidx};
-                nbouts =  size(obj.state_idx.(sidx_fname),1);
-                for bout = 1:nbouts
-                    start_idx = obj.state_idx.(sidx_fname)(bout,1);
-                    end_idx = obj.state_idx.(sidx_fname)(bout,2);
-                    duration = (end_idx - start_idx)/obj.param.fs;
-                    if (end_idx - start_idx + 1) < min_samples
-                        n_skipped = n_skipped + 1;
-                        continue
-                    end
-                    crop_data = data1d(start_idx:end_idx);
-                    spec = get_spectrogram(obj.param.fs,crop_data);
-                    % specify
-                    state_name = [state_name; string(sidx_fname)];
-                    bout_idx = [bout_idx ; bout];
-                    % spec contents
-                    spectral_density = [spectral_density ; {spec.S}];
-                    spectral_frequency = [spectral_frequency ; {spec.F}];
-                    spectral_lognorm = [spectral_lognorm ; {spec.log_norm_spectrum}];
-                    bout_duration = [bout_duration ; duration];
-                    total_bout = [total_bout ; nbouts];
-                end
-            end
-            obj.powerdensity.(name) = table(state_name,bout_idx,bout_duration,total_bout,...
-                spectral_density,spectral_frequency,spectral_lognorm);
-            if n_skipped > 0
-                fprintf('      %s : %d bout(s) under %d samples skipped\n', ...
-                    name, n_skipped, min_samples);
-            end
-
+        function save2disk(obj,name,savepath)
+            state_1d = obj;
+            save(fullfile(savepath,[name,'.mat']),'state_1d')
         end
+    end
 
+
+    methods    % calculations: each fills one table per content name
         function obj = get_summary(obj, name, data1d)
             sidx_fnames = fieldnames(obj.state_idx);
             sidxfilt_logic = ~endsWith(sidx_fnames,'_trans');
@@ -337,14 +169,9 @@ classdef state_1d < handle
             post_var = zeros(total_bouts, 1);
 
             % 3. Fill Data
-            % onset: transition_window의 절반을 샘플 수로 고정
-            % -> 모든 state 타입에서 data 컬럼 벡터 길이가 동일해짐
-            % (이전: indices(1)의 절반 -> fname마다 달라져 vertcat 에러 발생)
-            if isfield(obj.sleep_obj.param, 'transition_window')
-                onset = round(obj.sleep_obj.param.transition_window * obj.param.fs / 2);
-            else
-                onset = round(10 * obj.param.fs / 2);  % fallback: 10초
-            end
+            % half the transition window in samples, the same for every table so the
+            % data column stacks
+            onset = round(obj.transition_window * obj.param.fs / 2);
 
             row_counter = 1;
             for sidx = 1:length(sidx_fnames) % per state transition
@@ -403,14 +230,57 @@ classdef state_1d < handle
 
         end
 
+        function obj = get_powerdensity(obj, name, data1d)
+            % a bout too short for the tapers is skipped, not shortened; bout_idx keeps its
+            % original number so it still matches state_summary's
+            min_samples = 5;        % dpss(N,2,3) needs N > 2*NW = 4
+            n_skipped = 0;
+
+            sidx_fnames = fieldnames(obj.state_idx);
+            nsidx = length(sidx_fnames);
+            state_name = [];
+            spectral_density = [];
+            spectral_frequency = [];
+            spectral_lognorm = [];
+            bout_duration = [];
+            bout_idx = [];
+            total_bout = [];
+
+            for sidx = 1:nsidx
+                sidx_fname = sidx_fnames{sidx};
+                nbouts =  size(obj.state_idx.(sidx_fname),1);
+                for bout = 1:nbouts
+                    start_idx = obj.state_idx.(sidx_fname)(bout,1);
+                    end_idx = obj.state_idx.(sidx_fname)(bout,2);
+                    duration = (end_idx - start_idx)/obj.param.fs;
+                    if (end_idx - start_idx + 1) < min_samples
+                        n_skipped = n_skipped + 1;
+                        continue
+                    end
+                    crop_data = data1d(start_idx:end_idx);
+                    spec = get_spectrogram(obj.param.fs,crop_data);
+                    state_name = [state_name; string(sidx_fname)];
+                    bout_idx = [bout_idx ; bout];
+                    spectral_density = [spectral_density ; {spec.S}];
+                    spectral_frequency = [spectral_frequency ; {spec.F}];
+                    spectral_lognorm = [spectral_lognorm ; {spec.log_norm_spectrum}];
+                    bout_duration = [bout_duration ; duration];
+                    total_bout = [total_bout ; nbouts];
+                end
+            end
+            obj.powerdensity.(name) = table(state_name,bout_idx,bout_duration,total_bout,...
+                spectral_density,spectral_frequency,spectral_lognorm);
+            if n_skipped > 0
+                fprintf('      %s : %d bout(s) under %d samples skipped\n', ...
+                    name, n_skipped, min_samples);
+            end
+
+        end
+
         function obj = decompose_signal(obj, name, data1d)
-            % Get_band decomposition do three things which involves
-            % 1. band decomposition (continous = cnt , Infraslow = isf, Verylow = vlf, Low = lf)
-            % 2. peak2peak interval calculation and peak2trough amplitude calculation
-            % 3. update summary_stat table
-            % 4.
+            %DECOMPOSE_SIGNAL  The whole record in five bands, Butterworth order 3, zero phase:
+            %   continuous < 0.005 Hz, isf 0.005-0.1, vlf 0.1-0.3, lf 0.3-1, hf > 1 Hz
             decomposed = struct();
-            %% Paramter setup
             bparam.dc_cutoff = 0.005;
             bparam.isf_range = [0.005, 0.1];
             bparam.vlf_range = [0.1, 0.3];
@@ -420,28 +290,28 @@ classdef state_1d < handle
 
             % Nyquist Frequency
             fn = obj.param.fs / 2;
-            %% 0. Continuous (0 - 0.005 Hz) -> Lowpass
+            % 0. Continuous (0 - 0.005 Hz) -> Lowpass
             f_cutoff = bparam.dc_cutoff;
             Wn = f_cutoff / fn;
             [b, a] = butter(bparam.order, Wn, 'low');
             decomposed.continuous = {filtfilt(b, a, data1d)};
-            %% 1. Infraslow (0.005 - 0.1 Hz) -> Bandpass
+            % 1. Infraslow (0.005 - 0.1 Hz) -> Bandpass
             f_range = bparam.isf_range;
             Wn = f_range / fn;
             [b, a] = butter(bparam.order, Wn, 'bandpass');
             decomposed.isf = {filtfilt(b, a, data1d)};
-            %% 2. VLF (0.1 - 0.3 Hz) -> Bandpass
+            % 2. VLF (0.1 - 0.3 Hz) -> Bandpass
             f_range = bparam.vlf_range;
             Wn = f_range / fn;
             [b, a] = butter(bparam.order, Wn, 'bandpass');
             decomposed.vlf = {filtfilt(b, a, data1d)};
-            %% 3. LF (0.3 - 1 Hz) -> Bandpass
+            % 3. LF (0.3 - 1 Hz) -> Bandpass
             f_range = bparam.lf_range;
             Wn = f_range / fn;
             [b, a] = butter(bparam.order, Wn, 'bandpass');
             decomposed.lf = {filtfilt(b, a, data1d)};
-            %% 4. HF (1 - 1.5 Hz) -> Bandpass
-            f_cutoff = bparam.hf_cutoff; % Just close to Nyquist
+            % 4. HF (> 1 Hz) -> Highpass
+            f_cutoff = bparam.hf_cutoff;
             Wn = f_cutoff / fn;
             [b, a] = butter(bparam.order, Wn, 'high');
             decomposed.hf_residual = {filtfilt(b, a, data1d)};
@@ -506,15 +376,13 @@ classdef state_1d < handle
                     % Process each band
                     for k = 1:length(bandnames) % 3. per band
                         bn = bandnames{k};
-                        
-                        % Cell에서 배열 꺼내기
+
                         if iscell(decomposed.(bn))
                             signal_full = decomposed.(bn){1};
                         else
                             signal_full = decomposed.(bn);
                         end
 
-                        % Slicing check
                         if start_i > numel(signal_full) || end_i > numel(signal_full)
                             crop_sig = [];
                         else
@@ -522,17 +390,13 @@ classdef state_1d < handle
                         end
 
                         if ~isempty(crop_sig) && length(crop_sig) > 3
-                            % Calculate PP/PT stats
-                            % Use local function or internal logic to keep it contained?
-                            % Doing inline logic for P-P and P-T
-
                             % 1. Find Peaks
                             [pks, locs] = findpeaks(crop_sig);
                             % 2. Find Troughs
                             [troughs, t_locs] = findpeaks(-crop_sig);
                             troughs = -troughs;
 
-                            % PP Time
+                            % peak-to-peak intervals (s)
                             if numel(locs) > 1
                                 pp_times = diff(locs) / obj.param.fs;
                                 band_stats.(bn).pp_time_mean(row_counter) = mean(pp_times, 'omitnan');
@@ -544,15 +408,11 @@ classdef state_1d < handle
                                 band_stats.(bn).pp_time_raw{row_counter} = [];
                             end
 
-                            % PT Amp
-                            % Naive pairing: for each peak, find nearest subsequent trough?
-                            % Or just general stats?
-                            % "Peak to Trough Amplitude" usually implies Peak - Next Trough.
+                            % peak-to-trough amplitude: each peak against the first trough after it
                             amps = [];
                             for p_i = 1:numel(locs)
                                 c_loc = locs(p_i);
                                 c_val = pks(p_i);
-                                % Find first trough after this peak
                                 next_t_idx = find(t_locs > c_loc, 1, 'first');
                                 if ~isempty(next_t_idx)
                                     t_val = troughs(next_t_idx);
@@ -584,16 +444,13 @@ classdef state_1d < handle
             end
 
             % 4. Create one giant table for all bands
-            % Start with metadata columns
             % the same four names the other nests use, so one flattener serves them all
             giant_table = table(state_name, bout_idx, bout_duration, total_bout, ...
                 'VariableNames', {'state_name', 'bout_idx', 'bout_duration', 'total_bout'});
 
-            % Iterate through bands and append standardized columns
+            % then six columns per band, named <band>_<statistic>
             for k = 1:length(bandnames)
                 bn = bandnames{k};
-                % Create valid variable names (e.g. 'vlf_pp_time_mean')
-                % Assuming 'bn' is a valid field name like 'vlf', 'continuous'
 
                 band_tbl = table(band_stats.(bn).pp_time_mean, ...
                     band_stats.(bn).pp_time_std, ...
@@ -612,27 +469,102 @@ classdef state_1d < handle
                 giant_table = [giant_table, band_tbl];
             end
 
-            % Save as requested: obj.band_decomposition.(name+'pppt')
-            % Note: 'name' is a char/string.
             obj.peak_trough.(name) = giant_table;
         end
 
+        function obj = get_eventsummary(obj, name, data1d, opt)
+        %GET_EVENTSUMMARY  What one content did over each event, as a table; row = event, in eventlist order.
+        % IN   name     char, the content's name, as get_summary uses it
+        %      data1d   1 x T float px, that content's trace
+        %      pre_s    float s, segment reach BEFORE the event start. Default 10
+        %      post_s   float s, segment reach AFTER it. Default 30
+        % OUT  obj.event.(name), a height x 10 table. The segment's time axis and
+        %      the anchor sit in its Properties.UserData
+            arguments
+                obj
+                name   (1,:) char
+                data1d (1,:) double
+                opt.pre_s  (1,1) double {mustBeNonnegative} = 10
+                opt.post_s (1,1) double {mustBePositive}    = 30
+            end
+            if isempty(obj.eventlist)
+                error('state_1d:noEvents', ...
+                    'call get_events first; the tables are built on its list.');
+            end
+            n_row = numel(obj.eventlist);
+            n_sample = numel(data1d);
+            fs = obj.param.fs;
+            % The segment window, in samples either side of the event's start
+            n_pre  = round(opt.pre_s  * fs);
+            n_post = round(opt.post_s * fs);
+            n_seg  = n_pre + n_post + 1;
+            seg_offset = -n_pre:n_post;
 
+            state         = strings(n_row, 1);
+            bout_idx      = zeros(n_row, 1);
+            bout_duration = zeros(n_row, 1);
+            total_bout    = zeros(n_row, 1);
+            polarity      = strings(n_row, 1);
+            from          = zeros(n_row, 1);
+            to            = zeros(n_row, 1);
+            rise_s        = zeros(n_row, 1);
+            d_px     = nan(n_row, 1);
+            range_px = nan(n_row, 1);
+            sd_px    = nan(n_row, 1);
+            mean_px  = nan(n_row, 1);
+            seg_px   = nan(n_row, n_seg);
 
-        function target_table = get_filtered_table(obj, prop_name, field_name, target_state)
-            %GET_FILTERED_TABLE Access a specific table and filter by State
-            %   tbl = obj.get_filtered_table('state_summary', 'bv_thickness', 'NREM')
-            target_table = obj.(prop_name).(field_name);
-            rows = target_table.state_name == string(target_state);
-            target_table = target_table(rows, :);
+            % bouts per state, so total_bout means what it means in state_summary
+            n_bout_of = struct();
+            for f = string(fieldnames(obj.state_idx))'
+                n_bout_of.(f) = size(obj.state_idx.(f), 1);
+            end
+
+            for k = 1:n_row
+                row = obj.eventlist(k);
+                state(k)         = string(row.state);
+                polarity(k)      = string(row.pol);
+                bout_idx(k)      = row.bout;
+                bout_duration(k) = row.end_sec - row.start_sec;
+                if isfield(n_bout_of, row.state)
+                    total_bout(k) = n_bout_of.(row.state);
+                else
+                    total_bout(k) = NaN;
+                end
+                from(k)     = row.from;
+                to(k)       = row.to;
+                rise_s(k)   = row.rise_s;
+                span        = row.from:row.to;
+                span        = span(span >= 1 & span <= n_sample);
+                if isempty(span)
+                    continue
+                end
+                d_px(k)     = data1d(span(end)) - data1d(span(1));
+                range_px(k) = max(data1d(span)) - min(data1d(span));
+                sd_px(k)    = std(data1d(span));
+                mean_px(k)  = mean(data1d(span));
+                % the aligned segment; past either end of the record it stays NaN, not shifted
+                idx  = row.from + seg_offset;
+                have = idx >= 1 & idx <= n_sample;
+                seg_px(k, have) = data1d(idx(have));
+            end
+
+            % "state", not "state_name": this column also holds transition labels
+            tbl = table(state, bout_idx, bout_duration, total_bout, ...
+                polarity, from, to, rise_s, ...
+                d_px, range_px, sd_px, mean_px);
+            tbl.seg_px = seg_px;
+            tbl.Properties.VariableUnits = {'', '', 's', '', ...
+                '', 'frame', 'frame', 's', ...
+                'px', 'px', 'px', 'px', 'px'};
+            tbl.Properties.UserData = struct( ...
+                'seg_time_s', seg_offset / fs, ...   % 1 x n_seg, 0 = the anchor
+                'seg_anchor', 'from', ...            % which endpoint index 0 is
+                'pre_s',  opt.pre_s, ...
+                'post_s', opt.post_s, ...
+                'fs',     fs);
+            obj.event.(name) = tbl;
         end
-
-        function save2disk(obj,name,savepath)
-            state_1d = obj;
-            save(fullfile(savepath,[name,'.mat']),'state_1d')
-        end
-
-
     end
 
 
