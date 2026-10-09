@@ -1,28 +1,26 @@
-function idx_table = timetable2frame(t_axis,timetable)
-%TIME2FRAME Convert time windows to frame indices
-%   idx_table = timearr2frame(t_axis, timetable)
-%   timetable: [n x 2] matrix of start and end times
-%   t_axis: time axis vector
+function idx_table = timetable2frame(t_axis, timetable)
+%TIMETABLE2FRAME  Windows in seconds as [first last] frames on one time axis, half-open.
+%   Caller: bout_frames
+%   A frame is inside a window when start <= t < end, so two bouts that meet at one
+%   boundary time share no frame. A window that holds no frame of t_axis -- a bout the
+%   scoring ran past the recording -- is dropped.
 %
-%   This function ensures that all returned index windows have the same length,
-%   determined by the duration of the first event in timetable.
-%   Events that fall outside the bounds of t_axis are excluded.
-
-% Calculate sampling frequency
-fs = 1 / mean(diff(t_axis));
-n_time = size(timetable,1);
-
-
-
-% Collect valid indices
-idx_list = [];
-
-for eventidx = 1:n_time
-    % Find closest start index
-    [~, start_idx] = min(abs(t_axis - timetable(eventidx,1)));
-    [~, end_idx] = min(abs(t_axis - timetable(eventidx,2)));
-    idx_list = [idx_list; start_idx, end_idx];
-end
-
-idx_table = idx_list;
+% IN   t_axis     1 x T float s   frame times
+%      timetable  N x 2 float s   [start end] per window
+% OUT  idx_table  M x 2 int       [first last] frame of each window that holds one, M <= N
+    n_window = size(timetable, 1);
+    idx_table = zeros(0, 2);
+    for window_idx = 1:n_window
+        % 0. make bool array
+        in_window = t_axis >= timetable(window_idx, 1) & t_axis < timetable(window_idx, 2);
+        % 1. find first true
+        first_frame = find(in_window, 1, 'first');
+        if isempty(first_frame) % if first true not exist pass
+            continue
+        end
+        % 2. find last true
+        last_frame = find(in_window, 1, 'last');
+        % 3. add to idx table
+        idx_table(end+1, :) = [first_frame, last_frame]; %#ok<AGROW>
+    end
 end
