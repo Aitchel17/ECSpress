@@ -1,44 +1,19 @@
-%CENTRALIZE_DRIFT  Every session's *_motion.txt as one table, series and all.
-%   The sixth centralized product. Reads the acquisition's drift estimate off the
-%   session folders and writes centralized_drift.mat beside the other five.
-%
-%   IT CANNOT JOIN centralize_primary'S PRODUCT LOOP, for three reasons that are all
-%   in that file: :46 welds ".mat" onto the stem, :68 builds a fixed stem inside a
-%   fixed subfolder, and centralize_scansession :22 reads with load() and :29 throws
-%   on anything that is not an object. The motion file is text, it sits at the
-%   session root, and its stem is per session.
-%
-%   THE FILENAME IS NOT THE SESSION. mdf_xymovie.m:216 builds the path from the MDF
-%   FILE's name rather than the folder's, so the stem is found by globbing and the
-%   row's identity comes from the dirtable. One folder under hql073 holds a file
-%   named for HQL063; keying off the filename would file that session under the
-%   wrong mouse.
-%
-%   Run centralize_primary first only if the dirtable needs refreshing. This reads
-%   the sheet, not the centralized products.
+%CENTRALIZE_DRIFT  Every session's *_motion.txt as one table: dataset sheet -> motion files -> centralized_drift.mat.
+%   Reads the sheet dirtable_main writes; run that first when a recording is new.
+%   Why this is not a centralize_primary product: see CLAUDE_LOG.md
 
 %% settings
-param.dataset  = "merged_igkl_igkltdt";
+param.dataset  = "merged";      % str   the dataset whose sheet lists the sessions
 param.rebuild  = false;         % bool  true re-reads every session
-
-% which sessions the product is about
-cohorts = ["00_igkl", "01_igkltdt"];   % 1 x C str  membership, as centralize_primary
-
-% Bump when what is taken off the file changes. The sources are untouched by such a
-% change, so no stamp can see it.
-schema_version = 1;
+schema_version = 1;             % double  bump when what is taken off the file changes
 
 addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 dirs = dirs_central();
 
 %% the sessions
-for cohort = cohorts
-    dirs_scantable(dirs.working_root, dirs.secondary_root, cohort);
-end
-sheet_info = dirs_mergetable(dirs.working_root, dirs.secondary_root, ...
-    cohorts, param.dataset);
-dir_table = readtable(sheet_info.sheet_path, 'VariableNamingRule', 'preserve');
+sheet_path = fullfile(dirs.secondary_root, param.dataset, param.dataset + "_dirtable.xlsx");
+dir_table = readtable(sheet_path, 'VariableNamingRule', 'preserve');
 
 alive = false(height(dir_table), 1);
 for k = 1:height(dir_table)
@@ -47,7 +22,7 @@ end
 live_table = dir_table(alive, :);
 key_value = util_sessionkey(live_table);
 fprintf('dirtable %s\n   %d rows, %d point at a folder\n', ...
-    sheet_info.sheet_path, height(dir_table), sum(alive));
+    sheet_path, height(dir_table), sum(alive));
 
 %% what is already read
 out_path = fullfile(dirs.central, "centralized_drift.mat");
@@ -92,8 +67,7 @@ central.data = {scan.data}';
 central.source_bytes = [scan.source_bytes]';
 central.source_modified = [scan.source_modified]';
 
-% the scalars every consumer reads without opening a series. Flat columns rather
-% than another level inside data, so a filt can name one directly
+% the scalars as flat columns, so a filt names one without opening data
 summary = [scan.data];
 central.drift_fps = [summary.drift_fps]';
 central.drift_n = [summary.drift_n]';
@@ -128,6 +102,7 @@ function [row, failure] = scan_session(i, session_dir, old)
         'source_modified', {}, 'reused', {});
     failure = "";
 
+    % globbed: the stem is the MDF file's name, not the session's; see CLAUDE_LOG.md
     found = dir(fullfile(session_dir, '*_motion.txt'));
     if isempty(found)
         return
@@ -150,8 +125,7 @@ function [row, failure] = scan_session(i, session_dir, old)
             row(1).reused = false;
             return
         catch err
-            % a file that will not parse is no reason to drop what was already read
-            % from it, so the old row stands and the failure is named
+            % a file that will not parse keeps its old row; the failure is named
             failure = string(err.message);
         end
     end
@@ -167,8 +141,7 @@ end
 
 function summary = drift_summary(disp_row, disp_col, regerror, drift_fps)
 %DRIFT_SUMMARY  The series, and the scalars a filt reads without opening them.
-%   Every scalar is taken on a MAGNITUDE, so none of them moves if the stored sign
-%   convention is ever reversed.
+%   Scalars are taken on magnitudes, so a sign flip in the file moves none of them.
 %   OUT  summary  1x1 struct   series as columns, then the scalars
     summary = struct( ...
         'disp_row',         disp_row, ...      % N x 1 double  px

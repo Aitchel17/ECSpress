@@ -1,61 +1,12 @@
-%INTEGRATE_ANALYSISRESULT  Directory table -> merged dataset -> figures, block by block.
-%   The whole secondary path in one file. Every cell runs on its own, in order or
-%   not, and says what it needs before it needs it. Nothing here computes: each
-%   cell calls the stage that owns the work.
-%
-%   THE CHAIN, and what each stage leaves on disk
-%     2  centralize_primary        <cohort>_dirtable.xlsx, <dataset>_dirtable.xlsx and
-%                                  centralized/centralized_<product>.mat, five of them
-%     3  centralize_paxfwhmstate   centralized/centralized_paxfwhm_state.mat
-%     4  tablegeneration_main      state_summary.mat, transition.mat
-%     5  figures                   svg in the dataset folder, and figure windows
-%
-%   Nothing here writes into the DATA tree; everything writes under
-%   dirs.secondary_root alone. Stage 2 is the
-%   last stage that so much as opens a session folder; 3 onward work from what it
-%   gathered. Cell 0 is the only place a path is decided, so pointing this at
-%   another dataset is one edit.
-%
-%   Stage 2 rebuilds the directory sheets before it reads them, by running
-%   dirs_scantable per cohort and then dirs_mergetable, so a recording added since
-%   the last run cannot go unnoticed.
-%   The rescan does not overwrite metadata corrected by hand: dirs_writetable
-%   updates only the file columns of a row that already exists.
-%
-%   Stages 2 and 3 are INCREMENTAL. Each stamps every row with the size and
-%   modified time of the file it was built from and recomputes only the rows whose
-%   source has moved since. A re-run that changed nothing costs seconds.
-%     err  the state analysis used to be written into the session folders by
-%          batch_state_analysis, which skipped a session whenever the file already
-%          existed -- so a re-scored recording kept its old answer and no one could
-%          see it. Two sessions were found that way. see CLAUDE_LOG.md
-%
-%   Re-running a stage overwrites its output. The merged sheet is backed up first;
-%   the centralized files are not -- they are a cache of files that still exist,
-%   and stage 4 is a pure function of stage 3 and of the filters written into it.
-%
-%   The figure scripts are standalone (they clc/clear and load their own table).
-%   Cell 0 exports the dataset name to the environment, which survives their
-%   clear, so they follow this file without being edited. Run one directly and it
-%   falls back to its own default.
+%INTEGRATE_ANALYSISRESULT  Runs the dataset chain one cell per stage: directory sheets, centralized products, state analysis, tables, figures.
+%   Each cell runs the stage script that owns the work; nothing is computed here and
+%   nothing writes into the data tree. Cell 0 exports ECSPRESS_ROOT and ECSPRESS_DATASET,
+%   which survive the stages' clear, so every stage and figure follows it.
 
 %% 0. Configuration -- the only cell that decides anything
 clc, clear
-
-% Where the analysis products live. Not the data.
 dirs = dirs_central();
-
-% The data trees come from dirs_central, one per mounted root (the work drive and
-% the archive), and are empty off the rig. E:\ is the BACKUP drive -- a cohort
-% path under it produces rows that duplicate the same sessions. see CLAUDE_LOG.md
-
-% Cohorts, as <folder under dirs.working_root>. Only cell 1 reads this, and only
-% to pick which tree to rename videos in. Which cohorts go into the DATASET is
-% centralize_primary's param.cohorts, which it hands to dirs_mergetable.
-param.cohorts = ["00_igkl", "01_igkltdt"];
-
-% The joined dataset stages 2-5 work on
-param.dataset = "merged_igkl_igkltdt";
+param.dataset = "merged";   % str  the dataset; its cohorts are dirtable_main's param.dataset_cohort
 
 addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
@@ -68,58 +19,56 @@ fprintf('data    %s\n', strjoin(dirs.working_root, ' + '));
 fprintf('dataset %s\n', param.dataset);
 
 %% 0.1 What already exists -- run this before anything, it writes nothing
-% A stage whose input is missing fails deep inside a loop. This says so first.
 central_dir = fullfile(dirs.secondary_root, 'centralized');
 central_products = ["paxfwhm", "polarcluster", "roilist", "sleep_score", ...
-    "analysis_analog", "paxfwhm_state"];
+    "analysis_analog", "bout", "drift", "paxfwhm_state", "drift_state"];
 check_paths = [ ...
-    fullfile(dirs.secondary_root, param.cohorts, param.cohorts + "_dirtable.xlsx"), ...
     fullfile(dataset_dir, param.dataset + "_dirtable.xlsx"), ...
     fullfile(central_dir, "centralized_" + central_products + ".mat"), ...
-    fullfile(dataset_dir, ["state_summary.mat", "transition.mat"])];
+    fullfile(dataset_dir, ["state_summary.mat", "transition.mat", ...
+    "drift_summary.mat", "drift_transition.mat"])];
 fprintf('\n');
 check_exists = util_checkdirstat(check_paths);
-fprintf('%d of %d missing -- the stage that writes each is in the header above\n', ...
+fprintf('%d of %d missing -- each cell title below says what it writes\n', ...
     sum(~check_exists), numel(check_exists));
 
+%% 1. Directory tables   [WRITES sheets under dirs.secondary_root]
+% every stage below reads the dataset sheet this writes, so a new recording waits for it
+run(which('dirtable_main.m'));
+
 %% 1.1 Field drift in stored objects -- run when stage 4 fails on a flatten
-% One session saved before getdiameter gained eps/epschanges is enough to make
-% struct2table wrap every row in a cell, and explode_nest then fails.
-% see CLAUDE_LOG.md. dryrun lists what would change and writes nothing.
-param.cohort_idx = 2;   % which of param.cohorts, one per run
-cohort_dir = fullfile(dirs.working_root, param.cohorts(param.cohort_idx));   % one per root
+% one paxfwhm.mat saved before getdiameter gained eps is enough to break explode_nest;
+% the dry run lists what would change and writes nothing
+dirs = dirs_central();   % again: cell 1 ran a script that clears the workspace
+param.rederive_cohort = "01_igkltdt";   % str  the cohort folder the dry run walks, one per run
+cohort_dir = fullfile(dirs.working_root, param.rederive_cohort);   % one per root
 for root_idx = find(isfolder(cohort_dir))
     fwhm_rederive(char(cohort_dir(root_idx)), dryrun = true);
 end
 
 %% 2. Gather the per-session products   [WRITES under dirs.secondary_root]
-% Scans both cohorts and rebuilds the sheets first (dirs_scantable, dirs_mergetable, about a
-% second), then reads paxfwhm.mat, polarcluster.mat, roilist.mat, sleep_score.mat
-% and analysis_analog.mat out of every session that sheet lists and writes one
-% table per product. The LAST stage that opens a session folder. Incremental: a
-% row is rebuilt only when its source file's size or modified time has moved.
-%   First run is minutes and writes several GB. A re-run that finds nothing
-%   changed is seconds and does not rewrite the files.
-%   note  the scan does not overwrite a metadata value corrected by hand in the
-%        reference sheet -- dirs_writetable updates only the file columns
+% the five .mat products out of the session folders; a row is re-read only when its file moved.
+% First run takes minutes and several GB, a re-run with nothing moved takes seconds
 run(which('centralize_primary.m'));
 
+%% 2.1 Bouts   [WRITES centralized_bout.mat]
+% the state and transition windows of every session, from the scoring cell 2 gathered;
+% both state stages below read them, so a re-scored session needs this before cell 3
+run(which('centralize_bout.m'));
+
+%% 2.2 Global motion   [WRITES centralized_drift.mat]
+% each session's *_motion.txt, the frame shift the extraction applied
+run(which('centralize_drift.m'));
+
 %% 3. State analysis for every session   [WRITES centralized_paxfwhm_state.mat]
-% state_integration -> state_1d over the nine series, computed from the
-% centralized inputs. Nothing is read from or written to the data tree.
-%   This replaced batch_state_analysis, which wrote paxfwhm_state.mat into each
-%   session folder and skipped any session that already had one -- so a re-scored
-%   recording silently kept its old answer. see CLAUDE_LOG.md
+% from the centralized inputs only; a row is recomputed when its source or its bouts moved
 run(which('centralize_paxfwhmstate.m'));
 
+%% 3.1 State analysis of the global motion   [WRITES centralized_drift_state.mat]
+run(which('centralize_driftstate.m'));
+
 %% 4. Summary and transition tables   [WRITES state_summary.mat, transition.mat]
-% Flattens the two nests out of the centralized state analysis and applies the
-% filters: PA only, depth < 70, bout > 30 s, four states, sleep sessions only for
-% the transitions. Those are the analysis decision, so they stay in that file
-% rather than moving up here.
-%   Nothing caches what this produces. state_summary/transition are pure functions
-%   of the centralized state table and of those filters, so the committed script IS
-%   the record -- as long as it is committed. see CLAUDE_LOG.md
+% the analysis filters (artery, depth, bout length, states) are set in tablegeneration_main
 run(which('tablegeneration_main.m'));
 
 %% 4.1 What came out
@@ -137,10 +86,12 @@ fprintf('transition : %d rows | %d vessels | %d mice\n', n_row, n_vessel, n_mous
 fprintf('trace lengths : %s\n', ...
     mat2str(unique(cellfun(@numel, transition_result.abs_numeric.filtered_table.data))'));
 
+%% 4.2 Global motion tables   [WRITES drift_summary.mat, drift_transition.mat]
+% cell 4's filters, on recordings the FWHM pipeline judged; reads what cells 3 and 3.1 wrote
+run(which('tablegeneration_drift.m'));
+
 %% 5. Figures   [READ ONLY]
-% Each is standalone and reads ECSPRESS_DATASET, which cell 0 set. Run a cell on
-% its own or the block; they do not depend on each other.
-%   Only polar_ave_fig writes files. The other three draw on screen.
+% each reads ECSPRESS_DATASET from cell 0 and none depends on another; only polar_ave_fig writes files
 
 %% 5.1 Transition traces, four transitions x three vessels
 run(which('transition_fig.m'));
@@ -152,12 +103,9 @@ run(which('transition_prepost.m'));
 run(which('tonic_state.m'));
 
 %% 5.4 Vessel-averaged polar contours   [WRITES svg]
-% Needs polar_ave.mat, which polarcluster_integration writes and which is NOT
-% part of the table chain -- it walks the sessions itself. Run that first if the
-% file is missing.
+% needs polar_ave.mat from cell 5.0, which walks the session folders itself
 run(which('polar_ave_fig.m'));
 
 %% 5.0 Polar contour extraction, only when polar_ave.mat is missing   [WRITES]
-% Minutes, not seconds. polar_ave_fig does the alignment and averaging, so this
-% only has to run when the contours themselves change.
+% minutes; rerun only when the contours themselves change
 run(which('polarcluster_integration.m'));

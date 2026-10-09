@@ -7,18 +7,11 @@ if ~isfolder(dirs.central)
     mkdir(dirs.central);
     fprintf('created %s\n', dirs.central);
 end
-%% refresh the directory table
-% cohorts is the only place the dataset's membership is decided -- dirs_scantable and
-% dirs_mergetable take it as an argument rather than keeping a second copy
-dataset     = "merged_igkl_igkltdt";
-cohorts     = ["00_igkl", "01_igkltdt"];
-for cohort = cohorts
-    dirs_scantable(dirs.working_root, dirs.secondary_root, cohort);
-end
-sheet_info = dirs_mergetable(dirs.working_root, dirs.secondary_root, ...
-    cohorts, dataset);
 %% read directory table and extract keys
-dir_table = readtable(sheet_info.sheet_path, 'VariableNamingRule', 'preserve');
+% the sheet dirtable_main wrote; which cohorts it holds is decided there, not here
+dataset     = "merged";
+sheet_path  = fullfile(dirs.secondary_root, dataset, dataset + "_dirtable.xlsx");
+dir_table = readtable(sheet_path, 'VariableNamingRule', 'preserve');
 
 alive = false(height(dir_table), 1);
 for k = 1:height(dir_table)
@@ -27,7 +20,7 @@ end
 live_table = dir_table(alive, :);
 key_value = util_sessionkey(live_table);
 
-fprintf('dirtable %s\n   %d rows\n', sheet_info.sheet_path, height(dir_table));
+fprintf('dirtable %s\n   %d rows\n', sheet_path, height(dir_table));
 fprintf('   %d rows point at a folder, %d do not\n', sum(alive), sum(~alive));
 
 
