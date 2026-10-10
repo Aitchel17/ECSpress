@@ -4,8 +4,8 @@ classdef state_1d < handle
     %   Caller: centralize_statesession, centralize_driftsession, stateintegration_test
 
     properties
-        time_table         % 1x1 struct   table name -> N x 2 [start end] bouts in seconds, state_integration's
-        transition_window  % 1x1 float s  full width of a *_trans window, state_integration.param.transition_window
+        time_table         % 1x1 struct   table name -> N x 2 [start end] bouts in seconds, bout_sleep's or bout_puffmove's
+        transition_window  % 1x1 float s  full width of a *_trans window, the bout function's param.transition_window
         t_axis      % Time axis for the specific data being analyzed
         state_idx
         param        % Name of this analysis instance
@@ -25,8 +25,8 @@ classdef state_1d < handle
 
     methods    % set-up and access
         function obj = state_1d(bout_table, window_s)
-            % bout_table  1x1 struct   state_integration's time_table, trimmed to this series' record
-            % window_s    1x1 float s  state_integration.param.transition_window
+            % bout_table  1x1 struct   bout_sleep's or bout_puffmove's time_table, trimmed to this series' record
+            % window_s    1x1 float s  the bout function's param.transition_window
             obj.time_table = bout_table;
             obj.transition_window = window_s;
         end

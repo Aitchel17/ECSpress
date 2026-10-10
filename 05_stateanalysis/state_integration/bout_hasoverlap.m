@@ -1,6 +1,6 @@
 function hit = bout_hasoverlap(bout_table, other_table, pre_s, post_s)
 %BOUT_HASOVERLAP  Per row of bout_table, whether any row of other_table touches [start - pre_s, end + post_s].
-%   Caller: state_integration.awake_integration
+%   Caller: bout_puffmove.split_puffs
 %
 % IN   bout_table   N x 2 float s   [start, end] bouts to label
 %      other_table  M x 2 float s   [start, end] bouts to look for

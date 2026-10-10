@@ -15,7 +15,7 @@ function [swinglist, info] = event_findswing(dtrace, t_axis, state_idx, opt)
 %   quota -- an ineligible candidate is skipped, not promoted, and a state that
 %   cannot fill n_keep reports the shortfall rather than reaching further down.
 %
-%   RUN IT ON THE PURE STATE FIELDS, not the rough ones. state_integration builds
+%   RUN IT ON THE PURE STATE FIELDS, not the rough ones. bout_sleep builds
 %   both: roughnrem is NREM with uArousal folded in, so a microarousal sits inside
 %   a bout and its constriction would come back as the largest swing in NREM.
 %   Plain nrem splits the bout at the microarousal instead, so it cannot happen.

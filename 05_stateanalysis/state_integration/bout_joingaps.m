@@ -1,6 +1,6 @@
 function joined = bout_joingaps(bout_table, gap_s)
 %BOUT_JOINGAPS  Bouts closer than gap_s merged into one.
-%   Caller: state_integration.awake_integration
+%   Caller: bout_puffmove
 %
 % IN   bout_table  N x 2 float s   [start, end], sorted by start, non-overlapping
 %      gap_s       1 x 1 float s   a gap shorter than this joins its two neighbours

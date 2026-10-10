@@ -25,9 +25,9 @@ transition_table = load_struct.save_content;
 % why  the cut is state_1d line 203, center_i +/- onset with
 %      onset = transition_window*fs/2 -- HALF the window again. So the trace spans
 %      transition_window seconds total, +/- half of it
-% caution  25 is state_integration.m line 203. If that changes, this must too:
+% caution  25 is bout_sleep's param.transition_window. If that changes, this must too:
 %          the window is not stored anywhere in the transition table
-param.transition_window = 25;      % s, state_integration.param.transition_window
+param.transition_window = 25;      % s, bout_sleep's param.transition_window
 t_axis.duration = param.transition_window;
 t_axis.dpoints = size(transition_table.abs_numeric.filtered_table.data{1});
 t_axis.tpoints = linspace(-t_axis.duration/2,t_axis.duration/2, t_axis.dpoints(2));

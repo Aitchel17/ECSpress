@@ -1,6 +1,6 @@
 function [inside, outside] = bout_cutwindows(bout_table, window_table, min_s)
 %BOUT_CUTWINDOWS  Each bout split at the windows: the pieces inside any window, and the pieces outside all.
-%   Caller: state_integration.awake_integration
+%   Caller: bout_puffmove.zhang_loco
 %
 % IN   bout_table    N x 2 float s   [start, end] bouts to cut
 %      window_table  M x 2 float s   [start, end] windows; may overlap one another

@@ -101,7 +101,7 @@ classdef analysis_event < handle
         %   Fills smooth_diameter, eventlist and info.
         %
         % IN   state_bout struct       [nBout x 2] frame-index tables per state, from
-        %                              state_image.state_idx. This class knows nothing
+        %                              bout_frames. This class knows nothing
         %                              about sleep scoring, so they come in
         %      merge      N x 4 cell   {earlierState, laterState, label, polarity}.
         %                              Omitted = obj.param.merge; given, it is

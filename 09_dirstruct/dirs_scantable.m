@@ -1,6 +1,6 @@
 function [sheet_path, n_scanned] = dirs_scantable(working_root, secondary_root, cohort)
 %DIRS_SCANTABLE  Scan one cohort under every root and write its own dirtable.
-%   Caller: dirtable_main, centralize_primary, centralize_drift
+%   Caller: dirtable_main
 %   READ ONLY under working_root. The only writes are the cohort workbook and its MDF
 %   metadata cache, both under <secondary_root>\<cohort>. The cache is keyed by the
 %   session's full path, so one file serves every root. dirs_mergetable joins the sheets

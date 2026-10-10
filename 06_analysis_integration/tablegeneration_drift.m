@@ -24,6 +24,7 @@ dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 
 param.nest_names = ["state_summary", "transition"];
+% Cohort rides on filtered_table for the figures that compare cohorts; the folds drop it
 param.key_columns = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
     "NumericDepth", "NumericResolution", "Cohort"];
 

@@ -34,8 +34,10 @@ dirs.out = fullfile(dirs.secondary_root, param.dataset);
 param.nest_names = ["state_summary", "transition"];
 
 % What a row of the flattened tables carries before DataType and the series' own
-% columns. Every one is read below: the first four say which recording, VesselID and
-% NumericDepth are filtered on, NumericResolution is the pixel-to-micrometre scale.
+% columns. The first four say which recording, VesselID and NumericDepth are filtered
+% on, NumericResolution is the pixel-to-micrometre scale. Cohort is not read here: it
+% rides on filtered_table for the figures that compare cohorts. The folds group on
+% tableAnalyzer's own keys and drop it; a mouse is in one cohort, so MouseID finds it.
 param.key_columns = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
     "NumericDepth", "NumericResolution", "Cohort"];
 

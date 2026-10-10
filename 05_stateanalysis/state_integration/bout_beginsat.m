@@ -1,6 +1,6 @@
 function hit = bout_beginsat(bout_table, time_s)
 %BOUT_BEGINSAT  Per bout, whether it begins at one of the times, within a millisecond.
-%   Caller: state_integration.awake_integration
+%   Caller: bout_puffmove.zhang_loco
 %   A rest that was going when a puff came is cut at the puff onset, so its in-window piece begins
 %   exactly there; a rest that began later inside the window does not.
 %

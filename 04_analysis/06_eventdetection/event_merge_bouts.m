@@ -3,7 +3,7 @@ function pairs = event_merge_bouts(state_idx, merge, t_axis, search_s)
 %   Structural step: reads the bout tables only, never the diameter trace.
 %   The transition frame is search_from(2) == search_to(1).
 %
-% IN   state_idx  struct of [nBout x 2] frame-index bout tables (img_state.state_idx)
+% IN   state_idx  struct of [nBout x 2] frame-index bout tables, bout_frames' output
 %      merge      Nx4 cell {earlierState, laterState, label, polarity}
 %      t_axis     1xT frame times (s); also sets the frame rate
 %      search_s   search window each side of the transition (s), default 30

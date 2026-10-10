@@ -1,6 +1,6 @@
 function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
 %DIRS_MERGETABLE  Join each cohort's own sheet into the dataset sheet.
-%   Caller: dirtable_main, centralize_primary, centralize_drift
+%   Caller: dirtable_main
 %   Reads <secondary_root>\<cohort>\<cohort>_dirtable.xlsx as dirs_scantable last wrote it;
 %   the caller scans first.
 %

@@ -1,7 +1,5 @@
-%CENTRALIZE_DRIFT  Every session's *_motion.txt as one table: dataset sheet -> motion files -> centralized_drift.mat.
-%   Reads the sheet dirtable_main writes; run that first when a recording is new.
-%   Why this is not a centralize_primary product: see CLAUDE_LOG.md
-
+%CENTRALIZE_DRIFT  Work through every session's *_motion.txt and integrate to one table:
+%  Read merged directory table -> fint _motion.txt -> write centralized_drift.mat.
 %% settings
 param.dataset  = "merged";      % str   the dataset whose sheet lists the sessions
 param.rebuild  = false;         % bool  true re-reads every session
@@ -102,7 +100,7 @@ function [row, failure] = scan_session(i, session_dir, old)
         'source_modified', {}, 'reused', {});
     failure = "";
 
-    % globbed: the stem is the MDF file's name, not the session's; see CLAUDE_LOG.md
+    % globbed: the stem is the MDF file's name, not the session's
     found = dir(fullfile(session_dir, '*_motion.txt'));
     if isempty(found)
         return
