@@ -1,6 +1,6 @@
 function final_binary_movement = get_binaryball(absball, binary_smooth, gap_tolerance, thresh)
 %GET_BINARYBALL  Running or not, per ball sample: the smoothed threshold crossings, gaps under gap_tolerance filled, edges snapped to the raw threshold.
-%   Caller: state_integration.awake_integration
+%   Caller: bout_puffmove
 %
 % IN   absball        N float cm/s   |speed| at the ball's resampled rate
 %      binary_smooth  N bool         the smoothed |speed| above thresh

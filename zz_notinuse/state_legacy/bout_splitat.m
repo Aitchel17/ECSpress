@@ -1,6 +1,6 @@
 function [hit, miss] = bout_splitat(bout_table, window_table, min_s)
 %BOUT_SPLITAT  Bouts sorted against windows by where they BEGIN: one begun in a window is the window's whole, any other is cut at the window edges.
-%   Caller: state_integration.awake_integration
+%   Caller: bout_puffmove.cut_at_puffs
 %   A run the puff starts stays the puff's until the mouse stops, so it is not cut. A run that was
 %   already going when the puff came keeps what lies before the window and after it as its own,
 %   and hands the window itself to the puff.
