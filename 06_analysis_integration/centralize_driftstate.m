@@ -3,7 +3,7 @@
 %   same class, the same two methods, the same output shape, so tablegeneration_main
 %   and the figure scripts read drift_row / drift_col the way they read a thickness.
 %
-%   Run centralize_drift first. This reads what that wrote.
+%   Run centralize_drift and centralize_bout first. This reads what they wrote.
 
 %% settings
 param.key_columns  = ["MouseID", "Date", "SessionType", "SessionID"];
@@ -11,33 +11,29 @@ param.rebuild      = false;         % bool  true recomputes every session
 
 % Bump when what is taken off state_1d changes, or when either method changes what
 % it produces. The inputs are untouched by such a change, so no stamp can see it.
-schema_version = 1;
+%   2  the bout tables are centralized_bout's and are no longer copied in
+%   3  state windows are half-open, and only the transition windows lose the end margin
+schema_version = 3;
 
 addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 dirs = dirs_central();
 
 %% the inputs
-in_path = fullfile(dirs.central, "centralized_" + ["drift", "sleep_score", "analysis_analog"] + ".mat");
+in_path = fullfile(dirs.central, "centralized_" + ["drift", "bout"] + ".mat");
 [in_exists, ~, ~] = util_checkdirstat(in_path);
 if ~in_exists(1)
     error('centralize_driftstate:noDrift', 'run centralize_drift first, centralized_drift.mat is missing');
 end
+if ~in_exists(2)
+    error('centralize_driftstate:noBout', 'run centralize_bout first, centralized_bout.mat is missing');
+end
 drift_table = load(in_path(1)).central;
-score_table = table();
-analog_table = table();
-if in_exists(2)
-    score_table = load(in_path(2)).central;
-end
-if in_exists(3)
-    analog_table = load(in_path(3)).central;
-end
-fprintf('drift %d rows, sleep_score %d, analysis_analog %d\n', ...
-    height(drift_table), height(score_table), height(analog_table));
+bout_table = load(in_path(2)).central;
+fprintf('drift %d rows, bout %d\n', height(drift_table), height(bout_table));
 
 key_drift = util_sessionkey(drift_table);
-key_score = util_sessionkey(score_table);
-key_analog = util_sessionkey(analog_table);
+key_bout = util_sessionkey(bout_table);
 
 %% what is already computed
 out_path = fullfile(dirs.central, "centralized_drift_state.mat");
@@ -56,20 +52,22 @@ if ~isempty(previous)
     key_previous = util_sessionkey(previous);
 end
 
-%% one row per session that has a scoring to split by
+%% one row per session that has bout tables to split by
 scan = struct('drift_i', {}, 'data', {}, 'input_stamp', {}, 'reused', {});
 for k = 1:height(drift_table)
-    [score, primary_analog, stamp] = centralize_scoring(score_table, key_score, ...
-        analog_table, key_analog, key_drift(k), drift_table.source_modified(k));
-    if isempty(stamp)
-        fprintf('   no scoring %s\n', key_drift(k));
+    hit_bout = find(key_bout == key_drift(k), 1);
+    if isempty(hit_bout)
+        fprintf('   no bout tables %s\n', key_drift(k));
         continue
     end
+    % the stamp moves when the drift source moved or the bout row was recomputed
+    bout_data = bout_table.data{hit_bout};
+    stamp = drift_table.source_modified(k) + bout_table.computed(hit_bout);
     hit = find(key_previous == key_drift(k), 1);
     old = previous(hit, :);
     series = drift_table.data{k};
     [row, failure] = centralize_driftsession(k, series.disp_row, series.disp_col, ...
-        series.drift_fps, score, primary_analog, stamp, old);
+        series.drift_fps, bout_data.time_table, bout_data.param.transition_window, stamp, old);
     if failure ~= ""
         fprintf('   FAILED %s -- %s\n', key_drift(k), failure);
     end

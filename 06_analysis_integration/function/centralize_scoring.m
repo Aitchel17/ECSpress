@@ -2,9 +2,9 @@ function [score, primary_analog, stamp] = centralize_scoring(score_table, key_sc
     analog_table, key_analog, session_key, pax_stamp)
 %CENTRALIZE_SCORING  Which scoring splits this session, and when its sources moved.
 %   A sleep score wins. Almost every recording carries an analysis_analog.mat,
-%   sleep ones included, and theirs has an empty air table -- running
-%   awake_integration over it asks a table with no columns for Duration. So an
-%   analog counts as a scoring only when its air table has rows.
+%   sleep ones included, and theirs never switches the air channel on. So an
+%   analog counts as a scoring only when it carries air, which
+%   centralize_stripanalog keeps only where a puff was delivered.
 %
 %   The stamp covers the sources the row is actually built from, and only those: a
 %   sleep recording that also carries an analog analysis does not read it, so a
@@ -34,7 +34,7 @@ function [score, primary_analog, stamp] = centralize_scoring(score_table, key_sc
         return
     end
     candidate = analog_table.data{hit_analog};
-    if ~isfield(candidate, 'airtable') || isempty(candidate.airtable)
+    if ~isfield(candidate, 'air')
         return
     end
     primary_analog = candidate;

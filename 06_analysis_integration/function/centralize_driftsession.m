@@ -1,5 +1,5 @@
 function [row, failure] = centralize_driftsession(k, disp_row, disp_col, drift_fps, ...
-    score, primary_analog, stamp, old)
+    time_table, transition_window, stamp, old)
 %CENTRALIZE_DRIFTSESSION  One session's row of centralized_drift_state.
 %   Caller: centralize_driftstate
 %   The two drift components go through state_1d the way the nine FWHM series do
@@ -10,8 +10,8 @@ function [row, failure] = centralize_driftsession(k, disp_row, disp_col, drift_f
 %        disp_row        N x 1 double      tissue displacement along rows, px
 %        disp_col        N x 1 double      along columns, px
 %        drift_fps       1x1 double        Hz
-%        score           1x1 struct | []   the sleep score, if it has one
-%        primary_analog  1x1 struct | []   the whisker scoring instead
+%        time_table      1x1 struct        its bout tables, centralized_bout's data.time_table
+%        transition_window  1x1 float s    centralized_bout's data.param.transition_window
 %        stamp           1x1 double        what this row is rebuilt against
 %        old             0|1 row table     what the last run wrote for this session
 %   OUT  row             0x0 | 1x1 struct  drift_i, data, input_stamp, reused
@@ -23,9 +23,8 @@ function [row, failure] = centralize_driftsession(k, disp_row, disp_col, drift_f
     if ~unmoved
         try
             t_drift = (0:numel(disp_row) - 1) / drift_fps;
-            state_integrate = state_integration(score, primary_analog);
-            state_integrate.trim_to_duration(t_drift(end));
-            drift_state = state_1d(state_integrate);
+            trimmed_table = bout_trim(time_table, t_drift(end), transition_window);
+            drift_state = state_1d(trimmed_table, transition_window);
             drift_state.get_state_indices(t_drift, drift_fps);
 
             row_flat = detrend(disp_row)';    % 1 x N, the orientation the FWHM series carry
@@ -54,16 +53,10 @@ function [row, failure] = centralize_driftsession(k, disp_row, disp_col, drift_f
 end
 
 function out = strip_state(drift_state)
-    % the two result structs the tables nest on, the axes, and the pieces of the
-    % state_integration anything outside the class reads
+    % the two result structs the tables nest on and the axes. The bout tables this
+    % was split by are centralized_bout's row and are not copied here
     out = struct();
     for f = ["state_summary", "transition", "t_axis", "state_idx", "param"]
         out.(f) = drift_state.(f);
-    end
-    out.sleep_obj = struct();
-    if ~isempty(drift_state.sleep_obj)
-        out.sleep_obj.param = drift_state.sleep_obj.param;
-        out.sleep_obj.time_table = drift_state.sleep_obj.time_table;
-        out.sleep_obj.info = drift_state.sleep_obj.info;
     end
 end

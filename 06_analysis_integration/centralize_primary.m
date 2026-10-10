@@ -33,7 +33,7 @@ products    = [ ...            % Px2 str  <file stem>, <folder under the session
     "sleep_score",  "peripheral"; ...
     "analysis_analog", "peripheral"];
 param.rebuild = false;         % bool     true reads every source again
-schema_version = 1;            % double   bumping it forces a full rebuild
+schema_version = 2;            % double   bumping it forces a full rebuild
 
 %% one product at a time, so peak memory is one table and not three
 for p = 1:size(products, 1)

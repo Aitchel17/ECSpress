@@ -3,20 +3,26 @@ function out = centralize_stripanalog(primary_analog)
 %   IN   primary_analog  1x1 analysis_analog
 %   OUT  out             1x1 struct
 
-    % The resampled traces and the normalised spectrogram; nothing at the original
-    % sample rate. rawdata, emg.power/signal and ball's pre-resample traces are all
-    % 1.8 M samples per field and nothing downstream reads them. Of the four arrays
+    % The resampled traces and the normalised spectrogram. The air channel is the one
+    % thing kept at the original sample rate, as one bool per sample, because
+    % bout_puffmove finds the puffs on it. The rest of rawdata, emg.power/signal and
+    % ball's pre-resample traces are all 1.8 M samples per field and nothing
+    % downstream reads them. Of the four arrays
     % in ecogspectrum only baseline_S is taken -- it is the log ratio that is
     % actually looked at, and S, log_norm_spectrum and awake_S are the same
     % measurement in three other framings.
     %
     % Coming out as a plain struct also drops the dependency on the analysis_analog
     % classdef, which lives in 02_othersignal rather than either repo root here.
-    % Fields are guarded because a sleep recording has no airtable or ball and a
-    % whisker one has no sleep scoring behind its spectrogram.
+    % Fields are guarded because a sleep recording has no puff or ball and a
+    % whisker one has no sleep scoring behind its spectrogram. air is kept only
+    % where a puff was delivered, so its presence is what centralize_scoring tests.
     out = struct();
-    if isprop(primary_analog, 'airtable')
-        out.airtable = primary_analog.airtable;
+    if isfield(primary_analog.rawdata, 'raw_Air_puff1')
+        air_on = primary_analog.rawdata.raw_Air_puff1 > 0;
+        if any(air_on)
+            out.air = struct('on', air_on, 'fs', primary_analog.samplingfrequency);
+        end
     end
     out.ball = pick_fields(primary_analog, 'ball', ...
         ["ds_fps", "rs_taxis", "resampled_ball"]);
