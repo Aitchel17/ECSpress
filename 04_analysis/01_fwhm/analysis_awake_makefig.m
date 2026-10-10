@@ -2,7 +2,7 @@ function fig = analysis_awake_makefig(time_table, t_axis, bv_px, totalpvs_px, pi
 %ANALYSIS_AWAKE_MAKEFIG  The puff x locomotion bouts as a strip, and the ball velocity, vessel diameter and PVS thickness with the bouts behind them.
 %   Caller: review_session
 %
-% IN   time_table     1x1 struct   bout tables in seconds, from state_integration.awake_integration
+% IN   time_table     1x1 struct   bout tables in seconds, from bout_puffmove
 %      t_axis         1 x T float  frame times of the FWHM series (s)
 %      bv_px          1 x T float  vessel diameter, lower boundary minus upper (px)
 %      totalpvs_px    1 x T float  PVS thickness, both sides (px)
@@ -13,7 +13,7 @@ function fig = analysis_awake_makefig(time_table, t_axis, bv_px, totalpvs_px, pi
 %      opt.window_inch  1x2 float  size of the three trace windows (in)
 %      opt.strip_inch   1x2 float  size of the strip window (in)
 %      opt.bar_frac     1x1 float  puff bar height, as a fraction of the trace window's y range
-% OUT  fig.strip    make_fig   a puff row and a run / rest row, a legend of the six categories
+% OUT  fig.strip    make_fig   a puff row and a locomotion / rest row, a legend of the seven categories
 %      fig.ball     make_fig   ball velocity (cm/s)
 %      fig.bv       make_fig   vessel diameter (um)
 %      fig.pvs      make_fig   PVS thickness (um)
@@ -37,14 +37,14 @@ function fig = analysis_awake_makefig(time_table, t_axis, bv_px, totalpvs_px, pi
     recording_end = t_axis(end);
     headroom_frac = 1.5 * opt.bar_frac;
 
-    %% 1. The six categories as two rows; run and rest never overlap, so they share one
+    %% 1. The seven categories as two rows; locomotion and rest never overlap, so they share one
     fig.strip = make_fig('awakeStrip_figure');
     fig.strip.update_figsize(opt.strip_inch);
     fig.strip.reset_axis();
     patch_list = plot_awake_patches(fig.strip.ax, time_table, rows = true);
     xlim(fig.strip.ax, [0 recording_end]);
     ylim(fig.strip.ax, [0.4 2.6]);
-    set(fig.strip.ax, 'YTick', 1:2, 'YTickLabel', {'run / rest', 'puff'});
+    set(fig.strip.ax, 'YTick', 1:2, 'YTickLabel', {'locomotion / rest', 'puff'});
     fig.strip.put_xaxistitle('Time (sec)');
     key = legend(fig.strip.ax, patch_list, 'Orientation', 'horizontal', ...
         'Location', 'northoutside', 'Box', 'off', 'Interpreter', 'none');

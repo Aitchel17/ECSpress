@@ -5,11 +5,12 @@ function handle_list = plot_awake_patches(ax, time_table, opt)
 % IN   ax           1x1 axes      drawn into; its hold state is put back, and its y limits too
 %                                 unless rows is true, where the strip's caller sets them
 %      time_table   1x1 struct    table name -> N x 2 [start end] bouts in seconds, as
-%                                 state_integration builds it. Read: puff_go_dur*,
-%                                 puff_nogo_dur*, go_puff, go_nopuff, nogo_puff, nogo_nopuff
-%      opt.rows     1x1 logical   false = runs and puff-touched rests shaded the height of
-%                                 the axes, puffs as a bar along its top; true = all six as
-%                                 a strip, y = 2 puff, 1 run and rest, each row 0.8 tall
+%                                 bout_puffmove builds it. Read: puff_go_dur*,
+%                                 puff_nogo_dur*, puff_moving_dur*, loco_puff, loco_nopuff,
+%                                 loco_rest_puff, loco_rest_nopuff
+%      opt.rows     1x1 logical   false = locomotion and puff-touched rests shaded the height of
+%                                 the axes, puffs as a bar along its top; true = all seven as
+%                                 a strip, y = 2 puff, 1 locomotion and rest, each row 0.8 tall
 %      opt.ylim     1x2 float     height of the shading when rows is false; [] = ax.YLim
 %      opt.bar_frac 1x1 float     height of the puff bar, as a fraction of that height
 % OUT  handle_list  K x 1 patch    one patch per category that has bouts, DisplayName = its
@@ -24,9 +25,9 @@ function handle_list = plot_awake_patches(ax, time_table, opt)
 
     palette = color_lee.clist;
     category = table( ...
-        ["nogo_nopuff"; "nogo_puff"; "go_nopuff"; "go_puff"; "puff_nogo"; "puff_go"], ...
-        [1; 1; 1; 1; 2; 2], ...
-        [false; true; true; true; false; false], ...
+        ["loco_rest_nopuff"; "loco_rest_puff"; "loco_nopuff"; "loco_puff"; "puff_nogo"; "puff_go"; "puff_moving"], ...
+        [1; 1; 1; 1; 2; 2; 2], ...
+        [false; true; true; true; false; false; false], ...
         'VariableNames', {'name', 'strip_row', 'is_shaded'});
 
     y_range = opt.ylim;
