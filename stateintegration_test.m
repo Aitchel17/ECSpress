@@ -12,15 +12,15 @@ sessiondir = 'G:\tmp\00_igkl\hql097\260321_hql097_sleep\HQL097_sleep260321_010';
 session = ECSSession(sessiondir);
 session = session.load_primary_results();
 score = load(fullfile(sessiondir, 'peripheral', 'sleep_score.mat'));
-state_integrate = state_integration(score);
-state_integrate.trim_to_duration(session.pax_fwhm.t_axis(end));
+[sleep_bout, sleep_param] = bout_sleep(score.behavState, score.statecodes, score.binwidth_sec);
+time_table = bout_trim(sleep_bout, session.pax_fwhm.t_axis(end), sleep_param.transition_window);
 
 
 %
-paxfwhm_state = state_1d(state_integrate);
+paxfwhm_state = state_1d(time_table, sleep_param.transition_window);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
 
-paxfwhm_state = state_1d(state_integrate);
+paxfwhm_state = state_1d(time_table, sleep_param.transition_window);
 paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
 contents_types = {["thickness","eps","bv","totalpvs","uppvs","downpvs"],...
                 ["displacement","uppvs","downpvs","upbv","downbv"]};
@@ -62,13 +62,11 @@ session.stackch2 = session.loadstack('ch2');
 % ECSSession object works here as it has these properties.
 twophoton_processed = twophoton_preprocess(session);
 %%
-img_state = state_image(state_integrate);
-img_state.get_state_indices(twophoton_processed.t_axis,twophoton_processed.outfps);
-img_state.param.pixel2um = twophoton_processed.pixel2um;
+state_idx = bout_frames(twophoton_processed.t_axis, time_table);
 %session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.dir_struct.primary_analysis);
 %%
-na_trans = get_stateframes(img_state.state_idx.na_trans,twophoton_processed.ch1);
-ra_trans = get_stateframes(img_state.state_idx.ra_trans,twophoton_processed.ch1);
+na_trans = get_stateframes(state_idx.na_trans,twophoton_processed.ch1);
+ra_trans = get_stateframes(state_idx.ra_trans,twophoton_processed.ch1);
 
 %%
 result = piv_preprocess(ra_trans{1});

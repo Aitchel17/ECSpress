@@ -20,9 +20,8 @@ twophoton_processed = twophoton_preprocess(session);
 
 % 0.6 Load sleep state and put the bouts on the imaging frame axis
 score = load(fullfile(sessiondir, 'peripheral', 'sleep_score.mat'));
-sleep_integrate = state_integration(score);
-img_state = state_image(sleep_integrate);
-img_state.get_state_indices(twophoton_processed.t_axis, twophoton_processed.outfps);
+sleep_bout = bout_sleep(score.behavState, score.statecodes, score.binwidth_sec);
+state_idx = bout_frames(twophoton_processed.t_axis, sleep_bout);   % every bout table on the stack's frames
 
 
 %% 1. Event detection on the FWHM diameter
@@ -30,10 +29,10 @@ img_state.get_state_indices(twophoton_processed.t_axis, twophoton_processed.outf
 
 % The partition is analysis_event.param -- six transitions and the three states
 event_det = analysis_event(session.pax_fwhm.thickness.bv, session.pax_fwhm.t_axis);
-event_det.arousaltransition(img_state.state_idx);
+event_det.arousaltransition(state_idx);
 
 % The controls
-event_det.control(img_state.state_idx);
+event_det.control(state_idx);
 
 % Both traces on the object are PX; the figure layer converts
 disp(struct2table(rmfield(event_det.eventlist, {'search_from','search_to'})));
@@ -44,8 +43,8 @@ disp(struct2table(rmfield(event_det.eventlist, {'search_from','search_to'})));
 event_review(event_det.eventlist, event_det.diameter, event_det.smooth_diameter, ...
     event_det.info.P.sg_win_s, twophoton_processed.t_axis, ...
     'pixel2um',    twophoton_processed.pixel2um, ...
-    'sleep_score', sleep_integrate.sleep_score, ...
-    'state_idx',   img_state.state_idx, ...
+    'sleep_score', score, ...
+    'state_idx',   state_idx, ...
     'states',      event_det.param.states);
 %% 2. Pick the event
 % events is chronological, so ask by label + id rather than by index
@@ -402,8 +401,8 @@ k = 1;
 ax_tr = event_review(event_det.eventlist, event_det.diameter, ...
     event_det.smooth_diameter, event_det.info.P.sg_win_s, twophoton_processed.t_axis, ...
     'pixel2um',    twophoton_processed.pixel2um, ...
-    'sleep_score', sleep_integrate.sleep_score, ...
-    'state_idx',   img_state.state_idx, ...
+    'sleep_score', score, ...
+    'state_idx',   state_idx, ...
     'states',      event_det.param.states);
 w  = [event_det.eventlist(piv_sel(k).id).start_f, event_det.eventlist(piv_sel(k).id).end_f];
 rg = max(1, w(1) - 60):min(numel(event_det.diameter), w(2) + 60);

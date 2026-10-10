@@ -9,10 +9,8 @@
 %   for x < 0 -- one panel read two ways. In area the null is a horizontal line and
 %   both halves read the same direction. see CLAUDE_LOG.md
 %
-%   Reads centralized_paxfwhm.mat and centralized_sleep_score.mat, which is 2.6 MB.
-%   It does NOT open centralized_paxfwhm_state.mat: that file's state_idx has
-%   overlapping fields, consecutive bouts sharing a boundary frame, and a tail left
-%   unlabelled by trim_to_duration, and the scoring it was built from is right here.
+%   Reads centralized_paxfwhm_state.mat: the boundary rows, the frame axis and the
+%   state windows every state table is built on.
 %
 %   note  two protections an earlier design made mandatory were measured and
 %        dropped. The transition band costs a third of the vessels and moves
@@ -54,15 +52,14 @@ param.fontsize = 10;
 param.y_space = "eps";
 
 % HOW THE STATES ARE CUT.
-%   "nrem_awake"       the fine codes, NREM against NotSleep. Drowsy and uArousal
+%   "nrem_awake"       the fine windows, nrem against awake. Drowsy and uarousal
 %                      are in neither
-%   "roughnrem_awake"  NREM + uArousal against NotSleep, which is what
-%                      state_integration calls roughnrem. uArousal is a brief
+%   "roughnrem_awake"  roughnrem (nrem + uarousal) against awake. uArousal is a brief
 %                      arousal INSIDE an NREM bout, so folding it in adds
 %                      constrictions to the NREM cell and narrows its operating point
 param.state_partition = "roughnrem_awake";
 
-% Frames within this many of a label change are dropped from both cells. The 5 s
+% Frames within this many of a bout's first frame are dropped from both cells. The 5 s
 % scoring grid locates a transition only to +/- 2.5 s, which is 8 frames at 3 Hz.
 %   0 keeps everything, which is what the sweep argued for while the answers are
 %   null. see FINDINGS.md
@@ -75,10 +72,7 @@ param.match_columns = false;
 fprintf('y space %s | partition %s | edge band %d frames | matching %d\n\n', ...
     param.y_space, param.state_partition, param.edge_frame, param.match_columns);
 
-central = load(fullfile(dirs.central, 'centralized_paxfwhm.mat')).central;
-score_table = load(fullfile(dirs.central, 'centralized_sleep_score.mat')).central;
-key_central = util_sessionkey(central);
-key_score = util_sessionkey(score_table);
+central = load(fullfile(dirs.central, 'centralized_paxfwhm_state.mat')).central;
 
 %% The stratum
 depth_um = lead_number(central.Depth);
@@ -86,7 +80,8 @@ resolution_um = lead_number(central.Resolution);
 is_artery = contains(string(central.VesselID), "PA", 'IgnoreCase', true);
 same_setting = abs(resolution_um - param.pool_resolution) <= param.resolution_tol;
 in_stratum = is_artery & depth_um < param.depth_thr & same_setting;
-is_scored = ismember(key_central, key_score);
+% a session the sleep scoring reached has an nrem window table; a whisker one does not
+is_scored = cellfun(@(row) isfield(row.state_idx, "nrem"), central.data);
 row_list = find(in_stratum & is_scored);
 fprintf('PA, depth < %d um, %.3f um/px : %d sessions | with a scoring : %d\n', ...
     param.depth_thr, param.pool_resolution, sum(in_stratum), numel(row_list));
@@ -112,13 +107,14 @@ reached = zeros(2, n_grid);
 
 for a = 1:n_session
     k = row_list(a);
-    pax_fwhm = central.data{k};
+    state_row = central.data{k};
     um_per_px = resolution_um(k);
     session.vessel(a) = string(central.MouseID(k)) + "_" + string(central.VesselID(k));
 
-    bv_px = double(pax_fwhm.thickness.bv(:));
+    thickness = fwhm_thickness(state_row.idx);
+    bv_px = double(thickness.bv(:));
     bv_um = bv_px * um_per_px;
-    eps_um = double(pax_fwhm.thickness.eps(:)) * um_per_px;
+    eps_um = double(thickness.eps(:)) * um_per_px;
     finite_pair = isfinite(bv_um) & isfinite(eps_um);
 
     % the y series. area is absolute here on purpose -- see the param block
@@ -128,16 +124,25 @@ for a = 1:n_session
         y_value = eps_um;
     end
 
-    score_row = score_table.data{find(key_score == key_central(k), 1)};
-    [state_code, state_info] = state_perframe(pax_fwhm.t_axis, ...
-        double(score_row.behavState), score_row.binwidth_sec, param.edge_frame);
-    usable = finite_pair & ~state_info.near_change;
-
-    in_sleep = usable & state_code == score_row.statecodes.NREM;
-    if param.state_partition == "roughnrem_awake" && isfield(score_row.statecodes, 'uarousal')
-        in_sleep = in_sleep | (usable & state_code == score_row.statecodes.uarousal);
+    state_window = state_row.state_idx;
+    n_frame = numel(bv_px);
+    % frames within edge_frame of a bout's first frame; none when edge_frame is 0
+    near_change = false(n_frame, 1);
+    if param.edge_frame > 0
+        bout_first = false(n_frame, 1);
+        for field = ["awake", "drowsy", "nrem", "rem", "uarousal"]
+            bout_first(state_window.(field)(:, 1)) = true;
+        end
+        near_change = movmax(double(bout_first), 2 * param.edge_frame + 1) > 0;
     end
-    in_awake = usable & state_code == score_row.statecodes.NotSleep;
+    usable = finite_pair & ~near_change;
+
+    sleep_field = "nrem";
+    if param.state_partition == "roughnrem_awake"
+        sleep_field = "roughnrem";
+    end
+    in_sleep = usable & interval_mask(state_window.(sleep_field), n_frame);
+    in_awake = usable & interval_mask(state_window.awake, n_frame);
     cell_mask = {in_sleep, in_awake};
     session.n_frame(a, :) = [sum(in_sleep), sum(in_awake)];
     if any(session.n_frame(a, :) < param.min_frame)
@@ -371,5 +376,16 @@ function value = lead_number(text_column)
         if strlength(head) > 0
             value(k) = str2double(head);
         end
+    end
+end
+
+function frame_mask = interval_mask(interval, n_frame)
+%INTERVAL_MASK  A state table's [first last] frame rows as one logical column over frames.
+%   IN   interval    Nx2 double   frame indices, inclusive at both ends
+%        n_frame     1x1 double   how long the session is
+%   OUT  frame_mask  T x 1 logical
+    frame_mask = false(n_frame, 1);
+    for row_idx = 1:size(interval, 1)
+        frame_mask(interval(row_idx, 1):interval(row_idx, 2)) = true;
     end
 end
