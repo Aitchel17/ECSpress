@@ -16,6 +16,12 @@ classdef ECSSession < mdfExtractLoader
         pax_fwhm
         polarcluster
         radon_analysis
+
+        % Peripheral products and tissue motion, by load_peripheral and load_motion; [] when absent
+        primary_analog  % analysis_analog | []   peripheral/analysis_analog.mat
+        camera_session  % analysis_camera | []   peripheral/analysis_camera.mat
+        sleep_score     % 1x1 struct | []        peripheral/sleep_score.mat, as load returns it
+        motion          % 1x1 struct | []        t_s, rostral_um, lateral_um : N x 1 float each
     end
 
     methods
@@ -152,6 +158,45 @@ classdef ECSSession < mdfExtractLoader
                     warning('Could not initialize default roi_handle.');
                 end
             end
+        end
+
+        function obj = load_peripheral(obj)
+            % The three products peripheral_batch and the sleep scoring write; one left [] when its file is absent
+            peripheral_dir = fullfile(obj.dir_struct.load_dir, 'peripheral');
+            product = { ...              % file, variable inside it ('' = the whole file), property
+                'analysis_analog.mat', 'primary_analog', 'primary_analog'; ...
+                'analysis_camera.mat', 'camera_session', 'camera_session'; ...
+                'sleep_score.mat',     '',               'sleep_score'};
+            for k = 1:size(product, 1)
+                file_path = fullfile(peripheral_dir, product{k, 1});
+                if ~isfile(file_path)
+                    fprintf('   no %s\n', file_path);
+                    continue
+                end
+                if isempty(product{k, 2})
+                    obj.(product{k, 3}) = load(file_path);
+                else
+                    obj.(product{k, 3}) = load(file_path, product{k, 2}).(product{k, 2});
+                end
+            end
+        end
+
+        function obj = load_motion(obj)
+            % Tissue displacement from <session>_motion.txt, um from the session median : rostral = image top (-row), lateral = image right (+col)
+            motion_file = dir(fullfile(obj.dir_struct.load_dir, '*_motion.txt'));
+            if isempty(motion_file)
+                fprintf('   no *_motion.txt in %s\n', obj.dir_struct.load_dir);
+                return
+            end
+            motion_path = fullfile(motion_file(1).folder, motion_file(1).name);
+            [disp_row, disp_col, ~, drift_fps] = io_readmotion(motion_path);
+            frame_idx = (0:numel(disp_row) - 1)';
+            row_shift = disp_row(:) - median(disp_row);
+            col_shift = disp_col(:) - median(disp_col);
+            obj.motion = struct( ...
+                't_s', frame_idx / drift_fps, ...
+                'rostral_um', -row_shift * obj.img_param.pixel2um, ...
+                'lateral_um', col_shift * obj.img_param.pixel2um);
         end
     end
 
