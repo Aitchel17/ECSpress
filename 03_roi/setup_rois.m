@@ -1,5 +1,6 @@
 function setup_rois(roilist, twophoton_processed, pax_fwhm, primary_path, opt)
 %SETUP_ROIS  Trace the BV and PVS boundaries on the FWHM diameter extremes.
+%   Caller: analysis_main, analysis_main_grabne, analysis_main_piv
 %   A dilated or constricted boundary only exists at one frame each: where the
 %   FWHM lumen trace peaks and where it bottoms. Each ROI is drawn on a short
 %   window around its own frame rather than by scrolling the whole recording.
@@ -12,6 +13,7 @@ function setup_rois(roilist, twophoton_processed, pax_fwhm, primary_path, opt)
 %      primary_path         roilist save location
 %      halfwin              frames either side of an extreme, default 15
 %      sg_win_s             smoothing window (s) for locating the extremes, default 3
+%      labels               1 x K string, which of the six ROIs to draw; default all six
 % OUT  none; roilist is a handle, and is saved to primary_path
 
 arguments
@@ -21,6 +23,8 @@ arguments
     primary_path (1,:) char
     opt.halfwin  (1,1) double {mustBePositive} = 15
     opt.sg_win_s (1,1) double {mustBePositive} = 3
+    opt.labels   (1,:) string = ["manual_dilated_pvs", "manual_constricted_pvs", "manual_dilated_bv", ...
+                                 "manual_constricted_bv", "manual_dipin", "manual_dipout"]
 end
 
 % 0. Setup
@@ -51,16 +55,28 @@ report_frame('dilated',     f_dilated,     dtrace, pax_fwhm);
 report_frame('constricted', f_constricted, dtrace, pax_fwhm);
 
 % 1. PVS boundaries, drawn on the PVS channel
-draw_step(roilist, pvsimg, bvimg, 'manual_dilated_pvs',     '',                       'polygon', w_dil, primary_path);
-draw_step(roilist, pvsimg, bvimg, 'manual_constricted_pvs', 'manual_dilated_pvs',     'polygon', w_con, primary_path);
+if any(opt.labels == "manual_dilated_pvs")
+    draw_step(roilist, pvsimg, bvimg, 'manual_dilated_pvs',     '',                       'polygon', w_dil, primary_path);
+end
+if any(opt.labels == "manual_constricted_pvs")
+    draw_step(roilist, pvsimg, bvimg, 'manual_constricted_pvs', 'manual_dilated_pvs',     'polygon', w_con, primary_path);
+end
 
 % 2. Vessel boundaries, drawn on the lumen channel
-draw_step(roilist, bvimg, pvsimg, 'manual_dilated_bv',      'manual_dilated_pvs',     'polygon', w_dil, primary_path);
-draw_step(roilist, bvimg, pvsimg, 'manual_constricted_bv',  'manual_constricted_pvs', 'polygon', w_con, primary_path);
+if any(opt.labels == "manual_dilated_bv")
+    draw_step(roilist, bvimg, pvsimg, 'manual_dilated_bv',      'manual_dilated_pvs',     'polygon', w_dil, primary_path);
+end
+if any(opt.labels == "manual_constricted_bv")
+    draw_step(roilist, bvimg, pvsimg, 'manual_constricted_bv',  'manual_constricted_pvs', 'polygon', w_con, primary_path);
+end
 
 % 3. Dip lines, on the dilated frame where the structures are widest
-draw_step(roilist, bvimg,  pvsimg, 'manual_dipin',  '', 'line', w_dil, primary_path);
-draw_step(roilist, pvsimg, bvimg,  'manual_dipout', '', 'line', w_dil, primary_path);
+if any(opt.labels == "manual_dipin")
+    draw_step(roilist, bvimg,  pvsimg, 'manual_dipin',  '', 'line', w_dil, primary_path);
+end
+if any(opt.labels == "manual_dipout")
+    draw_step(roilist, pvsimg, bvimg,  'manual_dipout', '', 'line', w_dil, primary_path);
+end
 end
 
 % ---------------------------------------------------------------------------
