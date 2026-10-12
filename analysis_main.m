@@ -25,7 +25,7 @@ addpath("G:\03_program\01_ecspress\09_dirstruct"); dirs_ecspath;
 %close all
 % Directory setup
 % sessiondir = 'G:\tmp\01_igkltdt\hql104\260607_hql104_sleep\HQL104_sleep260607_006';
-sessiondir ='G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_005';
+sessiondir ='G:\tmp\01_igkltdt\hql111\260922_hql111_sleep\hql111_sleep260922_007';
 
 % 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(sessiondir);
@@ -48,7 +48,7 @@ twophoton_processed = twophoton_preprocess(session);
 
 %% 4.1 FWHM Analysis
 % 4.1.1 FWHM analysis - ROI Setupw
-session.roilist.addormodifyroi(twophoton_processed.ch2,'pax','line',twophoton_processed.ch1);
+session.roilist.addormodifyroi(twophoton_processed.ch1,'pax','line',twophoton_processed.ch2);
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 session.pax_fwhm.param.fs = twophoton_processed.outfps;
@@ -66,7 +66,6 @@ csfch = 'ch2';                                  % CSF/PVS channel
 session.pax_fwhm.param.channel_pvs = csfch;     % single source: data + record both from csfch
 session.pax_fwhm.addkymograph("pvs", twophoton_processed.(csfch),"mean")
 session.pax_fwhm.kymograph_afterprocess('pvs',[1 5])
-%%
 session.pax_fwhm.pvsanalysis();
 %%
 session.pax_fwhm.clean_outlier(true)
@@ -129,6 +128,7 @@ csfch = session.pax_fwhm.param.channel_pvs;
 session.polarcluster.cluster(session.pax_fwhm.kymograph.kgph_lumen_processed, ...
     twophoton_processed.(bvch), twophoton_processed.(csfch), ...
     session.pax_fwhm.idx.upperBVboundary, session.pax_fwhm.idx.lowerBVboundary);
+%%
 session.polarcluster.pickstate();
 session.polarcluster.save2disk(session.dir_struct.primary_analysis);
 %% 5.2 Make cluster figure
@@ -154,11 +154,14 @@ colormap(clee.gradient.inferno)
 %%
 imcontrast
 %% 6. Dynamic time warping based analysis
-%% 7. PIV analysis
+%% 7. PIV analysis : analysis_main_piv, after 4.1.5 (reads paxfwhm.mat, roilist.mat, sleep_score.mat)
 
 %% 8. Radon Analysis (Only capable for clear images without debris around artery)
 bvch = session.pax_fwhm.param.channel_lumen;    % radon follows FWHM's BV/vessel channel
-session.roilist.addormodifyroi(twophoton_processed.(bvch),'radon','rectangle');
+session.roilist.addormodifyroi(twophoton_processed.(bvch),'radon','circle');
+%%
+session.roilist.removeroi('radon')
+
 %%
 session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, session.pax_fwhm.param.channel_lumen);
 
@@ -166,56 +169,17 @@ session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, se
 
 %% 8.2 Radon figures
 analysis_radon_makefig(session.radon_analysis.radon_result, twophoton_processed.t_axis, session.dir_struct.figures_radon, twophoton_processed.pixel2um);
-%%
 session.radon_analysis.get_elipsoid
 %%
-figure()
 %%
-
+util_checkstack(session.radon_analysis.radon_result.events(4).irtd)
+%%
+util_checkstack(twophoton_processed.ch1(:,:,session.radon_analysis.radon_result.events(4).indices))
 
 
 
 %%
 radonresult = session.radon_analysis.radon_result;
-tmp.normt_diameter =radonresult.diameter./mean(radonresult.diameter,2) ;
-plot(tmp.normt_diameter(:,100))
-
-%%
-tmp.normd_diameter =radonresult.diameter./mean(radonresult.diameter,1) ;
-%%
-figure()
-imagesc(tmp.normd_diameter)
-%%
-plot(tmp.normd_diameter(:,100))
-hold on
-plot(tmp.normd_diameter(:,1200))
-
-%%
-figure()
-plot(tmp.normd_diameter(:,101))
-
-hold on
-plot(tmp.normd_diameter(:,880))
-
-plot(tmp.normd_diameter(:,1204))
-plot(tmp.normd_diameter(:,1242))
-
-
-%%
-figure()
-plot(radonresult.elipsoidfit.AI_1minus)
-
-%%
-
-figure()
-plot(radonresult.elipsoidfit.resnorm)
-
-
-
-
-
-
-%%
 session.radon_analysis.save2disk(session.dir_struct.primary_analysis);
 session.roilist.save2disk
 %%
