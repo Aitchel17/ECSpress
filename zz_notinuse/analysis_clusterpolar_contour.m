@@ -2,7 +2,8 @@ function polarcluster = analysis_clusterpolar_contour(polarcluster, roilist)
 % ANALYSIS_PAX_CLUSTER_CONTOUR Semi-automatic contouring of cluster median images.
 %   Now integrates with roilist for persistence of the Selection Polygon.
 %
-%   1. Check roilist for existing 'contour_name' ROI.
+%   1. Check roilist for existing 'contour_name' ROI. An intermediate with none
+%      starts from the dilated polygon of the same channel, so dilated is drawn first.
 %   2. Auto-detect edges.
 %   3. Display edges + (Existing Polygon OR New Polygon).
 %   4. User adjusts/draws polygon to KEEP edges.
@@ -27,13 +28,14 @@ if ~isfield(polarcluster, 'manual_roi')
 end
 
 state_names = {'constricted', 'intermediate', 'dilated'};
+draw_order  = [1 3 2];   % 1 x 3 int   state indices in the order the windows open
 ch_names    = {'bv', 'pvs'};
 
 % Counter for linear indexing over state x channel
 counter = 0;
 
 % Iterate through States (1=Constricted, 2=Intermediate, 3=Dilated) and Channels (1=BV, 2=PVS)
-for state_idx = 1:numel(state_names)
+for state_idx = draw_order
     for ch_idx = 1:2
         counter = counter + 1;
 
@@ -66,6 +68,17 @@ for state_idx = 1:numel(state_names)
             if ~isempty(roi_idx)
                 existing_pos = roilist.ROIs(roi_idx).Vertices;
                 disp(['Found existing ROI in roilist: ' contour_name]);
+            end
+        end
+
+        % An intermediate with no polygon of its own starts from the dilated one
+        is_unseeded_intermediate = isempty(roi_idx) && strcmp(state_names{state_idx}, 'intermediate');
+        if is_unseeded_intermediate && ~isempty(roilist) && ~isempty(roilist.ROIs)
+            seed_name = sprintf('dilated%s_contour', upper(ch_names{ch_idx}));
+            seed_idx = find(strcmp({roilist.ROIs.Label}, seed_name), 1);
+            if ~isempty(seed_idx)
+                existing_pos = roilist.ROIs(seed_idx).Vertices;
+                disp(['Starting from ' seed_name '; shrink it onto the intermediate wall']);
             end
         end
 
