@@ -24,7 +24,7 @@ load_struct = load(table_path);
 transition_table = load_struct.save_content;
 
 % The stored trace is center +/- transition_window/2 and the window is not in the
-% table; 25 is state_integration.param.transition_window. see CLAUDE_LOG.md
+% table; 25 is bout_sleep's param.transition_window. see CLAUDE_LOG.md
 param.transition_window = 25;      % s
 t_axis.dpoints = size(transition_table.abs_numeric.filtered_table.data{1});
 t_axis.tpoints = linspace(-param.transition_window/2, param.transition_window/2, t_axis.dpoints(2));
@@ -36,8 +36,8 @@ filt.transition_drawn = ["an_trans", "na_trans", "nr_trans", "ra_trans"];   % on
 % Keyed by the name, not by position, so dropping one from filt cannot slide the
 % rest along by one. +row is image-down, which is caudal, and the axis reads
 % rostral-positive, so the sign flips here and nowhere else.
-param.component_label = struct('drift_row', "rostral − caudal (um)", ...
-    'drift_col', "lateral − medial (um)");
+param.component_label = struct('drift_row', "rostral motion (um)", ...
+    'drift_col', "lateral motion (um)");
 param.component_sign = struct('drift_row', -1, 'drift_col', 1);
 label_map = struct( ...
     'an_trans', struct('pre',"Awake",'post',"NREM",  'enters', "nrem"), ...

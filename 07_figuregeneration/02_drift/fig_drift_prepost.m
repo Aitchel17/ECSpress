@@ -30,8 +30,8 @@ filt.transition_drawn = ["an_trans", "na_trans", "nr_trans", "ra_trans"];   % on
 % Keyed by the name, not by position, so dropping one from filt cannot slide the
 % rest along by one. +row is image-down, which is caudal, and the axis reads
 % rostral-positive, so the sign flips here and nowhere else.
-param.component_label = struct('drift_row', "rostral − caudal", ...
-    'drift_col', "lateral − medial");
+param.component_label = struct('drift_row', "rostral motion", ...
+    'drift_col', "lateral motion");
 param.component_sign = struct('drift_row', -1, 'drift_col', 1);
 param.transition_label = struct('an_trans', "Awake-NREM", 'na_trans', "NREM-Awake", ...
     'nr_trans', "NREM-REM", 'ra_trans', "REM-Awake");
