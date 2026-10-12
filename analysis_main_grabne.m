@@ -19,12 +19,11 @@
 % 1. Line full width halfmaximum (position-time)
 
 % Path setup
-addpath(fullfile(pwd, 'functions'));                    % where dirs_ecspath lives
-dirs_ecspath;                                          % three roots, minus zz_notinuse
+addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
+dirs_ecspath;                                        % three roots, minus zz_notinuse
 
 % Directory setup
-sessiondir = 'G:\tmp\Mike_pvs\260302_forHyunseok_Grabmut_REM\260302_forHyunseok_Grabmut_REM\260301_009';
-
+sessiondir = 'K:\tmp\02_egfptdt\hql108\261002_hql108_whiskerb\hql108_whiskerb261002_005';
 
 %% 1. Load data & 3. Load processed data (Integrated via ECSSession)
 session = ECSSession(sessiondir);
@@ -41,19 +40,23 @@ twophoton_processed = twophoton_preprocess(session);
 
 %% 4.1 FWHM Analysis
 % 4.1.1 FWHM analysis - ROI Setupw
-session.roilist.addormodifyroi(twophoton_processed.ch1,'pax','line');
+bvch = 'ch1';                                   % BV/lumen channel (recordings may swap ch1/ch2)
+csfch = 'ch2';                                  % CSF/PVS channel
+session.roilist.addormodifyroi(twophoton_processed.(bvch),'pax','line',twophoton_processed.(csfch));
 %% 4.1.2 Initialize Analysis Object & Lumen Analysis
 session.pax_fwhm = line_fwhm(session.roilist.getvertices('pax'));
 session.pax_fwhm.param.fs = twophoton_processed.outfps;
 session.pax_fwhm.t_axis = twophoton_processed.t_axis;
 % Lumen (vessel) processing
-session.pax_fwhm.addkymograph("lumen", twophoton_processed.ch2,"mean")
+session.pax_fwhm.param.channel_lumen = bvch;    % single source: data + record both from bvch
+session.pax_fwhm.addkymograph("lumen", twophoton_processed.(bvch),"min")
 session.pax_fwhm.kymograph_afterprocess('lumen',[1 3])
 session.pax_fwhm.fwhm("lumen");
 
 %% 4.1.3 PVS Analysis
-% PVS processing (using channel 2)
-session.pax_fwhm.addkymograph("pvs", twophoton_processed.ch1,"mean")
+% PVS processing
+session.pax_fwhm.param.channel_pvs = csfch;     % single source: data + record both from csfch
+session.pax_fwhm.addkymograph("pvs", twophoton_processed.(csfch),"median")
 session.pax_fwhm.kymograph_afterprocess('pvs',[1 5])
 session.pax_fwhm.pvsanalysis_inverted();
 session.pax_fwhm.clean_outlier(true)
@@ -62,33 +65,21 @@ session.pax_fwhm.getdisplacement;
 session.pax_fwhm.save2disk('paxfwhm',session.dir_struct.primary_analysis);
 session.roilist.save2disk(session.dir_struct.primary_analysis)
 
-
-
-
-
-
-
-
-
-
-
-
-
 %% 4.1.4 FWHM analysis figure generation
 analysis_pax_makefig(session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_fwhm);
-
 
 %% 4.2 Cluster polar analysis
 %% 5.1 Make cluster
 session.polarcluster = analysis_clusterpolar();
-% the same channels the kymographs above were built from
+bvch = session.pax_fwhm.param.channel_lumen;     % the stacks in the channel map FWHM recorded
+csfch = session.pax_fwhm.param.channel_pvs;
 session.polarcluster.cluster(session.pax_fwhm.kymograph.kgph_lumen_processed, ...
-    twophoton_processed.ch1, twophoton_processed.ch2, ...
+    twophoton_processed.(bvch), twophoton_processed.(csfch), ...
     session.pax_fwhm.idx.upperBVboundary, session.pax_fwhm.idx.lowerBVboundary);
 session.polarcluster.pickstate();
 session.polarcluster.save2disk(session.dir_struct.primary_analysis);
 %% 5.2 Make cluster figure
-analysis_clusterpolar_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_polarcluster);
+analysis_cluster_makefig(session.polarcluster, session.roilist, session.pax_fwhm, twophoton_processed.t_axis, twophoton_processed.pixel2um, session.dir_struct.figures_polarcluster);
 %% 5.3 Manual Contour Correction
 session.polarcluster.drawcontour(session.roilist);
 %% 5.4 Polar transform of contours (cartesian -> polar profiles)
@@ -99,9 +90,6 @@ session.roilist.save2disk(session.dir_struct.primary_analysis);
 % 5.5 save polar cluster
 session.polarcluster.save2disk(session.dir_struct.primary_analysis);
 %%
-
-
-
 save_struct = struct();
 save_struct.param = session.pax_fwhm.param;
 save_struct.kymograph = session.pax_fwhm.kymograph;
@@ -109,24 +97,18 @@ save_struct.thickness = session.pax_fwhm.thickness;
 save_struct.displacement = session.pax_fwhm.displacement;
 save_struct.mask = session.pax_fwhm.mask;
 save_struct.idx = session.pax_fwhm.idx;
-
 %%
-
 save("fwhm_grab_pvs","save_struct")
-
-
-
-
 %% 6. Dynamic time warping based analysis
 %% 7. PIV analysis
 
 %% 8. Radon Analysis (Only capable for clear images without debris around artery)
-session.roilist.addormodifyroi(twophoton_processed.ch1,'radon','circle');
-session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, 'ch1');
+bvch = session.pax_fwhm.param.channel_lumen;    % radon follows FWHM's BV/vessel channel
+session.roilist.addormodifyroi(twophoton_processed.(bvch),'radon','circle');
+session.radon_analysis = analysis_radon(twophoton_processed, session.roilist, bvch);
 
 %% 8.2 Radon figures
 analysis_radon_makefig(session.radon_analysis.radon_result, twophoton_processed.t_axis, session.dir_struct.figures_radon, twophoton_processed.pixel2um);
-%%
 session.radon_analysis.save2disk(session.dir_struct.primary_analysis);
 session.roilist.save2disk
 %%
