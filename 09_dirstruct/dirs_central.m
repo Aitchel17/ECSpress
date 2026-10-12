@@ -8,7 +8,6 @@ function dirs = dirs_central()
 %          .figure_root     1x1 str  where finished figures go, beside secondary_root
 %          .work_root       1xK str  <disk>\tmp of every disk declaring work, in letter order
 %          .archive_root    1xK str  <disk>\tmp of every disk declaring archive, dormant recordings
-%          .lto_root        1xK str  <disk>\lto of those, raw .mdf and their 7z
 %          .mirror_root     1xM str  the roots of the disks declaring mirror, never a pipeline root.
 %                                    A role's disks are a pool: an item sits on one of them,
 %                                    never two. Each is "" when no disk declares the role
@@ -75,7 +74,6 @@ dirs.source = source;
 volume = dirs_volumeletter();
 dirs.work_root = volume_folder(volume, "work", "tmp");
 dirs.archive_root = volume_folder(volume, "archive", "tmp");
-dirs.lto_root = volume_folder(volume, "archive", "lto");
 dirs.mirror_root = volume_folder(volume, "mirror", "");
 tmp_root = [dirs.work_root, dirs.archive_root];
 dirs.working_root = tmp_root(isfolder(tmp_root));

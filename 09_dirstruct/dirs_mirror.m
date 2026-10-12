@@ -1,14 +1,13 @@
 function info = dirs_mirror(live_root, mirror_root, opt)
 %DIRS_MIRROR  Robocopy every live item onto the mirror pool, one item at a time. Adds and updates, never deletes.
 %   Caller: archive_session
-%   An item is a session folder four levels under a tmp root, or a top-level entry (a
-%   date folder or a .7z) under an lto root. Each goes to the mirror root that holds it
-%   already, else to the emptiest, so the pool is one union tree, an item that moves
+%   An item is a session folder four levels under a tmp root. Each goes to the mirror
+%   root that holds it already, else to the emptiest, so the pool is one union tree, an item that moves
 %   between live roots keeps its mirror, and a full mirror disk is extended by adding
 %   one. /E only: nothing on a mirror is removed here. What a mirror holds and no live
 %   root does is listed, not deleted.
 %
-% IN   live_root    1 x K str      the tmp and lto folders of the work and archive disks;
+% IN   live_root    1 x K str      the tmp folders of the work and archive disks;
 %                                  one that does not exist today is skipped
 %      mirror_root  1 x M str      the roots of the mirror disks
 %      opt.dryrun   1 x 1 logical  robocopy /L, lists only (default false)
@@ -50,7 +49,7 @@ for k = 1:numel(live_root)
         continue
     end
     [~, leaf] = fileparts(source_root);
-    item = live_items(source_root, string(leaf));
+    item = live_items(source_root);
     gb_total = sum([item.bytes]) / 2^30;
     fprintf('mirror  %s : %d items, %.1f GB\n', source_root, numel(item), gb_total);
     started = tic;
@@ -60,7 +59,7 @@ for k = 1:numel(live_root)
         relative = fullfile(leaf, item(j).relative);
         target_root = dirs_pickroot(mirror_root, relative);
         target = fullfile(target_root, relative);
-        pass = robocopy_item(item(j).source, target, item(j).is_file, flags, info.log);
+        pass = robocopy_item(item(j).source, target, flags, info.log);
         info.pass(end + 1) = pass;
         gb_done = gb_done + item(j).bytes / 2^30;
         fprintf('  [%3d/%d] %6.1f GB  %-60s %5.0f s   %.1f of %.1f GB, %.2f h\n', j, numel(item), ...
@@ -74,7 +73,7 @@ for k = 1:numel(live_root)
 end
 
 %% 2. Orphans: session folders on a mirror and on no live tmp root today
-live_tmp = live_root(endsWith(live_root, "tmp") & isfolder(live_root));
+live_tmp = live_root(isfolder(live_root));
 info.orphan = strings(0, 1);
 for m = 1:numel(mirror_root)
     mirror_tmp = fullfile(mirror_root(m), "tmp");
@@ -98,46 +97,24 @@ fprintf('orphans %d session folders on a mirror and on no live root -> %s\n', nu
 end
 
 %% ------------------------------------------------------------------------
-function item = live_items(source_root, leaf)
-% the items of one live root: session folders four levels under tmp, top-level entries under lto
-if leaf == "tmp"
-    listing = dir(fullfile(source_root, '*', '*', '*', '*'));
-    listing = listing([listing.isdir]);
-else
-    listing = dir(fullfile(source_root, '*'));
-end
-listing = listing(~startsWith({listing.name}, '.'));
-item = struct('source', {}, 'relative', {}, 'is_file', {}, 'bytes', {});
+function item = live_items(source_root)
+% the items of one live root: session folders four levels under tmp
+listing = dir(fullfile(source_root, '*', '*', '*', '*'));
+listing = listing([listing.isdir] & ~startsWith({listing.name}, '.'));
+item = struct('source', {}, 'relative', {}, 'bytes', {});
 for k = 1:numel(listing)
     source = string(fullfile(listing(k).folder, listing(k).name));
     relative = extractAfter(source, strlength(source_root) + 1);
-    bytes = item_bytes(source, listing(k));
-    item(end + 1) = struct('source', source, 'relative', relative, 'is_file', ~listing(k).isdir, 'bytes', bytes); %#ok<AGROW>
+    files = dir(fullfile(source, '**', '*'));
+    files = files(~[files.isdir]);
+    item(end + 1) = struct('source', source, 'relative', relative, 'bytes', sum([files.bytes])); %#ok<AGROW>
 end
 end
 
-function bytes = item_bytes(source, entry)
-% the size of an item: the file's own, or every file under the folder
-if ~entry.isdir
-    bytes = entry.bytes;
-    return
-end
-files = dir(fullfile(source, '**', '*'));
-files = files(~[files.isdir]);
-bytes = sum([files.bytes]);
-end
-
-function pass = robocopy_item(source, target, is_file, flags, log_path)
-% one robocopy call; a file goes as <its folder> <target folder> <name>, without /E
+function pass = robocopy_item(source, target, flags, log_path)
+% one robocopy call for one session folder
 started = tic;
-if is_file
-    [source_dir, name, ext] = fileparts(source);
-    target_dir = fileparts(target);
-    file_flags = replace(flags, "/E ", "");
-    command = sprintf('robocopy "%s" "%s" "%s" %s /LOG+:"%s"', source_dir, target_dir, name + ext, file_flags, log_path);
-else
-    command = sprintf('robocopy "%s" "%s" %s /LOG+:"%s"', source, target, flags, log_path);
-end
+command = sprintf('robocopy "%s" "%s" %s /LOG+:"%s"', source, target, flags, log_path);
 [status, ~] = system(command);
 pass = struct('source', source, 'target', target, 'status', status, 'seconds', toc(started));
 end
