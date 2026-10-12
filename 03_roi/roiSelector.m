@@ -35,6 +35,8 @@ classdef roiSelector < handle
         fontsize = 14
         nframe = 0;
         n_circlevertex = 64;   % count   polygon points a circle ROI is stored as
+        contrast_low_pct = 20; % pct      the display window's low end : this percentile of every voxel
+        contrast_sigma = 3;    % float    its high end : the median + this many std
     end
     properties (Access=private)
         FrameSlider
@@ -81,6 +83,11 @@ classdef roiSelector < handle
     methods (Access = private)
         function setupUI(obj)
             obj.normalizeStack();
+            if ~obj.IsRGB
+                window = obj.autoWindow(obj.Stack);   % once per stack : a per-frame window flickers on the motion-correction gaps
+                obj.minIntensity = window(1);
+                obj.maxIntensity = window(2);
+            end
 
             % 0. Main uiFigure
             obj.Fig = uifigure('Name','Stack Explorer','Position',[100 100 1000 700]);
@@ -495,11 +502,39 @@ classdef roiSelector < handle
             obj.ReflectFig = figure('Name','Reflect on ch2','NumberTitle','off');
             obj.ReflectAx  = axes(obj.ReflectFig);
             obj.ReflectImg = imshow(obj.Stack2(:,:,f), [], 'Parent', obj.ReflectAx);
-            lo = double(min(obj.Stack2(:))); hi = double(max(obj.Stack2(:)));
-            if hi > lo, obj.ReflectAx.CLim = [lo hi]; end
+            obj.ReflectAx.CLim = obj.autoWindow(obj.Stack2);   % once per stack, as the main window
             axis(obj.ReflectAx,'image');
             hold(obj.ReflectAx,'on');
             obj.ReflectOverlay = gobjects(0);
+            % imcontrast sets the axes CLim by hand; updateReflect swaps CData only, so it holds across frames
+            uicontrol(obj.ReflectFig, 'Style', 'pushbutton', 'String', 'Contrast', ...
+                'Units', 'normalized', 'Position', [0.01 0.01 0.14 0.06], ...
+                'Callback', @(~,~) obj.openContrast());
+        end
+
+        function openContrast(obj)
+            % imcontrast refuses a CLim outside the frame on screen, and the stack-wide window can be : clip it first
+            data = double(obj.ReflectImg.CData(:));
+            window = obj.ReflectAx.CLim;
+            window(1) = max(window(1), min(data));
+            window(2) = min(window(2), max(data));
+            if window(2) <= window(1)
+                window = [min(data), max(data)];
+            end
+            obj.ReflectAx.CLim = window;
+            imcontrast(obj.ReflectImg);
+        end
+
+        function window = autoWindow(obj, stack)
+            % [low high] of the display over every voxel : the contrast_low_pct percentile, to the median + contrast_sigma std
+            voxel = double(stack(:));
+            low = prctile(voxel, obj.contrast_low_pct);
+            high = median(voxel) + obj.contrast_sigma * std(voxel);
+            high = min(high, max(voxel));
+            if high <= low
+                high = low + 1;
+            end
+            window = [low high];
         end
 
         function updateReflect(obj)
