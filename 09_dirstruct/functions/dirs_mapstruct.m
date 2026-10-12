@@ -80,7 +80,9 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, cache_path)
         'RadonResult',  'radon_result.mat'; ...
         'RoiList',      'roilist.mat'; ...
         'PolarCluster', 'polarcluster.mat'; ...
-        'PaxFWHM',      'paxfwhm.mat'};
+        'PaxFWHM',      'paxfwhm.mat'; ...
+        'PivQualityPass', 'pivquality_pass.mat'; ...
+        'PivQualityFail', 'pivquality_fail.mat'};
     peripheral_map = { ...
         'AnalogAnalysis',   'analysis_analog.mat'; ...
         'BehaviorAnalysis', 'analysis_camera.mat'; ...
@@ -92,6 +94,8 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, cache_path)
     cols.Primary_RoiList = {};
     cols.Primary_PolarCluster = {};
     cols.Primary_paxFWHM = {};
+    cols.Primary_PivQualityPass = {};
+    cols.Primary_PivQualityFail = {};
     
     % Peripheral Files
     cols.Peripheral_AnalogAnalysis = {};
@@ -226,6 +230,8 @@ function dirstruct_table = dirs_mapstruct(experiment_folder, cache_path)
                 cols.Primary_RoiList{end+1,1} = found_primary.RoiList;
                 cols.Primary_PolarCluster{end+1,1} = found_primary.PolarCluster;
                 cols.Primary_paxFWHM{end+1,1} = found_primary.PaxFWHM;
+                cols.Primary_PivQualityPass{end+1,1} = found_primary.PivQualityPass;
+                cols.Primary_PivQualityFail{end+1,1} = found_primary.PivQualityFail;
     
                 % Peripheral Files
                 cols.Peripheral_AnalogAnalysis{end+1,1} = found_peri.AnalogAnalysis;
