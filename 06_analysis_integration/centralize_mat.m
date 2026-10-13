@@ -72,12 +72,12 @@ for p = 1:size(products, 1)
         end
         % 4.4.1 Read source file size and modified datetime and make change flag
         source_info = dir(source_path);
-        is_changed = ~isempty(stay_row) && stay_row.source_bytes == source_info.bytes && stay_row.source_modified == source_info.datenum;
+        is_reusable = ~isempty(stay_row) && stay_row.source_bytes == source_info.bytes && stay_row.source_modified == source_info.datenum;
         % 4.4.2 Make row with actual source_byte and modified datte
         row = struct('confirmed_dirtableidx', dirtable_idx, 'data', [], 'source_bytes', source_info.bytes, ...
-            'source_modified', source_info.datenum, 'reused', is_changed);
+            'source_modified', source_info.datenum, 'reused', is_reusable);
         % 4.4.3 Reuse data from loaded table or read data to reduce read time
-        if is_changed
+        if is_reusable
             row.data = stay_row.data{1}; % reuse
         else
             try

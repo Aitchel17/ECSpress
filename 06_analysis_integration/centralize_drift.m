@@ -56,11 +56,11 @@ for dirtable_idx = 1:height(confirmed_dirtable)
     source_info = found(1);
     source_path = fullfile(source_info.folder, source_info.name);
     % 2.2 compare its size and modified time with the loaded row
-    is_changed = ~isempty(stay_row) && stay_row.source_bytes == source_info.bytes && stay_row.source_modified == source_info.datenum;
+    is_reusable = ~isempty(stay_row) && stay_row.source_bytes == source_info.bytes && stay_row.source_modified == source_info.datenum;
     row = struct('confirmed_dirtableidx', dirtable_idx, 'data', [], 'source_bytes', source_info.bytes, ...
-        'source_modified', source_info.datenum, 'reused', is_changed);
+        'source_modified', source_info.datenum, 'reused', is_reusable);
     % 2.3 reuse the loaded data, or read the file again
-    if is_changed
+    if is_reusable
         row.data = stay_row.data{1};
     else
         try
