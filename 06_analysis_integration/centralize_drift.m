@@ -1,72 +1,98 @@
-%CENTRALIZE_DRIFT  Work through every session's *_motion.txt and integrate to one table:
-%  Read merged directory table -> fint _motion.txt -> write centralized_drift.mat.
-%% settings
-param.dataset  = "merged";      % str   the dataset whose sheet lists the sessions
-param.rebuild  = false;         % bool  true re-reads every session
-schema_version = 1;             % double  bump when what is taken off the file changes
+function info = centralize_drift(central_dir, dirtable_path, rebuild)
+%CENTRALIZE_DRIFT  Each session's *_motion.txt, as one centralized_drift.mat under central_dir.
+%   Caller: d_centralize
+%   A session is read again only when its motion file moved since the last run; the table is saved every run.
+%
+% IN   central_dir    1 x 1 str  where the centralized_*.mat files live
+%      dirtable_path  1 x 1 str  the dataset's dirtable workbook, as c_dirtable writes it; its first sheet lists the sessions
+%      rebuild        1 x 1 bool true re-reads every session
+% OUT  info           1 x 1 struct  n_rows, n_read, n_reused, out_path
 
-addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
-dirs_ecspath;                                        % three roots, minus zz_notinuse
-dirs = dirs_central();
+% Bump when what is taken off the file changes; the stamp cannot see a code change
+schema_version = 1;
 
-%% the sessions
-sheet_path = fullfile(dirs.secondary_root, param.dataset, param.dataset + "_dirtable.xlsx");
-dir_table = readtable(sheet_path, 'VariableNamingRule', 'preserve');
-
+% 1. read directory table and verify existance
+dir_table = readtable(dirtable_path, 'VariableNamingRule', 'preserve');
 alive = false(height(dir_table), 1);
 for k = 1:height(dir_table)
     alive(k) = isfolder(string(dir_table.Directory(k)));
 end
-live_table = dir_table(alive, :);
-key_value = util_sessionkey(live_table);
+confirmed_dirtable = dir_table(alive, :);
+key_value = util_sessionkey(confirmed_dirtable);
 fprintf('dirtable %s\n   %d rows, %d point at a folder\n', ...
-    sheet_path, height(dir_table), sum(alive));
+    dirtable_path, height(dir_table), sum(alive));
 
-%% what is already read
-out_path = fullfile(dirs.central, "centralized_drift.mat");
-previous = table();
-if isfile(out_path) && ~param.rebuild
-    stored = load(out_path, 'central', 'schema_version');
-    if isfield(stored, 'schema_version') && stored.schema_version == schema_version
-        previous = stored.central;
+%% what the last run read, if its schema still holds
+out_path = fullfile(central_dir, "centralized_drift.mat");
+loaded_centraltable = table();
+if isfile(out_path) && ~rebuild
+    loaded = load(out_path, 'central', 'schema_version');
+    if isfield(loaded, 'schema_version') && loaded.schema_version == schema_version
+        loaded_centraltable = loaded.central;
     else
         fprintf('schema stamp does not match %d, reading every session again\n', schema_version);
     end
-    clear stored
+    clear loaded
 end
 key_previous = strings(0, 1);
-if ~isempty(previous)
-    key_previous = util_sessionkey(previous);
+if ~isempty(loaded_centraltable)
+    key_previous = util_sessionkey(loaded_centraltable);
 end
 
-%% one row per live session that carries a motion file
-scan = struct('live_i', {}, 'data', {}, 'source_bytes', {}, ...
-    'source_modified', {}, 'reused', {});
-for i = 1:height(live_table)
-    hit = find(key_previous == key_value(i), 1);
-    old = previous(hit, :);
-    [row, failure] = scan_session(i, string(live_table.Directory(i)), old);
-    if failure ~= ""
-        fprintf('   FAILED %s -- %s\n', string(live_table.Directory(i)), failure);
+% 2. struct array to contain rows
+scan_strarray =struct('confirmed_dirtableidx', {}, 'data', {}, 'source_bytes', {}, 'source_modified', {}, 'reused', {});
+for dirtable_idx = 1:height(confirmed_dirtable)
+    session_dir = string(confirmed_dirtable.Directory(dirtable_idx));
+    hit = find(key_previous == key_value(dirtable_idx), 1);
+    stay_row = loaded_centraltable(hit, :);
+    % 2.1 find the motion file; globbed, since the stem is the MDF file's name, not the session's
+    found = dir(fullfile(session_dir, '*_motion.txt'));
+    if isempty(found)
+        continue
     end
-    if ~isempty(row)
-        scan(end+1) = row; %#ok<SAGROW>
+    if numel(found) > 1
+        fprintf('   %d motion files in %s, took %s\n', numel(found), session_dir, found(1).name);
     end
-    if mod(i, 25) == 0
-        fprintf('   %d/%d scanned, %d held\n', i, height(live_table), numel(scan));
+    source_info = found(1);
+    source_path = fullfile(source_info.folder, source_info.name);
+    % 2.2 compare its size and modified time with the loaded row
+    is_changed = ~isempty(stay_row) && stay_row.source_bytes == source_info.bytes && stay_row.source_modified == source_info.datenum;
+    row = struct('confirmed_dirtableidx', dirtable_idx, 'data', [], 'source_bytes', source_info.bytes, ...
+        'source_modified', source_info.datenum, 'reused', is_changed);
+    % 2.3 reuse the loaded data, or read the file again
+    if is_changed
+        row.data = stay_row.data{1};
+    else
+        try
+            row.data = get_driftsummary(source_path);
+        catch err
+            fprintf('   FAILED %s -- %s\n', session_dir, err.message);
+            if isempty(stay_row)
+                continue
+            end
+            % a file that will not parse keeps the loaded row, and its stamp
+            row.data = stay_row.data{1};
+            row.source_bytes = stay_row.source_bytes;
+            row.source_modified = stay_row.source_modified;
+            row.reused = true;
+        end
+    end
+    scan_strarray(end+1) = row; %#ok<AGROW>
+    if mod(dirtable_idx, 25) == 0
+        fprintf('   %d/%d scanned, %d held\n', dirtable_idx, height(confirmed_dirtable), numel(scan_strarray));
     end
 end
 
 %% out
-kept = [scan.live_i];
-reused = [scan.reused];
-central = live_table(kept, :);
-central.data = {scan.data}';
-central.source_bytes = [scan.source_bytes]';
-central.source_modified = [scan.source_modified]';
+existingdata_idx = [scan_strarray.confirmed_dirtableidx];
+reused = [scan_strarray.reused];
+central = confirmed_dirtable(existingdata_idx, :);
+central.data = {scan_strarray.data}';
+central.source_bytes = [scan_strarray.source_bytes]';       % the stamps bout_drift rebuilds its rows against
+central.source_modified = [scan_strarray.source_modified]';
 
 % the scalars as flat columns, so a filt names one without opening data
-summary = [scan.data];
+summary = [scan_strarray.data];
 central.drift_fps = [summary.drift_fps]';
 central.drift_n = [summary.drift_n]';
 for name = ["disp_row_p95", "disp_row_max", "disp_row_stepmax", ...
@@ -75,7 +101,7 @@ for name = ["disp_row_p95", "disp_row_max", "disp_row_stepmax", ...
     central.(name) = [summary.(name)]';
 end
 
-key_out = key_value(kept);
+key_out = key_value(existingdata_idx);
 if numel(unique(key_out)) < numel(key_out)
     [counted, name] = groupcounts(key_out);
     for k = find(counted > 1)'
@@ -84,63 +110,19 @@ if numel(unique(key_out)) < numel(key_out)
 end
 
 save(out_path, 'central', 'schema_version', '-v7.3');
-listing = dir(out_path);
+source_info = dir(out_path);
 fprintf('\n%d rows: %d read, %d reused\n', height(central), nnz(~reused), nnz(reused));
-fprintf('%.1f MB -> %s\n', listing.bytes/1e6, out_path);
-
-%% ---------------------------------------------------------------- helpers
-function [row, failure] = scan_session(i, session_dir, old)
-%SCAN_SESSION  One session's row, or 0x0 if it carries no motion file.
-%   IN   i            1 x 1 double     which row of live_table this is
-%        session_dir  1 x 1 str        the session folder
-%        old          0|1 row table    what the last run wrote for this session
-%   OUT  row          0x0 | 1x1 struct
-%        failure      1 x 1 str        "" unless the read threw
-    row = struct('live_i', {}, 'data', {}, 'source_bytes', {}, ...
-        'source_modified', {}, 'reused', {});
-    failure = "";
-
-    % globbed: the stem is the MDF file's name, not the session's
-    found = dir(fullfile(session_dir, '*_motion.txt'));
-    if isempty(found)
-        return
-    end
-    if numel(found) > 1
-        failure = sprintf('%d motion files, took %s', numel(found), found(1).name);
-    end
-    listing = found(1);
-    source_path = fullfile(listing.folder, listing.name);
-
-    unmoved = ~isempty(old) && old.source_bytes == listing.bytes ...
-        && old.source_modified == listing.datenum;
-    if ~unmoved
-        try
-            [disp_row, disp_col, regerror, drift_fps] = io_readmotion(source_path);
-            row(1).live_i = i;
-            row(1).data = drift_summary(disp_row, disp_col, regerror, drift_fps);
-            row(1).source_bytes = listing.bytes;
-            row(1).source_modified = listing.datenum;
-            row(1).reused = false;
-            return
-        catch err
-            % a file that will not parse keeps its old row; the failure is named
-            failure = string(err.message);
-        end
-    end
-    if isempty(old)
-        return
-    end
-    row(1).live_i = i;
-    row(1).data = old.data{1};
-    row(1).source_bytes = old.source_bytes;
-    row(1).source_modified = old.source_modified;
-    row(1).reused = true;
+fprintf('%.1f MB -> %s\n', source_info.bytes/1e6, out_path);
+info = struct('n_rows', height(central), 'n_read', nnz(~reused), 'n_reused', nnz(reused), 'out_path', out_path);
 end
 
-function summary = drift_summary(disp_row, disp_col, regerror, drift_fps)
-%DRIFT_SUMMARY  The series, and the scalars a filt reads without opening them.
+%% ---------------------------------------------------------------- helpers
+function summary = get_driftsummary(source_path)
+%GET_DRIFTSUMMARY  One *_motion.txt read : the series, and the scalars a filt reads without opening them.
+%   Caller: centralize_drift
 %   Scalars are taken on magnitudes, so a sign flip in the file moves none of them.
 %   OUT  summary  1x1 struct   series as columns, then the scalars
+    [disp_row, disp_col, regerror, drift_fps] = io_readmotion(source_path);
     summary = struct( ...
         'disp_row',         disp_row, ...      % N x 1 double  px
         'disp_col',         disp_col, ...      % N x 1 double  px
