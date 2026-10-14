@@ -6,8 +6,8 @@ function handle_list = plot_awake_patches(ax, time_table, opt)
 %                                 unless rows is true, where the strip's caller sets them
 %      time_table   1x1 struct    table name -> N x 2 [start end] bouts in seconds, as
 %                                 bout_puffmove builds it. Read: puff_go_dur*,
-%                                 puff_nogo_dur*, puff_moving_dur*, loco_puff, loco_nopuff,
-%                                 loco_restpuff, loco_restnopuff
+%                                 puff_nogo_dur*, puff_gogo_dur*, loco_puff, loco_nopuff,
+%                                 rest_puff, rest_nopuff
 %      opt.rows     1x1 logical   false = locomotion and puff-touched rests shaded the height of
 %                                 the axes, puffs as a bar along its top; true = all seven as
 %                                 a strip, y = 2 puff, 1 locomotion and rest, each row 0.8 tall
@@ -25,7 +25,7 @@ function handle_list = plot_awake_patches(ax, time_table, opt)
 
     palette = color_lee.clist;
     category = table( ...
-        ["loco_restnopuff"; "loco_restpuff"; "loco_nopuff"; "loco_puff"; "puff_nogo"; "puff_go"; "puff_moving"], ...
+        ["rest_nopuff"; "rest_puff"; "loco_nopuff"; "loco_puff"; "puff_nogo"; "puff_go"; "puff_gogo"], ...
         [1; 1; 1; 1; 2; 2; 2], ...
         [false; true; true; true; false; false; false], ...
         'VariableNames', {'name', 'strip_row', 'is_shaded'});

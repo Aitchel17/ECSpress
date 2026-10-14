@@ -13,7 +13,10 @@ function info = centralize_bout(central_dir, rebuild)
 %   2  puff_quietend_sec : the pre-puff quiet window ends 0.1 s before the onset
 %   3  speed rule out, the puff itself is the go window, long chunks out, puffs off the air channel
 %   4  data.transition_window on every row, 0 for an analog row; param.dur<X> without rounded_duration;
-%      loco_rest_puff / _nopuff are loco_restpuff / loco_restnopuff
+%      loco_rest_puff / _nopuff are rest_puff / rest_nopuff; puff_moving is puff_gogo, and a puff moving before
+%      but still through it is dropped
+%      bout_puffmove takes the acceleration as a central difference (gradient), and drops the record's ends :
+%      no rest before the first or after the last moving stretch, no event judged on the first stretch
 schema_version = 4;
 
 
