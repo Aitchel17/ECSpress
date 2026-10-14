@@ -1,4 +1,11 @@
 function transition_table = get_transition(transition_window,pre_timetable,post_timetable, tolerance)
+%GET_TRANSITION  A window of +-transition_window around each time a pre bout ends and a post bout starts.
+%   Caller: bout_sleep
+% IN   transition_window  1 x 1 float s   half width; both bouts must be at least this long
+%      pre_timetable      N x 2 float s   [start end] bouts before the transition
+%      post_timetable     M x 2 float s   [start end] bouts after it
+%      tolerance          1 x 1 float s   end-to-start gap allowed; 0 (default) for bouts on a grid
+% OUT  transition_table   K x 2 float s   [t - transition_window, t + transition_window]; [] if an input is empty
 if nargin < 4
     tolerance = 0;
 end
