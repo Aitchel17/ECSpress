@@ -16,7 +16,7 @@ function out = centralize_stripanalog(primary_analog)
     % classdef, which lives in 02_othersignal rather than either repo root here.
     % Fields are guarded because a sleep recording has no puff or ball and a
     % whisker one has no sleep scoring behind its spectrogram. air is kept only
-    % where a puff was delivered, so its presence is what centralize_scoring tests.
+    % where a puff was delivered, so its presence is what centralize_bout tests.
     out = struct();
     if isfield(primary_analog.rawdata, 'raw_Air_puff1')
         air_on = primary_analog.rawdata.raw_Air_puff1 > 0;

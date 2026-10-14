@@ -1,7 +1,8 @@
-function keys = util_sessionkey(row_table)
+function [keys, key_columns] = util_sessionkey(row_table)
 
-%   IN   row_table  N-row table carrying the four columns below
-%   OUT  keys       Nx1 str   "hql090|251012|sleep|005"
+%   IN   row_table    N-row table carrying the four columns below
+%   OUT  keys         Nx1 str   "hql090|251012|sleep|005"
+%        key_columns  1x4 str   the columns joined, in that order
 
 key_columns = ["MouseID", "Date", "SessionType", "SessionID"];
 
