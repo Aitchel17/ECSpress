@@ -13,15 +13,12 @@ session = ECSSession(sessiondir);
 session = session.load_primary_results();
 score = load(fullfile(sessiondir, 'peripheral', 'sleep_score.mat'));
 [sleep_bout, sleep_param] = bout_sleep(score.behavState, score.statecodes, score.binwidth_sec);
-time_table = bout_trim(sleep_bout, session.pax_fwhm.t_axis(end), sleep_param.transition_window);
 
 
 %
-paxfwhm_state = state_1d(time_table, sleep_param.transition_window);
-paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
-
-paxfwhm_state = state_1d(time_table, sleep_param.transition_window);
-paxfwhm_state.get_state_indices(session.pax_fwhm.t_axis,session.pax_fwhm.param.fs);
+time_table = bout_trim(sleep_bout, session.pax_fwhm.t_axis(end), sleep_param.transition_window);
+paxfwhm_state = state_1d(time_table, sleep_param.transition_window, session.pax_fwhm.t_axis);
+paxfwhm_state.get_state_indices();
 contents_types = {["thickness","eps","bv","totalpvs","uppvs","downpvs"],...
                 ["displacement","uppvs","downpvs","upbv","downbv"]};
 %%
@@ -62,7 +59,10 @@ session.stackch2 = session.loadstack('ch2');
 % ECSSession object works here as it has these properties.
 twophoton_processed = twophoton_preprocess(session);
 %%
-state_idx = bout_frames(twophoton_processed.t_axis, time_table);
+state_idx = struct();
+for table_name = string(fieldnames(time_table))'
+    state_idx.(table_name) = timetable2frame(twophoton_processed.t_axis, time_table.(table_name));   % each bout table on the stack's frames
+end
 %session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.dir_struct.primary_analysis);
 %%
 na_trans = get_stateframes(state_idx.na_trans,twophoton_processed.ch1);

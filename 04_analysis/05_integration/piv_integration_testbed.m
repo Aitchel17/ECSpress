@@ -21,7 +21,10 @@ twophoton_processed = twophoton_preprocess(session);
 % 0.6 Load sleep state and put the bouts on the imaging frame axis
 score = load(fullfile(sessiondir, 'peripheral', 'sleep_score.mat'));
 sleep_bout = bout_sleep(score.behavState, score.statecodes, score.binwidth_sec);
-state_idx = bout_frames(twophoton_processed.t_axis, sleep_bout);   % every bout table on the stack's frames
+state_idx = struct();
+for table_name = string(fieldnames(sleep_bout))'
+    state_idx.(table_name) = timetable2frame(twophoton_processed.t_axis, sleep_bout.(table_name));   % each bout table on the stack's frames
+end
 
 
 %% 1. Event detection on the FWHM diameter

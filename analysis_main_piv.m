@@ -38,7 +38,10 @@ session.roilist.addormodifyroi(stack, char(param.roi_include), 'rectangle');
 session.roilist.save2disk(session.dir_struct.primary_analysis);
 
 %% 4. Transitions on the diameter, analysis_event's default merge table. control() is not called : transitions only
-state_idx = bout_frames(twophoton_processed.t_axis, sleep_bout);   % every bout table on the stack's frames
+state_idx = struct();
+for table_name = string(fieldnames(sleep_bout))'
+    state_idx.(table_name) = timetable2frame(twophoton_processed.t_axis, sleep_bout.(table_name));   % each bout table on the stack's frames
+end
 if numel(session.pax_fwhm.t_axis) ~= size(twophoton_processed.ch1, 3)
     error('analysis_main_piv:frameAxis', ...
         'paxfwhm.mat has %d frames, the stack %d -- the two were not made from the same extraction', ...
