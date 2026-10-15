@@ -1,14 +1,26 @@
 classdef state_1d < handle
     %STATE_1D  Centralize bout level analysis
 
-    %   Caller: centralize_statesession, centralize_driftsession, stateintegration_test
+    %   Caller: bout_paxfwhm, bout_drift, stateintegration_test
 
     properties
         time_table         % 1x1 struct   table name -> N x 2 [start end] bouts in seconds, bout_sleep's or bout_puffmove's
         transition_window  % 1x1 float s  full width of a *_trans window, the bout function's param.transition_window
         t_axis      % Time axis for the specific data being analyzed
         state_idx
-        param        % Name of this analysis instance
+        param = struct( ...   % 1x1 struct  the settings; fs is set from t_axis at construction
+            'fs', [], ...
+            'butter', struct( ...   % decompose_signal's bands, Butterworth, zero phase
+                'band_name', ["continuous", "isf", "vlf", "lf", "hf_residual"], ...   % the five, in the order the cutoffs below build them
+                'dc_cutoff', 0.005, ...          % Hz  continuous below it
+                'isf_range', [0.005, 0.1], ...   % Hz
+                'vlf_range', [0.1, 0.3], ...     % Hz
+                'lf_range', [0.3, 1.0], ...      % Hz
+                'hf_cutoff', 1.0, ...            % Hz  hf_residual above it
+                'order', 3, ...
+                'min_cycles', 2), ...            % a band needs this many periods of its low edge in the bout
+            'psd', struct( ...      % get_powerdensity's bouts
+                'min_samples', 5))               % dpss(N, 2, 3) needs N > 2 NW = 4; a shorter bout is skipped
     end
 
 
@@ -24,17 +36,21 @@ classdef state_1d < handle
 
 
     methods    % set-up and access
-        function obj = state_1d(bout_table, window_s)
-            % bout_table  1x1 struct   bout_sleep's or bout_puffmove's time_table, trimmed to this series' record
-            % window_s    1x1 float s  the bout function's param.transition_window
+        function obj = state_1d(bout_table, window_s, t_axis)
+            % bout_table  1x1 struct     bout_sleep's or bout_puffmove's time_table, bout_trim'd to this record
+            % window_s    1x1 float s    the bout function's param.transition_window
+            % t_axis      1 x T float s  the time axis of the series this object analyses, evenly spaced
             obj.time_table = bout_table;
             obj.transition_window = window_s;
+            obj.t_axis = t_axis;
+            obj.param.fs = (numel(t_axis) - 1) / (t_axis(end) - t_axis(1));   % the rate t_axis is spaced at
         end
 
-        function obj = get_state_indices(obj, t_axis,fs)
-            obj.state_idx = bout_frames(t_axis, obj.time_table);   % every bout table on this series' frames
-            obj.t_axis = t_axis; % copy time axis
-            obj.param.fs = fs; % copy sampling rate
+        function obj = get_state_indices(obj)
+            obj.state_idx = struct();
+            for table_name = string(fieldnames(obj.time_table))'
+                obj.state_idx.(table_name) = timetable2frame(obj.t_axis, obj.time_table.(table_name));   % each bout table on this series' frames
+            end
         end
 
         function obj = get_events(obj, eventlist, event_info)
@@ -231,10 +247,10 @@ classdef state_1d < handle
         end
 
         function obj = get_powerdensity(obj, name, data1d)
-            % a bout too short for the tapers is skipped, not shortened; bout_idx keeps its
-            % original number so it still matches state_summary's
-            min_samples = 5;        % dpss(N,2,3) needs N > 2*NW = 4
+            % a bout too short for the tapers, or touching NaN, is skipped, not shortened or
+            % filled; bout_idx keeps its original number so it still matches state_summary's
             n_skipped = 0;
+            n_nan = 0;
 
             sidx_fnames = fieldnames(obj.state_idx);
             nsidx = length(sidx_fnames);
@@ -253,11 +269,15 @@ classdef state_1d < handle
                     start_idx = obj.state_idx.(sidx_fname)(bout,1);
                     end_idx = obj.state_idx.(sidx_fname)(bout,2);
                     duration = (end_idx - start_idx)/obj.param.fs;
-                    if (end_idx - start_idx + 1) < min_samples
+                    if (end_idx - start_idx + 1) < obj.param.psd.min_samples
                         n_skipped = n_skipped + 1;
                         continue
                     end
                     crop_data = data1d(start_idx:end_idx);
+                    if any(isnan(crop_data))
+                        n_nan = n_nan + 1;
+                        continue
+                    end
                     spec = get_spectrogram(obj.param.fs,crop_data);
                     state_name = [state_name; string(sidx_fname)];
                     bout_idx = [bout_idx ; bout];
@@ -272,50 +292,93 @@ classdef state_1d < handle
                 spectral_density,spectral_frequency,spectral_lognorm);
             if n_skipped > 0
                 fprintf('      %s : %d bout(s) under %d samples skipped\n', ...
-                    name, n_skipped, min_samples);
+                    name, n_skipped, obj.param.psd.min_samples);
+            end
+            if n_nan > 0
+                fprintf('      %s : %d bout(s) touching NaN skipped\n', name, n_nan);
             end
 
         end
 
         function obj = decompose_signal(obj, name, data1d)
-            %DECOMPOSE_SIGNAL  The whole record in five bands, Butterworth order 3, zero phase:
-            %   continuous < 0.005 Hz, isf 0.005-0.1, vlf 0.1-0.3, lf 0.3-1, hf > 1 Hz
-            decomposed = struct();
-            bparam.dc_cutoff = 0.005;
-            bparam.isf_range = [0.005, 0.1];
-            bparam.vlf_range = [0.1, 0.3];
-            bparam.lf_range = [0.3, 1.0];
-            bparam.hf_cutoff = 1.0;
-            bparam.order = 3;
+            %DECOMPOSE_SIGNAL  Five bands per BOUT, Butterworth order 3, zero phase, on the
+            %   bout's own crop: continuous < 0.005 Hz, isf 0.005-0.1, vlf 0.1-0.3, lf 0.3-1,
+            %   hf > 1 Hz. A bout touching NaN is skipped and counted, never filled. A band is
+            %   computed only when the bout holds min_cycles periods of its low edge AND enough
+            %   samples for filtfilt; otherwise its cell stays empty. A slow band in a short
+            %   bout is therefore empty by construction, not NaN.
 
-            % Nyquist Frequency
-            fn = obj.param.fs / 2;
-            % 0. Continuous (0 - 0.005 Hz) -> Lowpass
-            f_cutoff = bparam.dc_cutoff;
-            Wn = f_cutoff / fn;
-            [b, a] = butter(bparam.order, Wn, 'low');
-            decomposed.continuous = {filtfilt(b, a, data1d)};
-            % 1. Infraslow (0.005 - 0.1 Hz) -> Bandpass
-            f_range = bparam.isf_range;
-            Wn = f_range / fn;
-            [b, a] = butter(bparam.order, Wn, 'bandpass');
-            decomposed.isf = {filtfilt(b, a, data1d)};
-            % 2. VLF (0.1 - 0.3 Hz) -> Bandpass
-            f_range = bparam.vlf_range;
-            Wn = f_range / fn;
-            [b, a] = butter(bparam.order, Wn, 'bandpass');
-            decomposed.vlf = {filtfilt(b, a, data1d)};
-            % 3. LF (0.3 - 1 Hz) -> Bandpass
-            f_range = bparam.lf_range;
-            Wn = f_range / fn;
-            [b, a] = butter(bparam.order, Wn, 'bandpass');
-            decomposed.lf = {filtfilt(b, a, data1d)};
-            % 4. HF (> 1 Hz) -> Highpass
-            f_cutoff = bparam.hf_cutoff;
-            Wn = f_cutoff / fn;
-            [b, a] = butter(bparam.order, Wn, 'high');
-            decomposed.hf_residual = {filtfilt(b, a, data1d)};
-            obj.param.butter = bparam;
+            % 1. parameter loading and namespace
+            fs = obj.param.fs;
+            fn = fs / 2;
+            band_low_hz = [obj.param.butter.dc_cutoff, obj.param.butter.isf_range(1), obj.param.butter.vlf_range(1), ...
+                obj.param.butter.lf_range(1), obj.param.butter.hf_cutoff];
+            % 2. Butter band pass
+            coeff_b = cell(1, 5);
+            coeff_a = cell(1, 5);
+            [coeff_b{1}, coeff_a{1}] = butter(obj.param.butter.order, obj.param.butter.dc_cutoff / fn, 'low');
+            [coeff_b{2}, coeff_a{2}] = butter(obj.param.butter.order, obj.param.butter.isf_range / fn, 'bandpass');
+            [coeff_b{3}, coeff_a{3}] = butter(obj.param.butter.order, obj.param.butter.vlf_range / fn, 'bandpass');
+            [coeff_b{4}, coeff_a{4}] = butter(obj.param.butter.order, obj.param.butter.lf_range / fn, 'bandpass');
+            [coeff_b{5}, coeff_a{5}] = butter(obj.param.butter.order, obj.param.butter.hf_cutoff / fn, 'high');
+            % 3. Minimum sample length    
+            min_filt_samples = zeros(1, 5); 
+            for k = 1:5
+                n_coeff = max(numel(coeff_b{k}), numel(coeff_a{k}));
+                filter_order = n_coeff - 1;
+                min_filt_samples(k) = 3 * filter_order + 1; % minimum for filtfilt require sample x3 of order
+            end
+            min_cycle_samples = ceil(obj.param.butter.min_cycles ./ band_low_hz * fs);   % 1 x 5  must capture x2 of cycle 
+            min_band_samples = max(min_cycle_samples, min_filt_samples); % choose sample size
+            % 4. initialize loop
+            sidx_fnames = fieldnames(obj.state_idx);
+            total_bouts = 0;
+            for i = 1:length(sidx_fnames)
+                total_bouts = total_bouts + size(obj.state_idx.(sidx_fnames{i}), 1);
+            end
+            state_name = strings(total_bouts, 1);
+            bout_idx = zeros(total_bouts, 1);
+            bout_duration = zeros(total_bouts, 1);
+            total_bout = zeros(total_bouts, 1);
+            band_crop = cell(total_bouts, 5);
+
+            n_nan = 0;
+            row_counter = 0;
+            % 5. state loop
+            for sidx = 1:length(sidx_fnames)
+                fname = sidx_fnames{sidx};
+                indices = obj.state_idx.(fname);
+                nbouts = size(indices, 1);
+                % 6. bout loop
+                for b = 1:nbouts
+                    crop_data = data1d(indices(b, 1):indices(b, 2));
+                    if any(isnan(crop_data))
+                        n_nan = n_nan + 1;
+                        continue
+                    end
+                    row_counter = row_counter + 1;
+                    state_name(row_counter) = fname;
+                    bout_idx(row_counter) = b;
+                    bout_duration(row_counter) = (indices(b, 2) - indices(b, 1)) / fs;
+                    total_bout(row_counter) = nbouts;
+                    % 7. band loop
+                    for k = 1:5
+                        if numel(crop_data) >= min_band_samples(k) % 3. minimum condition here
+                            band_crop{row_counter, k} = filtfilt(coeff_b{k}, coeff_a{k}, crop_data);
+                        end
+                    end
+                end
+            end
+            % 7. out
+            decomposed = table(state_name(1:row_counter), bout_idx(1:row_counter), ...
+                bout_duration(1:row_counter), total_bout(1:row_counter), ...
+                'VariableNames', {'state_name', 'bout_idx', 'bout_duration', 'total_bout'});
+            for k = 1:5
+                decomposed.(obj.param.butter.band_name(k)) = band_crop(1:row_counter, k);
+            end
+            if n_nan > 0
+                fprintf('      %s : %d bout(s) touching NaN skipped\n', name, n_nan);
+            end
             obj.band_decomposition.(name) = decomposed;
         end
 
@@ -328,20 +391,19 @@ classdef state_1d < handle
             end
 
             decomposed = obj.band_decomposition.(name);
-            bandnames = fieldnames(decomposed); % e.g. continuous, isf, vlf, lf, hf
-            sidx_fnames = fieldnames(obj.state_idx);
-
-            % 1. Pre-calculate total rows needed to pre-allocate
-            total_bouts = 0;
-            for i = 1:length(sidx_fnames)
-                total_bouts = total_bouts + size(obj.state_idx.(sidx_fnames{i}), 1);
+            if ~istable(decomposed)
+                error('state_1d:oldDecomposition', ...
+                    '%s holds the whole-record decomposition; rerun decompose_signal, it is per bout now', name);
             end
+            key_names = {'state_name', 'bout_idx', 'bout_duration', 'total_bout'};
+            bandnames = setdiff(decomposed.Properties.VariableNames, key_names, 'stable');
+            total_bouts = height(decomposed);
 
-            % 2. Pre-allocate arrays
-            state_name = strings(total_bouts, 1);
-            bout_idx = zeros(total_bouts, 1);
-            bout_duration = zeros(total_bouts, 1);
-            total_bout = zeros(total_bouts, 1);
+            % 2. Pre-allocate: one row per decomposed bout, the keys copied from its table
+            state_name = decomposed.state_name;
+            bout_idx = decomposed.bout_idx;
+            bout_duration = decomposed.bout_duration;
+            total_bout = decomposed.total_bout;
 
             % Initialize struct for band data (will convert to table later)
             band_stats = struct();
@@ -356,38 +418,11 @@ classdef state_1d < handle
             end
 
             % 3. Fill Data
-            row_counter = 1;
-            for sidx = 1:length(sidx_fnames) % 1. per state
-                fname = sidx_fnames{sidx};
-                indices = obj.state_idx.(fname); % Nx2 matrix
-                nbouts = size(indices, 1);
-
-                for b = 1:nbouts  % 2. Per Bout
-                    start_i = indices(b, 1);
-                    end_i   = indices(b, 2);
-                    duration = (end_i - start_i) / obj.param.fs;
-
-                    % Store Metadata
-                    state_name(row_counter) = fname;
-                    bout_idx(row_counter) = b;
-                    bout_duration(row_counter) = duration;
-                    total_bout(row_counter) = nbouts;
-
-                    % Process each band
-                    for k = 1:length(bandnames) % 3. per band
+            for row_counter = 1:total_bouts
+                    % Process each band; an empty cell is a band the bout could not hold
+                    for k = 1:length(bandnames) % per band
                         bn = bandnames{k};
-
-                        if iscell(decomposed.(bn))
-                            signal_full = decomposed.(bn){1};
-                        else
-                            signal_full = decomposed.(bn);
-                        end
-
-                        if start_i > numel(signal_full) || end_i > numel(signal_full)
-                            crop_sig = [];
-                        else
-                            crop_sig = signal_full(start_i:end_i);
-                        end
+                        crop_sig = decomposed.(bn){row_counter};
 
                         if ~isempty(crop_sig) && length(crop_sig) > 3
                             % 1. Find Peaks
@@ -438,9 +473,6 @@ classdef state_1d < handle
                             band_stats.(bn).pt_amp_std(row_counter) = NaN;
                         end
                     end
-
-                    row_counter = row_counter + 1;
-                end
             end
 
             % 4. Create one giant table for all bands
