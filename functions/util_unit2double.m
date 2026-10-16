@@ -1,6 +1,6 @@
 function value = util_unit2double(text)
 %UTIL_UNIT2DOUBLE  The leading number of a unit-suffixed value, as a double.
-%   Caller: centralize_driftstate
+%   Caller: bout_paxfwhm, bout_drift
 %   The same function as 00_mdfExtractor/mdfExtractor/function/util_unit2double,
 %   taking a column as well as a scalar so a table variable goes through in one call.
 %

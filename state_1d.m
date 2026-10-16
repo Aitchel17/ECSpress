@@ -411,34 +411,34 @@ classdef state_1d < handle
                 error('state_1d:oldDecomposition', ...
                     '%s holds the whole-record decomposition; rerun decompose_signal, it is per bout now', name);
             end
-            % 2. the band columns decompose_signal wrote, in its order
+            % 2. Prepare for loop, bandname array and total bout number
             bandnames = cellstr(obj.param.butter.band_name);
             total_bouts = height(decomposed);
 
-            % 2. Pre-allocate: one row per decomposed bout, the keys copied from its table
+            % 3. Pre-allocate: one row per decomposed bout, the keys copied from its table
             state_name = decomposed.state_name;
             bout_idx = decomposed.bout_idx;
             bout_duration = decomposed.bout_duration;
             total_bout = decomposed.total_bout;
 
-            % Initialize struct for band data (will convert to table later)
+            % 4. Initialize struct for band data (will convert to table later)
             band_stats = struct();
             for k = 1:length(bandnames)
-                bn = bandnames{k};
-                band_stats.(bn).pp_time_mean = zeros(total_bouts, 1);
-                band_stats.(bn).pp_time_std = zeros(total_bouts, 1);
-                band_stats.(bn).pt_amp_mean = zeros(total_bouts, 1);
-                band_stats.(bn).pt_amp_std = zeros(total_bouts, 1);
-                band_stats.(bn).pp_time_raw = cell(total_bouts, 1);
-                band_stats.(bn).pt_amp_raw = cell(total_bouts, 1);
+                bname = bandnames{k};
+                band_stats.(bname).pp_time_mean = zeros(total_bouts, 1);
+                band_stats.(bname).pp_time_std = zeros(total_bouts, 1);
+                band_stats.(bname).pt_amp_mean = zeros(total_bouts, 1);
+                band_stats.(bname).pt_amp_std = zeros(total_bouts, 1);
+                band_stats.(bname).pp_time_raw = cell(total_bouts, 1);
+                band_stats.(bname).pt_amp_raw = cell(total_bouts, 1);
             end
 
-            % 3. Fill Data
+            % 5. Fill Data
             for row_counter = 1:total_bouts
                     % Process each band; an empty cell is a band the bout could not hold
                     for k = 1:length(bandnames) % per band
-                        bn = bandnames{k};
-                        crop_sig = decomposed.(bn){row_counter};
+                        bname = bandnames{k};
+                        crop_sig = decomposed.(bname){row_counter};
 
                         if ~isempty(crop_sig) && length(crop_sig) > 3
                             % 1. Find Peaks
@@ -450,13 +450,13 @@ classdef state_1d < handle
                             % peak-to-peak intervals (s)
                             if numel(locs) > 1
                                 pp_times = diff(locs) / obj.param.fs;
-                                band_stats.(bn).pp_time_mean(row_counter) = mean(pp_times, 'omitnan');
-                                band_stats.(bn).pp_time_std(row_counter) = std(pp_times, 'omitnan');
-                                band_stats.(bn).pp_time_raw{row_counter} = pp_times;
+                                band_stats.(bname).pp_time_mean(row_counter) = mean(pp_times, 'omitnan');
+                                band_stats.(bname).pp_time_std(row_counter) = std(pp_times, 'omitnan');
+                                band_stats.(bname).pp_time_raw{row_counter} = pp_times;
                             else
-                                band_stats.(bn).pp_time_mean(row_counter) = NaN;
-                                band_stats.(bn).pp_time_std(row_counter) = NaN;
-                                band_stats.(bn).pp_time_raw{row_counter} = [];
+                                band_stats.(bname).pp_time_mean(row_counter) = NaN;
+                                band_stats.(bname).pp_time_std(row_counter) = NaN;
+                                band_stats.(bname).pp_time_raw{row_counter} = [];
                             end
 
                             % peak-to-trough amplitude: each peak against the first trough after it
@@ -472,47 +472,47 @@ classdef state_1d < handle
                             end
 
                             if ~isempty(amps)
-                                band_stats.(bn).pt_amp_mean(row_counter) = mean(amps, 'omitnan');
-                                band_stats.(bn).pt_amp_std(row_counter) = std(amps, 'omitnan');
-                                band_stats.(bn).pt_amp_raw{row_counter} = amps;
+                                band_stats.(bname).pt_amp_mean(row_counter) = mean(amps, 'omitnan');
+                                band_stats.(bname).pt_amp_std(row_counter) = std(amps, 'omitnan');
+                                band_stats.(bname).pt_amp_raw{row_counter} = amps;
                             else
-                                band_stats.(bn).pt_amp_mean(row_counter) = NaN;
-                                band_stats.(bn).pt_amp_std(row_counter) = NaN;
-                                band_stats.(bn).pt_amp_raw{row_counter} = [];
+                                band_stats.(bname).pt_amp_mean(row_counter) = NaN;
+                                band_stats.(bname).pt_amp_std(row_counter) = NaN;
+                                band_stats.(bname).pt_amp_raw{row_counter} = [];
                             end
 
                         else
                             % Empty or too short
-                            band_stats.(bn).pp_time_mean(row_counter) = NaN;
-                            band_stats.(bn).pp_time_std(row_counter) = NaN;
-                            band_stats.(bn).pt_amp_mean(row_counter) = NaN;
-                            band_stats.(bn).pt_amp_std(row_counter) = NaN;
+                            band_stats.(bname).pp_time_mean(row_counter) = NaN;
+                            band_stats.(bname).pp_time_std(row_counter) = NaN;
+                            band_stats.(bname).pt_amp_mean(row_counter) = NaN;
+                            band_stats.(bname).pt_amp_std(row_counter) = NaN;
                         end
                     end
             end
 
-            % 4. Create one giant table for all bands
+            % 6. Create one giant table for all bands
             % the same four names the other nests use, so one flattener serves them all
             giant_table = table(state_name, bout_idx, bout_duration, total_bout, ...
                 'VariableNames', {'state_name', 'bout_idx', 'bout_duration', 'total_bout'});
 
             % then six columns per band, named <band>_<statistic>
             for k = 1:length(bandnames)
-                bn = bandnames{k};
+                bname = bandnames{k};
 
-                band_tbl = table(band_stats.(bn).pp_time_mean, ...
-                    band_stats.(bn).pp_time_std, ...
-                    band_stats.(bn).pp_time_raw, ...
-                    band_stats.(bn).pt_amp_mean, ...
-                    band_stats.(bn).pt_amp_std, ...
-                    band_stats.(bn).pt_amp_raw, ...
+                band_tbl = table(band_stats.(bname).pp_time_mean, ...
+                    band_stats.(bname).pp_time_std, ...
+                    band_stats.(bname).pp_time_raw, ...
+                    band_stats.(bname).pt_amp_mean, ...
+                    band_stats.(bname).pt_amp_std, ...
+                    band_stats.(bname).pt_amp_raw, ...
                     'VariableNames', ...
-                    {strcat(bn, '_pp_time_mean'), ...
-                    strcat(bn, '_pp_time_std'), ...
-                    strcat(bn, '_pp_time_raw'), ...
-                    strcat(bn, '_pt_amp_mean'), ...
-                    strcat(bn, '_pt_amp_std'), ...
-                    strcat(bn, '_pt_amp_raw')});
+                    {strcat(bname, '_pp_time_mean'), ...
+                    strcat(bname, '_pp_time_std'), ...
+                    strcat(bname, '_pp_time_raw'), ...
+                    strcat(bname, '_pt_amp_mean'), ...
+                    strcat(bname, '_pt_amp_std'), ...
+                    strcat(bname, '_pt_amp_raw')});
 
                 giant_table = [giant_table, band_tbl];
             end
