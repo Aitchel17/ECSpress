@@ -34,7 +34,7 @@ content_names = [ ...
 %      cut by the record's first or last frame is dropped instead of clipped (bout_trim is gone)
 schema_version = 5;
 
-% 1. load centralized_bout and paxfwhm.
+% 1. check the two centralized tables exist
 in_path = fullfile(central_dir, "centralized_" + ["paxfwhm", "bout"] + ".mat");
 [in_exists, ~, ~] = util_checkdirstat(in_path);
 if ~in_exists(1)
@@ -43,15 +43,16 @@ end
 if ~in_exists(2)
     error('bout_paxfwhm:noBout', 'run centralize_bout first, centralized_bout.mat is missing');
 end
+% 2. load them
 pax_table = load(in_path(1)).central;
 bout_table = load(in_path(2)).central;
 fprintf('paxfwhm %d rows, bout %d\n', height(pax_table), height(bout_table));
 
-% 2. Get session key for each data table
+% 3. session key of each table
 [key_pax, key_columns] = util_sessionkey(pax_table);
 key_bout = util_sessionkey(bout_table);
 
-% 3. Load previously processed paxstate table if exist
+% 4. load the previous output, when its schema matches
 out_path = fullfile(central_dir, "centralized_paxfwhm_state.mat");
 loaded_fwhmstatetable = table();
 if isfile(out_path) && ~rebuild
@@ -63,43 +64,42 @@ if isfile(out_path) && ~rebuild
     end
     clear stored
 end
-% 3.1 Session key from loaded 
+% 4.1 session key of the loaded rows
 key_previous = strings(0, 1);
 if ~isempty(loaded_fwhmstatetable)
     key_previous = util_sessionkey(loaded_fwhmstatetable);
 end
 
-% 4. Loop through session
+% 5. one row per session, split again or reused
 scan = struct('pax_i', {}, 'data', {}, 'input_source_modified', {}, 'input_bout_computed', {}, 'reused', {});
 for pax_sessionidx = 1:height(pax_table)
-    % 4.1 find matching session key
+    % 5.1 matching bout row
     matched_boutidx = find(key_bout == key_pax(pax_sessionidx), 1);
     if isempty(matched_boutidx)
         fprintf('   no bout tables %s\n', key_pax(pax_sessionidx));
         continue
     end
-    % 4.2 Select bout
+    % 5.2 its bout tables
     bout_data = bout_table.data{matched_boutidx};
-    % 4.3 Get timestamp
+    % 5.3 the two input stamps
     source_modified = pax_table.source_modified(pax_sessionidx);
     bout_computed = bout_table.computed(matched_boutidx);
-    % 4.4 Select co-existing fwhm data session
+    % 5.4 this session's row in the loaded output, if any
     hit = find(key_previous == key_pax(pax_sessionidx), 1);
     stay_row = loaded_fwhmstatetable(hit, :);
-    % 4.5 Determine to reuse or renew session bout X fwhm
+    % 5.5 is the loaded row still valid
     is_reusable = false;   % reuse only when neither the paxfwhm source moved nor the bout row was recomputed
     if ~isempty(stay_row)
-        is_samesource = stay_row.input_source_modified == source_modified; % Is FWHM equal?
-        is_samebout = stay_row.input_bout_computed == bout_computed; % Is bout equal?
-        is_reusable = is_samesource && is_samebout; % If bout, fwhm unchanged reuse
+        is_samesource = stay_row.input_source_modified == source_modified;
+        is_samebout = stay_row.input_bout_computed == bout_computed;
+        is_reusable = is_samesource && is_samebout;
     end
-    % 5 Fill the struct array
+    % 5.6 the row: the loaded result, a new split, or on failure the loaded row and its stamps
     row = struct('pax_i', pax_sessionidx, 'data', [], 'input_source_modified', source_modified, ...
         'input_bout_computed', bout_computed, 'reused', is_reusable);
-    % reuse the loaded results, or split the series again
-    
+
     if is_reusable
-        row.data = stay_row.data{1};
+        row.data = stay_row.data{1}; % reuse
     else
         pax_fwhm = pax_table.data{pax_sessionidx};
         try
@@ -116,34 +116,30 @@ for pax_sessionidx = 1:height(pax_table)
             row.reused = true;
         end
     end
+    % 5.7 add to the output struct array
     scan(end+1) = row; %#ok<AGROW>
     if mod(pax_sessionidx, 10) == 0
         fprintf('   %d/%d scanned, %d held\n', pax_sessionidx, height(pax_table), numel(scan));
     end
 end
 
-%% out
+% 6. make output
+% 6.1 rows kept
 kept = [scan.pax_i];
-reused = [scan.reused];
-central = pax_table(kept, key_columns);
-extra = intersect(["VesselID", "Depth", "Resolution", "Cohort", "Directory"], ...
-    string(pax_table.Properties.VariableNames));
-central = [central, pax_table(kept, extra)];
-
-% Depth reads '70um' and Resolution '0.19um' -- both transcribed off the
-% acquisition info.txt, so the number sits at the front and the unit follows it.
-% Both are read as NUMBERS downstream: Depth by the layer filter, Resolution by
-% the scaling that turns pixels into micrometres, and neither can be done from
-% the text. Parsed here because this is the table those readers open.
+% 6.2 key columns, the columns the filters read, and Depth and Resolution as numbers (stored as '70um', '0.19um')
+central = pax_table(kept, [key_columns, "VesselID", "Depth", "Resolution", "Cohort", "Directory"]);
 central.NumericDepth = util_unit2double(pax_table.Depth(kept));
 central.NumericResolution = util_unit2double(pax_table.Resolution(kept));
 
+% 6.3 data column and the input stamps
 central.data = {scan.data}';
 central.input_source_modified = [scan.input_source_modified]';   % the stamps the next run reuses this row against
 central.input_bout_computed = [scan.input_bout_computed]';
 save(out_path, 'central', 'schema_version', '-v7.3');
 
+% 6.4 summary
 listing = dir(out_path);
+reused = [scan.reused];
 fprintf('\n%d rows: %d computed, %d reused\n', ...
     height(central), nnz(~reused), nnz(reused));
 fprintf('%.0f MB -> %s\n', listing.bytes/1e6, out_path);

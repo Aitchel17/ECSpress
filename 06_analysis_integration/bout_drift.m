@@ -15,8 +15,8 @@ function info = bout_drift(central_dir, rebuild)
 %      last frame is dropped instead of clipped (bout_trim is gone)
 schema_version = 3;
 
-% 1. make and check directory
-in_path = fullfile(central_dir, "centralized_" + ["drift", "bout"] + ".mat"); % centralized_drift.mat and centralized_bout.mat
+% 1. check the two centralized tables exist
+in_path = fullfile(central_dir, "centralized_" + ["drift", "bout"] + ".mat");
 [in_exists, ~, ~] = util_checkdirstat(in_path);
 if ~in_exists(1)
     error('bout_drift:noDrift', 'run centralize_drift first, centralized_drift.mat is missing');
@@ -24,15 +24,15 @@ end
 if ~in_exists(2)
     error('bout_drift:noBout', 'run centralize_bout first, centralized_bout.mat is missing');
 end
-% 2. load table
+% 2. load them
 drift_table = load(in_path(1)).central;
 bout_table = load(in_path(2)).central;
 fprintf('drift %d rows, bout %d\n', height(drift_table), height(bout_table));
-% 3. Make session key
+% 3. session key of each table
 [key_drift, key_columns] = util_sessionkey(drift_table);
 key_bout = util_sessionkey(bout_table);
 
-% 4. make or load output directory
+% 4. load the previous output, when its schema matches
 out_path = fullfile(central_dir, "centralized_drift_state.mat");
 loaded_table = table();
 if isfile(out_path) && ~rebuild
@@ -44,36 +44,42 @@ if isfile(out_path) && ~rebuild
     end
     clear stored
 end
-% 5. get key from loaded table
+% 4.1 session key of the loaded rows
 key_loaded = strings(0, 1);
 if ~isempty(loaded_table)
     key_loaded = util_sessionkey(loaded_table);
 end
 
-%% one row per session that has bout tables to split by
+% 5. one row per session, split again or reused
 scan = struct('drift_i', {}, 'data', {}, 'input_source_modified', {}, 'input_bout_computed', {}, 'reused', {});
 for k = 1:height(drift_table)
-    hit_bout = find(key_bout == key_drift(k), 1);
-    if isempty(hit_bout)
+    % 5.1 matching bout row
+    hit_boutidx = find(key_bout == key_drift(k), 1);
+    if isempty(hit_boutidx)
         fprintf('   no bout tables %s\n', key_drift(k));
         continue
     end
-    bout_data = bout_table.data{hit_bout};
+    % 5.2 its bout tables
+    bout_data = bout_table.data{hit_boutidx};
+    % 5.3 the two input stamps
     source_modified = drift_table.source_modified(k);
-    bout_computed = bout_table.computed(hit_bout);
+    bout_computed = bout_table.computed(hit_boutidx);
+    % 5.4 this session's row in the loaded output, if any
     hit = find(key_loaded == key_drift(k), 1);
     stay_row = loaded_table(hit, :);
+    % 5.5 is the loaded row still valid
     is_reusable = false;   % reuse only when neither the drift source moved nor the bout row was recomputed
     if ~isempty(stay_row)
         is_samesource = stay_row.input_source_modified == source_modified;
         is_samebout = stay_row.input_bout_computed == bout_computed;
         is_reusable = is_samesource && is_samebout;
     end
+    % 5.6 the row: the loaded result, a new split, or on failure the loaded row and its stamps
     row = struct('drift_i', k, 'data', [], 'input_source_modified', source_modified, ...
         'input_bout_computed', bout_computed, 'reused', is_reusable);
-    % reuse the loaded results, or split the series again
+
     if is_reusable
-        row.data = stay_row.data{1};
+        row.data = stay_row.data{1}; % reuse
     else
         drift = drift_table.data{k};
         try
@@ -90,32 +96,31 @@ for k = 1:height(drift_table)
             row.reused = true;
         end
     end
+    % 5.7 add to the output struct array
     scan(end+1) = row; %#ok<AGROW>
     if mod(k, 10) == 0
         fprintf('   %d/%d scanned, %d held\n', k, height(drift_table), numel(scan));
     end
 end
 
-%% out
+% 6. make output
+% 6.1 rows kept
 kept = [scan.drift_i];
-reused = [scan.reused];
-central = drift_table(kept, key_columns);
-extra = intersect(["VesselID", "Depth", "Resolution", "Cohort", "Directory"], ...
-    string(drift_table.Properties.VariableNames));
-central = [central, drift_table(kept, extra)];
-
-% Depth reads '70um' and Resolution '0.19um'. Both are read as numbers downstream,
-% Depth by the layer filter and Resolution by the pixel-to-micrometre scaling.
+% 6.2 key columns, the columns the filters read, Depth and Resolution as numbers (stored as '70um', '0.19um'), and the frame rate
+central = drift_table(kept, [key_columns, "VesselID", "Depth", "Resolution", "Cohort", "Directory"]);
 central.NumericDepth = util_unit2double(drift_table.Depth(kept));
 central.NumericResolution = util_unit2double(drift_table.Resolution(kept));
+central.drift_fps = drift_table.drift_fps(kept);
 
+% 6.3 data column and the input stamps
 central.data = {scan.data}';
 central.input_source_modified = [scan.input_source_modified]';   % the stamps the next run reuses this row against
 central.input_bout_computed = [scan.input_bout_computed]';
-central.drift_fps = drift_table.drift_fps(kept);
 save(out_path, 'central', 'schema_version', '-v7.3');
 
+% 6.4 summary
 listing = dir(out_path);
+reused = [scan.reused];
 fprintf('\n%d rows: %d computed, %d reused\n', ...
     height(central), nnz(~reused), nnz(reused));
 fprintf('%.0f MB -> %s\n', listing.bytes/1e6, out_path);

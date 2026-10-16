@@ -96,7 +96,7 @@ classdef state_1d < handle
             end
 
             % 2. Pre-allocate arrays
-            state_name = strings(total_bouts, 1);
+            row_state = strings(total_bouts, 1);
             bout_idx = zeros(total_bouts, 1);
             bout_duration = zeros(total_bouts, 1);
             total_bout = zeros(total_bouts, 1);
@@ -110,20 +110,20 @@ classdef state_1d < handle
             % 3. Fill Data
             row_counter = 1;
             for sidx = 1:length(sidx_fnames) % per state
-                fname = sidx_fnames{sidx};
-                indices = obj.state_idx.(fname); % Nx2 matrix
+                state_name = sidx_fnames{sidx};
+                indices = obj.state_idx.(state_name); % Nx2 matrix
                 nbouts = size(indices, 1);
 
-                for b = 1:nbouts % bout
-                    start_i = indices(b, 1);
-                    end_i   = indices(b, 2);
+                for bidx = 1:nbouts % bout
+                    start_i = indices(bidx, 1);
+                    end_i   = indices(bidx, 2);
 
                     crop_data = data1d(start_i:end_i);
                     duration = (end_i - start_i) / obj.param.fs;
 
                     % Store Metadata
-                    state_name(row_counter) = fname;
-                    bout_idx(row_counter) = b;
+                    row_state(row_counter) = state_name;
+                    bout_idx(row_counter) = bidx;
                     bout_duration(row_counter) = duration;
                     total_bout(row_counter) = nbouts;
 
@@ -141,10 +141,11 @@ classdef state_1d < handle
                     row_counter = row_counter + 1;
                 end
             end
-            % 4. Create Table
-            obj.state_summary.(name) = table(state_name, bout_idx, ...
+            % 4. Create Table, the state column under the name the readers use
+            summary_table = table(row_state, bout_idx, ...
                 bout_duration, total_bout, raw_data, ...
                 raw_mean, raw_median, raw_q1, raw_q3, raw_var);
+            obj.state_summary.(name) = renamevars(summary_table, 'row_state', 'state_name');
         end
 
 
@@ -157,20 +158,20 @@ classdef state_1d < handle
             sidxfilt_logic = endsWith(sidx_fnames,'_trans');
             sidx_fnames = sidx_fnames(sidxfilt_logic);
 
-            % 1. Pre-calculate total rows needed (one row per transition bout)
+            % 1.1 Pre-calculate total rows needed (one row per transition bout)
             total_bouts = 0;
             for i = 1:length(sidx_fnames)
                 total_bouts = total_bouts + size(obj.state_idx.(sidx_fnames{i}), 1);
             end
 
-            % 2. Pre-allocate arrays for metadata
-            state_name = strings(total_bouts, 1);
+            % 1.2 Pre-allocate arrays for metadata
+            row_state = strings(total_bouts, 1);
             bout_idx = zeros(total_bouts, 1);
             bout_duration = zeros(total_bouts, 1);
             total_bout = zeros(total_bouts, 1);
             transition_point = zeros(total_bouts, 1);  % Center index
 
-            % Pre-allocate for BEFORE transition period
+            % 1.3 Pre-allocate for BEFORE transition period
             data = cell(total_bouts, 1);
             pre_mean = zeros(total_bouts, 1);
             pre_median = zeros(total_bouts, 1);
@@ -178,42 +179,44 @@ classdef state_1d < handle
             pre_q3 = zeros(total_bouts, 1);
             pre_var = zeros(total_bouts, 1);
 
-            % Pre-allocate for AFTER transition period
+            % 1.4 Pre-allocate for AFTER transition period
             post_mean = zeros(total_bouts, 1);
             post_median = zeros(total_bouts, 1);
             post_q1 = zeros(total_bouts, 1);
             post_q3 = zeros(total_bouts, 1);
             post_var = zeros(total_bouts, 1);
 
-            % 3. Fill Data
+            % 2. Fill Data
             % half the transition window in samples, the same for every table so the
             % data column stacks
             onset = round(obj.transition_window * obj.param.fs / 2);
 
             row_counter = 1;
             n_edge = 0;
+            % 2.1 transition state loop
             for sidx = 1:length(sidx_fnames) % per state transition
-                fname = sidx_fnames{sidx};
-                indices = obj.state_idx.(fname); % Nx2 matrix
+                state_name = sidx_fnames{sidx};
+                indices = obj.state_idx.(state_name); % Nx2 matrix
                 nbouts = size(indices, 1);
                 if ~isempty(indices)
-
-                    for b = 1:nbouts % per bout
-                        start_i = indices(b, 1);
-                        end_i   = indices(b, 2);
+                    % 2.2 Bout loop
+                    for bidx = 1:nbouts % per bout
+                        % 1. Drop the bout at start and end
+                        start_i = indices(bidx, 1);
+                        end_i   = indices(bidx, 2);
                         is_atedge = start_i <= 1 || end_i >= numel(data1d);
                         if is_atedge
                             n_edge = n_edge + 1;
                             continue
                         end
 
-                        % Calculate center point (transition point)
+                        % 2. Derive middle of window = transition (timetable2transition)
                         center_i = round((start_i + end_i) / 2);
                         duration = (end_i - start_i) / obj.param.fs;
 
-                        % Store Metadata
-                        state_name(row_counter) = fname;
-                        bout_idx(row_counter) = b;
+                        % 3. Store Metadata 
+                        row_state(row_counter) = state_name;
+                        bout_idx(row_counter) = bidx;
                         bout_duration(row_counter) = duration;
                         total_bout(row_counter) = nbouts;
                         transition_point(row_counter) = center_i;
@@ -247,9 +250,10 @@ classdef state_1d < handle
             end
 
             % 4. Create Table with all columns, the rows the edge windows left unfilled cut off
-            transition_table = table(state_name, bout_idx, bout_duration, total_bout, transition_point, ...
+            transition_table = table(row_state, bout_idx, bout_duration, total_bout, transition_point, ...
                 data, pre_mean, pre_median, pre_q1, pre_q3, pre_var, ...
                 post_mean, post_median, post_q1, post_q3, post_var);
+            transition_table = renamevars(transition_table, 'row_state', 'state_name');
             obj.transition.(name) = transition_table(1:row_counter - 1, :);
             if n_edge > 0
                 fprintf('      %s : %d transition window(s) at the record edge skipped\n', name, n_edge);
@@ -347,7 +351,7 @@ classdef state_1d < handle
             for i = 1:length(sidx_fnames)
                 total_bouts = total_bouts + size(obj.state_idx.(sidx_fnames{i}), 1);
             end
-            state_name = strings(total_bouts, 1);
+            row_state = strings(total_bouts, 1);
             bout_idx = zeros(total_bouts, 1);
             bout_duration = zeros(total_bouts, 1);
             total_bout = zeros(total_bouts, 1);
@@ -357,20 +361,20 @@ classdef state_1d < handle
             row_counter = 0;
             % 5. state loop
             for sidx = 1:length(sidx_fnames)
-                fname = sidx_fnames{sidx};
-                indices = obj.state_idx.(fname);
+                state_name = sidx_fnames{sidx};
+                indices = obj.state_idx.(state_name);
                 nbouts = size(indices, 1);
                 % 6. bout loop
-                for b = 1:nbouts
-                    crop_data = data1d(indices(b, 1):indices(b, 2));
+                for bidx = 1:nbouts
+                    crop_data = data1d(indices(bidx, 1):indices(bidx, 2));
                     if any(isnan(crop_data))
                         n_nan = n_nan + 1;
                         continue
                     end
                     row_counter = row_counter + 1;
-                    state_name(row_counter) = fname;
-                    bout_idx(row_counter) = b;
-                    bout_duration(row_counter) = (indices(b, 2) - indices(b, 1)) / fs;
+                    row_state(row_counter) = state_name;
+                    bout_idx(row_counter) = bidx;
+                    bout_duration(row_counter) = (indices(bidx, 2) - indices(bidx, 1)) / fs;
                     total_bout(row_counter) = nbouts;
                     % 7. band loop
                     for k = 1:5
@@ -381,7 +385,7 @@ classdef state_1d < handle
                 end
             end
             % 7. out
-            decomposed = table(state_name(1:row_counter), bout_idx(1:row_counter), ...
+            decomposed = table(row_state(1:row_counter), bout_idx(1:row_counter), ...
                 bout_duration(1:row_counter), total_bout(1:row_counter), ...
                 'VariableNames', {'state_name', 'bout_idx', 'bout_duration', 'total_bout'});
             for k = 1:5
@@ -395,19 +399,20 @@ classdef state_1d < handle
 
         function obj = get_pppt_decomposition(obj, name)
             % GET_PPPT_DECOMPOSITION Calculate peak-to-peak and peak-to-trough stats for decomposed signals
-
+            % 1.  Get decomposition data
             if ~isfield(obj.band_decomposition, name)
                 warning('Decomposition data for %s not found. Run get_band_decomposition first.', name);
                 return;
             end
-
+            
             decomposed = obj.band_decomposition.(name);
+
             if ~istable(decomposed)
                 error('state_1d:oldDecomposition', ...
                     '%s holds the whole-record decomposition; rerun decompose_signal, it is per bout now', name);
             end
-            key_names = {'state_name', 'bout_idx', 'bout_duration', 'total_bout'};
-            bandnames = setdiff(decomposed.Properties.VariableNames, key_names, 'stable');
+            % 2. the band columns decompose_signal wrote, in its order
+            bandnames = cellstr(obj.param.butter.band_name);
             total_bouts = height(decomposed);
 
             % 2. Pre-allocate: one row per decomposed bout, the keys copied from its table
