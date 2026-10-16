@@ -16,8 +16,7 @@ score = load(fullfile(sessiondir, 'peripheral', 'sleep_score.mat'));
 
 
 %
-time_table = bout_trim(sleep_bout, session.pax_fwhm.t_axis(end), sleep_param.transition_window);
-paxfwhm_state = state_1d(time_table, sleep_param.transition_window, session.pax_fwhm.t_axis);
+paxfwhm_state = state_1d(sleep_bout, sleep_param.transition_window, session.pax_fwhm.t_axis);
 paxfwhm_state.get_state_indices();
 contents_types = {["thickness","eps","bv","totalpvs","uppvs","downpvs"],...
                 ["displacement","uppvs","downpvs","upbv","downbv"]};
@@ -60,8 +59,8 @@ session.stackch2 = session.loadstack('ch2');
 twophoton_processed = twophoton_preprocess(session);
 %%
 state_idx = struct();
-for table_name = string(fieldnames(time_table))'
-    state_idx.(table_name) = timetable2frame(twophoton_processed.t_axis, time_table.(table_name));   % each bout table on the stack's frames
+for table_name = string(fieldnames(sleep_bout))'
+    state_idx.(table_name) = timetable2frame(twophoton_processed.t_axis, sleep_bout.(table_name));   % each bout table on the stack's frames
 end
 %session.polarcluster = analysis_clusterpolar(session.pax_fwhm, twophoton_processed, session.dir_struct.primary_analysis);
 %%

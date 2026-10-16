@@ -37,7 +37,7 @@ classdef state_1d < handle
 
     methods    % set-up and access
         function obj = state_1d(bout_table, window_s, t_axis)
-            % bout_table  1x1 struct     bout_sleep's or bout_puffmove's time_table, bout_trim'd to this record
+            % bout_table  1x1 struct     bout_sleep's or bout_puffmove's time_table
             % window_s    1x1 float s    the bout function's param.transition_window
             % t_axis      1 x T float s  the time axis of the series this object analyses, evenly spaced
             obj.time_table = bout_table;
@@ -151,6 +151,7 @@ classdef state_1d < handle
         function obj = get_transitionsummary(obj, name, data1d)
             % GET_TRANSITIONSUMMARY Analyze transitions with center of bout as transition point
             % Splits each bout in half: before and after the transition center
+            % A window cut by the record's first or last frame is skipped: its middle is not the transition
 
             sidx_fnames = fieldnames(obj.state_idx);
             sidxfilt_logic = endsWith(sidx_fnames,'_trans');
@@ -190,6 +191,7 @@ classdef state_1d < handle
             onset = round(obj.transition_window * obj.param.fs / 2);
 
             row_counter = 1;
+            n_edge = 0;
             for sidx = 1:length(sidx_fnames) % per state transition
                 fname = sidx_fnames{sidx};
                 indices = obj.state_idx.(fname); % Nx2 matrix
@@ -199,6 +201,11 @@ classdef state_1d < handle
                     for b = 1:nbouts % per bout
                         start_i = indices(b, 1);
                         end_i   = indices(b, 2);
+                        is_atedge = start_i <= 1 || end_i >= numel(data1d);
+                        if is_atedge
+                            n_edge = n_edge + 1;
+                            continue
+                        end
 
                         % Calculate center point (transition point)
                         center_i = round((start_i + end_i) / 2);
@@ -239,10 +246,14 @@ classdef state_1d < handle
                 end
             end
 
-            % 4. Create Table with all columns
-            obj.transition.(name) = table(state_name, bout_idx, bout_duration, total_bout, transition_point, ...
+            % 4. Create Table with all columns, the rows the edge windows left unfilled cut off
+            transition_table = table(state_name, bout_idx, bout_duration, total_bout, transition_point, ...
                 data, pre_mean, pre_median, pre_q1, pre_q3, pre_var, ...
                 post_mean, post_median, post_q1, post_q3, post_var);
+            obj.transition.(name) = transition_table(1:row_counter - 1, :);
+            if n_edge > 0
+                fprintf('      %s : %d transition window(s) at the record edge skipped\n', name, n_edge);
+            end
 
         end
 
