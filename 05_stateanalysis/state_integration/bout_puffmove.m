@@ -1,6 +1,6 @@
 function [time_table, param] = bout_puffmove(air_on, air_fs, speed, taxis, fs)
 %BOUT_PUFFMOVE  The puffs crossed with the movement, as bout tables.
-%   Caller: centralize_bout, review_session
+%   Caller: centralize_bout, b_reviewsession
 %   The movement block reads the ball; categorize_puff, categorize_locomotion and categorize_rest cross it with the puffs and
 %   never see the sensor, so another rig (a cylinder) replaces only that block.
 %

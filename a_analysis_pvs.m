@@ -1,5 +1,5 @@
-% This is main ecspress analysis file
-% This file is intended to show top most level of pipeline
+%A_ANALYSIS_PVS  The first main : one session from its stacks to paxfwhm.mat, polarcluster.mat, radon_result.mat and roilist.mat
+%   The top level of the per-session pipeline, one cell per stage
 % Must be simple as possible
 % 20251229: Currently pipeline consist of following step
 % 1. Load mdfExtracted files using mdfExtractLoader object
@@ -154,7 +154,7 @@ colormap(clee.gradient.inferno)
 %%
 imcontrast
 %% 6. Dynamic time warping based analysis
-%% 7. PIV analysis : analysis_main_piv, after 4.1.5 (reads paxfwhm.mat, roilist.mat, sleep_score.mat)
+%% 7. PIV analysis : a_analysis_piv, after 4.1.5 (reads paxfwhm.mat, roilist.mat, sleep_score.mat)
 
 %% 8. Radon Analysis (Only capable for clear images without debris around artery)
 bvch = session.pax_fwhm.param.channel_lumen;    % radon follows FWHM's BV/vessel channel

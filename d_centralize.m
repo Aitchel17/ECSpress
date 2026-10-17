@@ -1,5 +1,5 @@
 %D_CENTRALIZE  Every session's products into the centralized files, then each series split by its bouts.
-%   Run dirtable_main first : cell 1 reads the sheet it writes. Nothing is read from or written to
+%   Run c_dirtable first : cell 1 reads the sheet it writes. Nothing is read from or written to
 %   the data tree; everything lands under dirs.central, one file per product.
 %   1  gather    the sheet's sessions -> centralized_{paxfwhm, polarcluster, roilist, sleep_score, analysis_analog, drift}
 %   2  by bout   centralized_{sleep_score, analysis_analog} -> centralized_bout, then
@@ -13,7 +13,7 @@ param.dataset = "merged";   % str   the dirtable whose reference sheet lists the
 param.rebuild = false;      % bool  true recomputes every row of every file
 resolved = dirs_central();
 dirs.central = resolved.central;                                                                    % 1 x 1 str  the centralized_*.mat files
-dirs.sheet = fullfile(resolved.secondary_root, param.dataset, param.dataset + "_dirtable.xlsx");   % 1 x 1 str  dirtable_main's workbook
+dirs.sheet = fullfile(resolved.secondary_root, param.dataset, param.dataset + "_dirtable.xlsx");   % 1 x 1 str  c_dirtable's workbook
 if ~isfolder(dirs.central)
     mkdir(dirs.central);
 end

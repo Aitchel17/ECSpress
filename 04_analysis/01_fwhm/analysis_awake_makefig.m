@@ -1,6 +1,6 @@
 function fig = analysis_awake_makefig(time_table, t_axis, bv_px, totalpvs_px, pixel2um, ball_t, ball_velocity, save_dir, opt)
 %ANALYSIS_AWAKE_MAKEFIG  The puff x locomotion bouts as a strip, and the ball velocity, vessel diameter and PVS thickness with the bouts behind them.
-%   Caller: review_session
+%   Caller: b_reviewsession
 %
 % IN   time_table     1x1 struct   bout tables in seconds, from bout_puffmove
 %      t_axis         1 x T float  frame times of the FWHM series (s)

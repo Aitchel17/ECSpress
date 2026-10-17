@@ -1,6 +1,6 @@
 function flipper = plot_blink(fig_obj, tag_name)
 %PLOT_BLINK  Flip every image on a figure that carries tag_name between its two frames, until the figure closes.
-%   Caller: analysis_main_piv
+%   Caller: a_analysis_piv
 %
 % IN   fig_obj      1x1 figure   the board
 %      tag_name      1 x n char   the Tag of the images to flip; each one's UserData is {rgb_1, rgb_2}

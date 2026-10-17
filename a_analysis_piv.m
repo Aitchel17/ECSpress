@@ -1,5 +1,5 @@
-%ANALYSIS_MAIN_PIV  The second main : one session's diameter transitions through PIV, as pivtransition.mat and pivpolar.mat
-%   Runs on analysis_main's products (paxfwhm.mat, roilist.mat), the sleep score and analysis_main_pivjudge's pass.
+%A_ANALYSIS_PIV  The second main : one session's diameter transitions through PIV, as pivtransition.mat and pivpolar.mat
+%   Runs on a_analysis_pvs's products (paxfwhm.mat, roilist.mat), the sleep score and a_check_pivquality's pass.
 %   Inputs - stacks - ROIs - transitions - mask - PIV - save - QC - polar.
 clc, clear
 addpath('g:/03_program/01_ecspress/09_dirstruct');    % where dirs_ecspath lives
@@ -18,7 +18,7 @@ param.min_tri_wedge = 10;                     % triangles a wedge needs before i
 %% 1. Inputs : load session files (FWHM and sleep score)
 session = ECSSession(dirs.session);
 session = session.load_primary_results;
-load(fullfile(session.dir_struct.primary_analysis, 'pivquality_pass.mat'), 'pivquality');   % a session not passed by analysis_main_pivjudge stops here
+load(fullfile(session.dir_struct.primary_analysis, 'pivquality_pass.mat'), 'pivquality');   % a session not passed by a_check_pivquality stops here
 score = load(fullfile(dirs.session, 'peripheral', 'sleep_score.mat'));
 sleep_bout = bout_sleep(score.behavState, score.statecodes, score.binwidth_sec);
 channel = char(session.pax_fwhm.param.channel_pvs);        % the tissue channel, off the FWHM record
@@ -30,7 +30,7 @@ twophoton_processed = twophoton_preprocess(session);
 
 %% 3. ROIs : the wall and the PIV region drawn or confirmed
 stack = twophoton_processed.(channel);
-% the wall at maximum dilation, on setup_rois's window around the widest frame, as analysis_main 4.1.5 draws it
+% the wall at maximum dilation, on setup_rois's window around the widest frame, as a_analysis_pvs 4.1.5 draws it
 setup_rois(session.roilist, twophoton_processed, session.pax_fwhm, session.dir_struct.primary_analysis, ...
     labels = param.roi_exclude);
 % the region PIV is confined to
@@ -43,7 +43,7 @@ for table_name = string(fieldnames(sleep_bout))'
     state_idx.(table_name) = timetable2frame(twophoton_processed.t_axis, sleep_bout.(table_name));   % each bout table on the stack's frames
 end
 if numel(session.pax_fwhm.t_axis) ~= size(twophoton_processed.ch1, 3)
-    error('analysis_main_piv:frameAxis', ...
+    error('a_analysis_piv:frameAxis', ...
         'paxfwhm.mat has %d frames, the stack %d -- the two were not made from the same extraction', ...
         numel(session.pax_fwhm.t_axis), size(twophoton_processed.ch1, 3));
 end

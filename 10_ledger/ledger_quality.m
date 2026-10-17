@@ -1,6 +1,6 @@
 function record = ledger_quality(sessiondir, grade, note)
 %LEDGER_QUALITY  One session's grade, read or written, keyed the way every table is.
-%   Called from review_session with the figures still open: look, then grade. The
+%   Called from b_reviewsession with the figures still open: look, then grade. The
 %   numbers a table already carries are NOT what this is for -- bv_range says the
 %   diameter span and cond_sd says the scatter, and re-typing those as a grade only
 %   makes a second copy that can disagree. What goes in the note is what no column
@@ -16,7 +16,7 @@ function record = ledger_quality(sessiondir, grade, note)
 %   B  used, never representative. The defect is visible and the note says where
 %   C  dropped once more data arrives. Kept now because the sample is worth having
 %
-%   IN   sessiondir  1x1 str      the session folder, as pasted into review_session
+%   IN   sessiondir  1x1 str      the session folder, as pasted into b_reviewsession
 %        grade       1x1 str      "S" | "A" | "B" | "C". Omit both to read
 %        note        1x1 str      why, in English. Required with a grade -- a bare
 %                                 letter sends the next reader back to the figure,

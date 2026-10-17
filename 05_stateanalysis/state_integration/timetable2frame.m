@@ -1,6 +1,6 @@
 function idx_table = timetable2frame(t_axis, timetable)
 %TIMETABLE2FRAME  Windows in seconds as [first last] frames on one time axis, half-open.
-%   Caller: state_1d.get_state_indices, analysis_main_piv, piv_integration_testbed, stateintegration_test
+%   Caller: state_1d.get_state_indices, a_analysis_piv, piv_integration_testbed, stateintegration_test
 %   A frame is inside a window when start <= t < end, so two bouts that meet at one
 %   boundary time share no frame. A window that holds no frame of t_axis -- a bout the
 %   scoring ran past the recording -- is dropped.

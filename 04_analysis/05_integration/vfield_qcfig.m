@@ -1,6 +1,6 @@
 function [quiver_fig, blink_fig] = vfield_qcfig(from_img, to_img, xyuv)
 %VFIELD_QCFIG  One displacement field's QC pair : the field over the FROM image, and the FROM/TO blink.
-%   Caller: analysis_main_piv
+%   Caller: a_analysis_piv
 %   Both windows are made invisible and untitled; the caller titles them, copies their axes onto a
 %   board and closes them.
 %

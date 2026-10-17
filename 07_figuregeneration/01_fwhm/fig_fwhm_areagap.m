@@ -213,7 +213,7 @@ draw_delta(axes(fig_flagsplit), rows, param.beta_column, param.paired_ref, ...
     param.paired_ref_label, param.paired_other, param.paired_other_label, param.fontsize, param.beta_label + ", minus awake", ...
     'split', rows.flagged, 'split_name', ["inside 0..1", "flagged"]);
 
-% which sessions carry the flag, with the path to open them in review_session
+% which sessions carry the flag, with the path to open them in b_reviewsession
 flag_rows = rows(rows.flagged & rows.state == "awake", :);
 flag_rows = sortrows(flag_rows, "beta_ratio");
 for k = 1:height(flag_rows)

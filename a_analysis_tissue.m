@@ -1,4 +1,4 @@
-% This is main ecspress analysis file
+%A_ANALYSIS_TISSUE  The first main for the tissue cohort : one session from its stacks, the hql108 whisker copy of a_analysis_pvs
 % This file is intended to show top most level of pipeline
 % Must be simple as possible
 % 20251229: Currently pipeline consist of following step

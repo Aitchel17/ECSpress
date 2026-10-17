@@ -33,7 +33,7 @@ dirs.session = 'G:\tmp\00_igkl\hql090\251016_hql090_sleep\HQL090_sleep251016_005
 dirs.scratch = ['C:\Users\hql5715\AppData\Local\Temp\claude\g--03-program\' ...
     'aba78c46-71f9-4044-865e-82b968e72537\scratchpad'];
 
-%% load, following analysis_main
+%% load, following a_analysis_pvs
 % ECSSession inherits from mdfExtractLoader, which lives in the extractor tree, so
 % both roots have to be on the path. dirs_ecspath adds exactly the three ECSpress
 % roots and nothing above them -- other folders under the program root carry

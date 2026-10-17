@@ -1,6 +1,6 @@
 function setup_rois(roilist, twophoton_processed, pax_fwhm, primary_path, opt)
 %SETUP_ROIS  Trace the BV and PVS boundaries on the FWHM diameter extremes.
-%   Caller: analysis_main, analysis_main_grabne, analysis_main_piv
+%   Caller: a_analysis_pvs, a_analysis_tissue, a_analysis_piv
 %   A dilated or constricted boundary only exists at one frame each: where the
 %   FWHM lumen trace peaks and where it bottoms. Each ROI is drawn on a short
 %   window around its own frame rather than by scrolling the whole recording.
@@ -33,7 +33,7 @@ need = {'channel_lumen', 'channel_pvs'};
 gone = need(~isfield(pax_fwhm.param, need));
 if ~isempty(gone)
     error('setup_rois:channelMap', ...
-        ['pax_fwhm.param is missing %s. Re-run the FWHM cells of analysis_main, ' ...
+        ['pax_fwhm.param is missing %s. Re-run the FWHM cells of a_analysis_pvs, ' ...
          'which set them from bvch / csfch.'], strjoin(gone, ' and '));
 end
 bvimg  = twophoton_processed.(pax_fwhm.param.channel_lumen);

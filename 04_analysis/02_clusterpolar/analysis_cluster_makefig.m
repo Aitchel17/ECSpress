@@ -1,6 +1,6 @@
 function analysis_cluster_makefig(polarcluster, roilist, pax_fwhm, t_axis, pixel2um, save_dir)
 %ANALYSIS_CLUSTER_MAKEFIG  The sorted kymograph with its three picks, and each state's median images with their contours.
-%   Caller: analysis_main, fig_review_session, review_session
+%   Caller: a_analysis_pvs, fig_review_session, b_reviewsession
 %
 % Inputs:
 %   polarcluster: analysis_clusterpolar

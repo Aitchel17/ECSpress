@@ -17,7 +17,7 @@ function [ax, h] = event_review(events, dtrace, smooth_diameter, sg_win_s, t_axi
 %      focus         cell of event labels to draw in POLARITY colour; every other
 %                    transition goes thin grey. {} = colour them all
 %      show_control  false hides the pol='none' stable windows entirely
-%      band_alpha    0.40, as analysis_main
+%      band_alpha    0.40, as a_analysis_pvs
 %      ax            target axes ([] = new figure)
 % OUT  ax, h (raw, dsg, bands, edges)
 %

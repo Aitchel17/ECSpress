@@ -1,6 +1,6 @@
 function [time_table, param] = bout_sleep(behav_state, state_codes, binwidth_s)
 %BOUT_SLEEP  Generate timetable of each bout including individual sleep state, rough category, and transition
-%   Caller: centralize_bout, analysis_main_piv, piv_integration_testbed, stateintegration_test
+%   Caller: centralize_bout, a_analysis_piv, piv_integration_testbed, stateintegration_test
 %
 % IN   behav_state  B x 1 double    state code per scored bin, sleep_score.mat's behavState
 %      state_codes  1x1 struct      state name -> code, sleep_score.mat's statecodes

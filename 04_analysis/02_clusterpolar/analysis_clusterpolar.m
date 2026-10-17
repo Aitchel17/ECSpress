@@ -1,6 +1,6 @@
 classdef analysis_clusterpolar < handle
 %ANALYSIS_CLUSTERPOLAR  Kymograph clusters, three diameter states, their contours and polar profiles.
-%   Caller: analysis_main, analysis_main_grabne, analysis_phantom, fig_review_session,
+%   Caller: a_analysis_pvs, a_analysis_tissue, analysis_phantom, fig_review_session,
 %           polarcluster_integration, centralize_strip.centralize_strippolar, ECSSession
 %
 %   pc = analysis_clusterpolar();

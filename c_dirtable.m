@@ -1,4 +1,4 @@
-%DIRTABLE_MAIN  The directory tables: each cohort's own sheet, then the joined dataset.
+%C_DIRTABLE  The directory tables: each cohort's own sheet, then the joined dataset.
 %   Reads the data tree and writes each cohort's workbook and MDF metadata cache under
 %   <secondary_root>\<cohort>, and the dataset workbook under <secondary_root>\<dataset>. A cohort in
 %   param.alone_cohort gets its own sheet and is never joined into a dataset.

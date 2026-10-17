@@ -1,4 +1,4 @@
-%REVIEW_SESSION  One session folder, whatever it holds : the FWHM and cluster figures, and the traces
+%B_REVIEWSESSION  One session folder, whatever it holds : the FWHM and cluster figures, and the traces
 %   stacked on one time axis over the sleep states or the puff x locomotion bouts.
 %   A FWHM or cluster figure whose data the folder lacks is skipped with one line; every trace
 %   panel is drawn, empty where there is nothing to draw. Comment a panel's block out to drop it.
@@ -191,7 +191,7 @@ board.link_x(1);
 %% ---------------------------------------------------------------- helpers
 function f = trace_window(name, t, y, y_label)
 %TRACE_WINDOW  One make_fig window holding one trace against time.
-%   Caller: review_session
+%   Caller: b_reviewsession
 % IN   name     1x1 str        window name
 %      t        N x 1 float s  times of the trace
 %      y        N x 1 float    the trace
@@ -208,7 +208,7 @@ end
 
 function f = state_window(bout_kind, sleep_score, awake_bout)
 %STATE_WINDOW  The bouts as a strip of their own : the sleep states in one row, or puff and locomotion / rest in two.
-%   Caller: review_session
+%   Caller: b_reviewsession
 % IN   bout_kind    1x1 str      "sleep" | "awake"
 %      sleep_score  1x1 struct   sleep_score.mat contents; read when bout_kind is "sleep"
 %      awake_bout   1x1 struct   bout_puffmove's time_table; read when bout_kind is "awake"
@@ -233,7 +233,7 @@ end
 
 function f = spectrum_window(spectrum)
 %SPECTRUM_WINDOW  The ECoG spectrogram in one make_fig window, the way main_analog draws it.
-%   Caller: review_session
+%   Caller: b_reviewsession
 % IN   spectrum  1x1 struct | []   analysis_analog ecog.ecogspectrum : T, F and baseline_S
 %                                   (sleep-scored) or log_norm_spectrum, frequency x time;
 %                                   [] = an empty window
@@ -257,7 +257,7 @@ end
 
 function t_end = data_end(ax)
 %DATA_END  The largest x any line, patch or surface on the axes reaches; 0 when it holds none.
-%   Caller: review_session
+%   Caller: b_reviewsession
 % IN   ax     1x1 axes
 % OUT  t_end  1x1 float s
     t_end = 0;

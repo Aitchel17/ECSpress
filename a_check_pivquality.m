@@ -1,5 +1,5 @@
-%ANALYSIS_MAIN_PIVJUDGE  One mouse's sessions judged for PIV by eye, a marker file per session
-%   Needs no FWHM. A short stretch of both stacks, preprocessed as analysis_main does, under the pax line dialog,
+%A_CHECK_PIVQUALITY  One mouse's sessions judged for PIV by eye, a marker file per session
+%   Needs no FWHM. A short stretch of both stacks, preprocessed as a_analysis_pvs does, under the pax line dialog,
 %   then y/N : pivquality_pass.mat or pivquality_fail.mat in primary_analysis. Sessions holding either are skipped.
 clc, clear
 addpath('g:/03_program/01_ecspress/09_dirstruct');    % where dirs_ecspath lives
@@ -33,7 +33,7 @@ for k = 1:numel(session_dirs)
     session.stackch1 = session.loadstack('ch1', page_range);
     session.stackch2 = session.loadstack('ch2', page_range);
     twophoton_processed = twophoton_preprocess(session);
-    % the pax dialog as a viewer only : the line is not saved, analysis_main checks it against its FWHM output
+    % the pax dialog as a viewer only : the line is not saved, a_analysis_pvs checks it against its FWHM output
     session.roilist.addormodifyroi(twophoton_processed.(param.channel_parenchyma), 'pax', 'line', ...
         twophoton_processed.(param.channel_lumen));
     verdict_reply = input(sprintf('[%d/%d] %s : pass to PIV? [y/N]: ', k, numel(session_dirs), session_dirs(k)), 's');

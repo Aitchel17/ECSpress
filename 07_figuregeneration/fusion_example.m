@@ -4,7 +4,7 @@
 %   on it, every panel is on before a column can be linked, and the link is made
 %   before the file is written or the bottom panel keeps its ticks.
 %
-%   Run review_session first. That is what leaves pax_fig, figStruct and sleepscore
+%   Run b_reviewsession first. That is what leaves pax_fig, figStruct and sleepscore
 %   in the workspace, and this reads them straight out of it.
 
 %% 1. the panels, each in its own window, exactly as the makefigs leave them
