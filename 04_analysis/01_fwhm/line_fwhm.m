@@ -16,7 +16,12 @@ classdef line_fwhm < handle
         param = struct('input_size',[-1,-1,-1],...
             'line_info',[-1,-1;-1,-1;-1,-999],...
             'idxclean_noisethr', 5, ...
-            'idxclean_refmedian', 7); % 3x2 double, {x1,y1; x2,y2; linewidth,-999}
+            'idxclean_refmedian', 31, ... % samples; an excursion shorter than half this is catchable, 7 hid a 3 s one. see CLAUDE_LOG.md
+            'pvsedge_prominence', 0.05, ... % float 0-1  least prominence of a band peak or a shade dip, and the least drop that counts as shade, on the rescaled kymograph
+            'pvsedge_sgord', 2, ...         % count      Savitzky-Golay order along a column profile
+            'pvsedge_sgframe', 9, ...       % count rows Savitzky-Golay frame (odd); the band-peak search skips a column shorter than this
+            'pvsedge_mindiprows', 5, ...    % count rows least rows outward of the band peak for a dip search
+            'pvsedge_medfiltcols', 11);     % count cols median across columns, bridges flicker up to half this
     end
 
 
@@ -101,7 +106,9 @@ classdef line_fwhm < handle
         function pvsanalysis(obj)
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
-            [tmp.idx, tmp.kgph_mask] = get_pvsoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperBVboundary, obj.idx.lowerBVboundary);
+            [tmp.idx, tmp.kgph_mask] = get_pvsoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperBVboundary, obj.idx.lowerBVboundary, ...
+                obj.param.pvsedge_prominence, obj.param.pvsedge_sgord, obj.param.pvsedge_sgframe, ...
+                obj.param.pvsedge_mindiprows, obj.param.pvsedge_medfiltcols);
             obj.idx = obj.mergestruct(obj.idx, tmp.idx);
             obj.mask = obj.mergestruct(obj.mask, tmp.kgph_mask);
         end
@@ -131,18 +138,20 @@ classdef line_fwhm < handle
         % caller that wants the sorted view can build it and has to say so.
             obj.thickness = fwhm_thickness(obj.idx);
 
-            % which side is thicker, as its own recorded fact
+            % which side is thicker, as its own recorded fact. NaN columns (an edge
+            % the finder left empty) are skipped, not spread
             difference_pvs = obj.thickness.uppvs - obj.thickness.downpvs;
-            difference_pvs = medfilt1(difference_pvs,11); % smoothing the pvs thickness difference
+            difference_pvs = medfilt1(difference_pvs, 11, [], 2, 'omitnan', 'truncate'); % smoothing the pvs thickness difference
             % area under the curve, so one frame cannot decide it
-            obj.up_thicker = trapz(difference_pvs) > 0;
+            obj.up_thicker = trapz(difference_pvs(~isnan(difference_pvs))) > 0;
 
             %%
-            obj.thickness.median_totalpvs = median(obj.thickness.totalpvs);
-            obj.thickness.median_uppvs = median(obj.thickness.uppvs);
-            obj.thickness.median_downpvs = median(obj.thickness.downpvs);
+            % omitnan, or one NaN column turns the median and every *changes series NaN
+            obj.thickness.median_totalpvs = median(obj.thickness.totalpvs, 'omitnan');
+            obj.thickness.median_uppvs = median(obj.thickness.uppvs, 'omitnan');
+            obj.thickness.median_downpvs = median(obj.thickness.downpvs, 'omitnan');
             %%
-            obj.thickness.median_bv = median(obj.thickness.bv);
+            obj.thickness.median_bv = median(obj.thickness.bv, 'omitnan');
             obj.thickness.bvchanges = obj.thickness.bv - obj.thickness.median_bv;
             obj.thickness.pvschanges_total = obj.thickness.totalpvs - obj.thickness.median_totalpvs;
             obj.thickness.pvschanges_up = obj.thickness.uppvs - obj.thickness.median_uppvs;
@@ -159,11 +168,13 @@ classdef line_fwhm < handle
             % 3000 frames, which at the 3 Hz these stacks are resampled to is 1000 s --
             % a near-global baseline, not the tens of seconds an earlier comment claimed.
             % 'truncate' also means the first and last 500 s use a shorter, asymmetric
-            % window, so displacement.* is not one convention across the record
-            obj.displacement.slow_uppvs = medfilt1(obj.idx.clean_pvsupedge_idx, 3000, 'truncate');
-            obj.displacement.slow_upbv = medfilt1(obj.idx.clean_upperBVboundary, 3000, 'truncate');
-            obj.displacement.slow_downbv = medfilt1(obj.idx.clean_lowerBVboundary, 3000, 'truncate');
-            obj.displacement.slow_downpvs = medfilt1(obj.idx.clean_pvsdownedge_idx, 3000, 'truncate');
+            % window, so displacement.* is not one convention across the record.
+            % omitnan, or one NaN edge column blanks the slow component 1500 frames
+            % either side; displacement keeps NaN exactly where the edge is NaN
+            obj.displacement.slow_uppvs = medfilt1(obj.idx.clean_pvsupedge_idx, 3000, [], 2, 'omitnan', 'truncate');
+            obj.displacement.slow_upbv = medfilt1(obj.idx.clean_upperBVboundary, 3000, [], 2, 'omitnan', 'truncate');
+            obj.displacement.slow_downbv = medfilt1(obj.idx.clean_lowerBVboundary, 3000, [], 2, 'omitnan', 'truncate');
+            obj.displacement.slow_downpvs = medfilt1(obj.idx.clean_pvsdownedge_idx, 3000, [], 2, 'omitnan', 'truncate');
 
 
             % 3. Calculate changes (High-pass). Sign convention: + is OUTWARD, so
