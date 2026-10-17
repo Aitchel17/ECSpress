@@ -1,4 +1,4 @@
-function [idx, kymographmask] = get_pvsoutter(kymograph, bv_upidx, bv_downidx, min_prominence, sg_ord, sg_frame, min_diprows, medfilt_cols)
+function [idx, kymographmask, crop_rows] = get_pvsoutter(kymograph, bv_upidx, bv_downidx, min_prominence, sg_ord, sg_frame, min_diprows, medfilt_cols)
 % calculate_csf_boundaries - calculates upper and lower CSF boundaries based on given inputs.
 %
 % Inputs:
@@ -17,6 +17,9 @@ function [idx, kymographmask] = get_pvsoutter(kymograph, bv_upidx, bv_downidx, m
 %   idx.up_csf_boundary    - upper CSF boundary indices
 %   idx.down_csf_boundary  - lower CSF boundary indices
 %   kymographmask.cb_thresholded     - updated binary mask with CSF boundaries
+%   crop_rows       1x2 row      the manual crop [upper lower] the dialog ended on; rows at or above
+%                                upper and at or below lower are excluded. Where a column has no
+%                                prominent dip its shade is the deepest point, usually the crop row
 %
 % A column with no band peak outward of the vessel midline, or no shade beyond the peak, gets
 % NaN edge boundaries; a brighter region beyond the band no longer captures the anchor, and the
@@ -70,6 +73,7 @@ while true
         break
     end
 end
+crop_rows = [upcropval, downcropval];
 
 % 2. Rescale from cropped region
 cropkymograph = cropkymograph - min(cropkymograph, [], 1);
@@ -106,7 +110,9 @@ for side_k = 1:2
     edge_kgph(row_idx_grid > maxidx) = NaN;
     edge_kgph(:, isnan(maxidx)) = NaN;   % no band : the whole chain leaves the column NaN
     % 4.3.2 Find first shadow region or minimum dip region
-    [edge_confined, minidx] = find_banddip(edge_kgph, true, min_prominence, sg_ord, sg_frame, min_diprows, medfilt_cols);
+    [edge_confined, minidx, is_nodip] = find_banddip(edge_kgph, true, min_prominence, sg_ord, sg_frame, min_diprows, medfilt_cols);
+    fprintf('   side %d : no prominent dip, shade at the deepest point in %d of %d columns\n', ...
+        side_k, nnz(is_nodip), numel(is_nodip));
     % 4.3.3 Find half max from max to first shadow region
     [edge_thresholded, side_edgerawidx] = halfmax_confinedkymograph(edge_confined, true);
     side_edgeidx = clean_thresholdedkymograph(edge_thresholded, true, ax);
@@ -238,7 +244,7 @@ end
 maxidx = round(medfilt1(maxidx, medfilt_cols, [], 2, 'omitnan', 'truncate'));   % bridges flicker up to half the window
 end
 
-function [crop_mask,minidx] = find_banddip(maxcropkymograph, upmod, min_prominence, sg_ord, sg_frame, min_diprows, medfilt_cols)
+function [crop_mask,minidx,is_nodip] = find_banddip(maxcropkymograph, upmod, min_prominence, sg_ord, sg_frame, min_diprows, medfilt_cols)
 %FIND_BANDDIP  Per column: the first prominent dip outward of the band peak with nothing clearly
 %   darker beyond it, and the kymograph cropped to [peak, dip]. A dip the profile later undercuts
 %   by min_prominence is a wiggle inside the band, not the shade; judging the dip against the
@@ -256,10 +262,12 @@ function [crop_mask,minidx] = find_banddip(maxcropkymograph, upmod, min_prominen
 %      medfilt_cols      1x1 count    median window across columns
 % OUT  crop_mask         H x W float  the kymograph, NaN beyond the dip; all NaN where minidx is NaN
 %      minidx            1 x W float  dip row per column; NaN where the column holds nothing or no shade
+%      is_nodip          1 x W bool   no prominent dip, the deepest point stood in
 sz = size(maxcropkymograph);
 [row_idx_grid, ~] = ndgrid(1:sz(1), 1:sz(2)); % 2D row index grid
 minidx = nan(1, sz(2));
 is_noshade = false(1, sz(2));   % 1 x W bool  profile never falls min_prominence below the band peak
+is_nodip = false(1, sz(2));     % 1 x W bool  it falls, but through no prominent dip
 for c = 1:sz(2)
     valid_rows = find(~isnan(maxcropkymograph(:, c)));
     if numel(valid_rows) < min_diprows
@@ -298,6 +306,7 @@ for c = 1:sz(2)
     end
     if isempty(dip_loc)
         [~, dip_loc] = min(profile);      % plain decay : the deepest point is the shade
+        is_nodip(c) = true;
     end
     if dip_loc < 2
         continue

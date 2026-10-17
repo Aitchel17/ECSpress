@@ -21,7 +21,8 @@ classdef line_fwhm < handle
             'pvsedge_sgord', 2, ...         % count      Savitzky-Golay order along a column profile
             'pvsedge_sgframe', 9, ...       % count rows Savitzky-Golay frame (odd); the band-peak search skips a column shorter than this
             'pvsedge_mindiprows', 5, ...    % count rows least rows outward of the band peak for a dip search
-            'pvsedge_medfiltcols', 11);     % count cols median across columns, bridges flicker up to half this
+            'pvsedge_medfiltcols', 11, ...  % count cols median across columns, bridges flicker up to half this
+            'pvsedge_croprows', [NaN NaN]); % 1x2 row   manual crop of the PVS kymograph [upper lower], set by pvsanalysis' dialog
     end
 
 
@@ -106,7 +107,7 @@ classdef line_fwhm < handle
         function pvsanalysis(obj)
             %METHOD1 Summary of this method goes here
             %   Detailed explanation goes here
-            [tmp.idx, tmp.kgph_mask] = get_pvsoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperBVboundary, obj.idx.lowerBVboundary, ...
+            [tmp.idx, tmp.kgph_mask, obj.param.pvsedge_croprows] = get_pvsoutter(obj.kymograph.kgph_pvs_processed, obj.idx.upperBVboundary, obj.idx.lowerBVboundary, ...
                 obj.param.pvsedge_prominence, obj.param.pvsedge_sgord, obj.param.pvsedge_sgframe, ...
                 obj.param.pvsedge_mindiprows, obj.param.pvsedge_medfiltcols);
             obj.idx = obj.mergestruct(obj.idx, tmp.idx);
