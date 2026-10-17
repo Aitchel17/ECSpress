@@ -27,7 +27,7 @@ if size(merge, 2) ~= 4
 end
 % 0.2 Search half-width in frames
 fps     = 1 / mean(diff(t_axis));
-nsearch = max(1, round(search_s * fps));
+nsearch = round(search_s * fps);
 % 0.3 Output template
 pairs = struct('state',{},'pol',{},'bout',{},'start_f',{},'end_f',{}, ...
                'start_sec',{},'end_sec',{},'search_from',{},'search_to',{});
@@ -42,23 +42,26 @@ for m = 1:size(merge, 1)
     % 1.2 Bout tables of the earlier and the later state
     pre_bouts = state_idx.(pre_state);
     post_bouts = state_idx.(post_state);
-    for i = 1:size(pre_bouts, 1)
+    for bidx = 1:size(pre_bouts, 1)
         % 1.3 Find the later bout starting on the frame after this earlier bout ends
-        j = find(post_bouts(:,1) == pre_bouts(i,2) + 1, 1);
-        if isempty(j); continue; end
+        is_next = post_bouts(:,1) == pre_bouts(bidx,2) + 1;
+        next_loc = find(is_next, 1);
+        if isempty(next_loc)
+            continue
+        end
         % 1.4 The two bouts' ends, in frames
-        pre_first = pre_bouts(i,1);
-        pre_last = pre_bouts(i,2);
-        post_first = post_bouts(j,1);
-        post_last = post_bouts(j,2);
-        % 1.5 Search windows butted against the transition, nsearch frames at most, inside their own bout
+        pre_first = pre_bouts(bidx,1);
+        pre_last = pre_bouts(bidx,2);
+        post_first = post_bouts(next_loc,1);
+        post_last = post_bouts(next_loc,2);
+        % 1.5 Search windows, nsearch frames at most, each inside its own bout
         search_pre_start = max(pre_first, pre_last - nsearch + 1);
         search_post_end = min(post_last, post_first + nsearch - 1);
         % 1.6 The pair, filled in the template's field order
         pair = struct();
         pair.state = transition_label;
         pair.pol = polarity;
-        pair.bout = i;
+        pair.bout = bidx;
         pair.start_f = pre_first;
         pair.end_f = post_last;
         pair.start_sec = t_axis(pre_first);
