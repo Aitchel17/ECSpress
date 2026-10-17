@@ -3,14 +3,9 @@ addpath(genpath('g:\03_program\01_ecspress\00_plotting'));
 addpath('g:/03_program/01_ecspress/09_dirstruct');    % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 clee = color_lee();
-% integrate_analysisresult sets these in the environment, which survives the clear
-% above; run this file on its own and the defaults below apply.
 %   this used to be pinned to 00_igkl while transition_fig drew merged_igkl_igkltdt,
 %   so the two figures were of different datasets. see CLAUDE_LOG.md
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 dirs = dirs_central();
 exp_path = fullfile(dirs.secondary_root, param.dataset);
 table_path = fullfile(exp_path, "state_summary.mat");

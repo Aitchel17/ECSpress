@@ -12,10 +12,7 @@ addpath('g:\03_program\01_ecspress\09_dirstruct');
 dirs_ecspath;
 clee = color_lee();
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 % Name and label side by side, matched by POSITION. The table stores an
 % identifier and an axis names the thing; a subset takes the same indices out of
 % both, which is what param.*_pick below is for

@@ -16,10 +16,7 @@ clee = color_lee(); sty.fontsize = 11; sty.view = [-38 26];
 
 
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 dirs = dirs_central();
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);
 

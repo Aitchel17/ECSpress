@@ -10,10 +10,7 @@ addpath('g:\03_program\01_ecspress\09_dirstruct');
 dirs_ecspath;
 clee = color_lee();
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 param.column_stat = "median";      % Which stored curve to draw (str), mode/centroid/median
 param.y_show = "totalpvs";         % Axis to draw on (str), "totalpvs" or "eps"
 param.fontsize = 11;

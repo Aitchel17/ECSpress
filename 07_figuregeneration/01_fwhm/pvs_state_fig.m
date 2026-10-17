@@ -25,10 +25,7 @@ dirs_ecspath;                                        % three roots, minus zz_not
 clee = color_lee();
 dirs = dirs_central();
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);
 
 param.depth_thr = 70;        % um     L1 / L2-3 boundary, the stratum every result uses

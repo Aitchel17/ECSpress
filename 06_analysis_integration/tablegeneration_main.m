@@ -4,32 +4,26 @@
 %   dataset.
 %
 %   It used to walk the dirtable, open one paxfwhm_state.mat per session folder and
-%   rebuild mtable_FWHMsleep.mat on the way. That is centralize_primary and
-%   centralize_paxfwhmstate now, which happen once and are incremental; this file no longer
+%   rebuild mtable_FWHMsleep.mat on the way. That is centralize_mat and
+%   bout_paxfwhm now, which happen once and are incremental; this file no longer
 %   touches the data tree, the sheet, or the mtable.
 %
 %   The FILTERS below are the analysis decision -- artery only, layer 1, bouts over
 %   30 s, four scored states, sleep recordings for the transitions. They stay in this
-%   file rather than moving up into integrate_analysisresult, and they are the reason
-%   nothing caches what the flattening produces: change one and every table below is
+%   file, and they are the reason nothing caches what the flattening produces: change one and every table below is
 %   a different table.
 %
-%   integrate_analysisresult exports the two environment variables and they survive
-%   the clear below. Run this file on its own and the defaults apply.
-%     caution  the OUTPUT lands in the dataset folder. Pointing this at another
-%              dataset writes a different pair of files
+%   caution  the OUTPUT lands in the dataset folder. Pointing param.dataset at another
+%            dataset writes a different pair of files
 clc, clear
 addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads and writes
 dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 
-% The two nests this file works on. centralize_paxfwhmstate carries five; band_decomposition,
+% The two nests this file works on. bout_paxfwhm carries five; band_decomposition,
 % powerdensity and peak_trough are not opened here and stay nested where they are.
 param.nest_names = ["state_summary", "transition"];
 
@@ -49,7 +43,7 @@ param.state_names = ["awake", "drowsy", "nrem", "rem"];
 central_path = fullfile(dirs.central, 'centralized_paxfwhm_state.mat');
 if ~isfile(central_path)
     error('tablegeneration:noCentral', ...
-        'run centralize_paxfwhmstate first; %s is missing', central_path);
+        'run bout_paxfwhm first; %s is missing', central_path);
 end
 loaded_central = load(central_path);
 central = loaded_central.central;

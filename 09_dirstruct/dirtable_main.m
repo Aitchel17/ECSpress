@@ -2,7 +2,7 @@
 %   Reads the data tree and writes each cohort's workbook and MDF metadata cache under
 %   <secondary_root>\<cohort>, and the dataset workbook under <secondary_root>\<dataset>. A cohort in
 %   param.alone_cohort gets its own sheet and is never joined into a dataset.
-%   The only place the dataset's membership is decided: centralize_primary and centralize_drift
+%   The only place the dataset's membership is decided: centralize_mat and centralize_drift
 %   read the sheet this writes and hold no cohort list of their own.
 clc
 clear

@@ -20,10 +20,7 @@ clc
 addpath('G:\03_program\01_ecspress\09_dirstruct');
 dirs_ecspath;
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 param.bin_deg  = 10;     % deg    angular block the 1-deg polar bins collapse into
 param.fontsize = 7;      % pt     one size over panels drawn at different figure sizes
 

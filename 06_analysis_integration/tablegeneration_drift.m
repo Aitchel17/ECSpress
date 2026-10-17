@@ -11,15 +11,12 @@
 %
 %   The first version of this file built its own bout table by hand with a local
 %   quiet-flank baseline. That is superseded: the series is now flattened by
-%   detrend in centralize_driftsession and goes through state_1d like a thickness.
+%   detrend in bout_drift and goes through state_1d like a thickness.
 clc, clear
 addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads and writes
 dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 
@@ -38,7 +35,7 @@ filt.require_fwhm = true;                                 % bool only recordings
 central_path = fullfile(dirs.central, 'centralized_drift_state.mat');
 if ~isfile(central_path)
     error('tablegeneration_drift:noCentral', ...
-        'run centralize_driftstate first; %s is missing', central_path);
+        'run bout_drift first; %s is missing', central_path);
 end
 loaded_central = load(central_path);
 central = loaded_central.central;

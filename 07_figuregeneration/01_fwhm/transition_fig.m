@@ -5,12 +5,7 @@ dirs_ecspath;                                        % three roots, minus zz_not
 clee = color_lee();
 % Which dataset to draw. tablegeneration_main writes transition.mat beside the
 % dirtable it was pointed at, so this must name the same folder.
-% integrate_analysisresult sets these in the environment, which survives the clear
-% above; run this file on its own and the defaults below apply.
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 dirs = dirs_central();
 exp_path = fullfile(dirs.secondary_root, param.dataset);
 table_path = fullfile(exp_path, "transition.mat");

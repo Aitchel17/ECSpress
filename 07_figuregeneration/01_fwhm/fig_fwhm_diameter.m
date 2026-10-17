@@ -12,10 +12,7 @@ addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 clee = color_lee();
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 dirs = dirs_central();
 dirs.save_dir = fullfile(dirs.secondary_root, param.dataset);
 

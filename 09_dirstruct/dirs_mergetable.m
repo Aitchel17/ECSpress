@@ -106,7 +106,7 @@ function info = dirs_mergetable(working_root, secondary_root, cohorts, dataset)
         end
     end
 
-    % What centralize_primary will find
+    % What centralize_mat will find
     has_fwhm  = string(merged_table.Primary_paxFWHM) == "paxfwhm.mat";
     has_score = string(merged_table.Peripheral_SleepScore) == "sleep_score.mat";
     fprintf('\nmerged %d rows | paxfwhm %d | sleep_score %d | both %d\n', ...

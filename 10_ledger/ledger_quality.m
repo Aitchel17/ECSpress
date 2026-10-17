@@ -33,10 +33,7 @@ function record = ledger_quality(sessiondir, grade, note)
     end
 
     dirs = dirs_central();
-    dataset = string(getenv('ECSPRESS_DATASET'));
-    if dataset == ""
-        dataset = "merged";
-    end
+    dataset = "merged";   % str  the dataset whose register this reads and writes
     register_path = fullfile(dirs.secondary_root, dataset, "session_quality.csv");
     register = read_register(register_path);
 
@@ -75,7 +72,7 @@ function identity = session_identity(secondary_root, dataset, sessiondir)
     sheet_path = fullfile(secondary_root, dataset, dataset + "_dirtable.xlsx");
     if ~isfile(sheet_path)
         error('ledger_quality:noDirtable', ...
-            'no %s. run centralize_primary first', sheet_path);
+            'no %s. run centralize_mat first', sheet_path);
     end
     dirtable = readtable(sheet_path, 'Sheet', 'reference', 'TextType', 'string');
     wanted = strip(string(sessiondir), 'right', filesep);

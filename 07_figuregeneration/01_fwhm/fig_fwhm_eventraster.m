@@ -10,10 +10,7 @@ addpath('g:\03_program\01_ecspress\09_dirstruct');
 dirs_ecspath;
 clee = color_lee();
 
-param.dataset = getenv('ECSPRESS_DATASET');
-if isempty(param.dataset)
-    param.dataset = 'merged';
-end
+param.dataset = 'merged';   % char  the dataset whose tables this reads
 param.fontsize = 11;
 % name and label side by side, matched by position : the table stores an identifier, an axis names the thing
 param.state       = ["an_trans",      "na_trans",      "nr_trans",    "ra_trans",     "uarousal"];
