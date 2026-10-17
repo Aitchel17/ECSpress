@@ -102,7 +102,13 @@ classdef make_fig < handle
             p.LineWidth = linewidth;
             xlim(obj.ax,[0 max(obj.loc.x)]);
             if isempty(obj.loc.y)
-                ylim(obj.ax,[min(line_data*obj.resolution) max(line_data*obj.resolution)]);
+                % an all-NaN or constant series leaves the limits to MATLAB; min/max
+                % already skip scattered NaN, so this only guards the degenerate cases
+                y_low = min(line_data*obj.resolution);
+                y_high = max(line_data*obj.resolution);
+                if isfinite(y_low) && isfinite(y_high) && y_high > y_low
+                    ylim(obj.ax,[y_low y_high]);
+                end
             else
                 ylim(obj.ax,[0 max(obj.loc.y)]);
             end

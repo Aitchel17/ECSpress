@@ -35,8 +35,10 @@ function idx_dataset = clean_idxoutlier(idx_dataset, overwrite, medfilt_size, no
             disp(idx_name{:})
             idx_data = idx_dataset.(idx_name{:});
     
-            % Median filtering for reference
-            ref_median = medfilt1(idx_data,medfilt_size);
+            % Median filtering for reference. omitnan, or a NaN column (an edge the
+            % finder left empty) blanks the reference beside it and detection turns
+            % off exactly where the boundary is least trustworthy
+            ref_median = medfilt1(idx_data, medfilt_size, [], 2, 'omitnan', 'truncate');
             diff_data = abs(idx_data - ref_median);
             above_noise = diff_data > noise_thr;
     
