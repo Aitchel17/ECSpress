@@ -82,10 +82,10 @@ classdef ECSSession < mdfExtractLoader
             duration_sec = (valid_raw_frames * fduration_sec);
             obj.img_param.imgendtime = obj.img_param.imgstarttime + duration_sec;
 
-            % T-axis
-            % Time points corresponding to the CENTER of each group? Or Start?
-            % Usually linspace from start to end.
-            obj.img_param.taxis = linspace(obj.img_param.imgstarttime, obj.img_param.imgendtime, num_stack_frames);
+            % T-axis : one stack frame per groupz raw frames, from the first frame's time.
+            % A linspace to imgendtime, the END of the last frame, ran long by one period
+            stack_period_sec = fduration_sec * groupz;
+            obj.img_param.taxis = obj.img_param.imgstarttime + (0:num_stack_frames - 1) * stack_period_sec;
         end
 
 

@@ -32,9 +32,10 @@ downsampled_2p.ch2 = medfilt3(preprocessed_ch2,[1 1 downsampled_2p.medianframes]
 if isprop(session_instance, 'img_param')
     downsampled_2p.pixel2um = session_instance.img_param.pixel2um;
     downsampled_2p.fps = outfps_ch2;
-    % Recalculate time axis matching the new frame count
+    % Time axis : one period per frame from the first frame's time. A linspace to imgendtime,
+    % the END of the last frame, spread n - 1 gaps over n periods and ran long
     n_frames = size(downsampled_2p.ch1, 3);
-    downsampled_2p.t_axis = linspace(session_instance.img_param.imgstarttime, session_instance.img_param.imgendtime, n_frames);
+    downsampled_2p.t_axis = session_instance.img_param.imgstarttime + (0:n_frames - 1) / outfps_ch2;
 end
 
 end
