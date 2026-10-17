@@ -22,7 +22,7 @@ key_value = util_sessionkey(confirmed_dirtable);
 fprintf('dirtable %s\n   %d rows, %d point at a folder\n', ...
     dirtable_path, height(dir_table), sum(alive));
 
-%% what the last run read, if its schema still holds
+% 2. load centralized_drift table if exist
 out_path = fullfile(central_dir, "centralized_drift.mat");
 loaded_centraltable = table();
 if isfile(out_path) && ~rebuild
@@ -34,18 +34,19 @@ if isfile(out_path) && ~rebuild
     end
     clear loaded
 end
+% 3. get session key from loaded centralized table
 key_previous = strings(0, 1);
 if ~isempty(loaded_centraltable)
     key_previous = util_sessionkey(loaded_centraltable);
 end
 
-% 2. struct array to contain rows
+% 4. fill structarray
 scan_strarray =struct('confirmed_dirtableidx', {}, 'data', {}, 'source_bytes', {}, 'source_modified', {}, 'reused', {});
 for dirtable_idx = 1:height(confirmed_dirtable)
     session_dir = string(confirmed_dirtable.Directory(dirtable_idx));
     hit = find(key_previous == key_value(dirtable_idx), 1);
     stay_row = loaded_centraltable(hit, :);
-    % 2.1 find the motion file; globbed, since the stem is the MDF file's name, not the session's
+    % 4.1 find the motion file; globbed, since the stem is the MDF file's name, not the session's
     found = dir(fullfile(session_dir, '*_motion.txt'));
     if isempty(found)
         continue
@@ -55,11 +56,11 @@ for dirtable_idx = 1:height(confirmed_dirtable)
     end
     source_info = found(1);
     source_path = fullfile(source_info.folder, source_info.name);
-    % 2.2 compare its size and modified time with the loaded row
+    % 4.2 compare its size and modified time with the loaded row
     is_reusable = ~isempty(stay_row) && stay_row.source_bytes == source_info.bytes && stay_row.source_modified == source_info.datenum;
     row = struct('confirmed_dirtableidx', dirtable_idx, 'data', [], 'source_bytes', source_info.bytes, ...
         'source_modified', source_info.datenum, 'reused', is_reusable);
-    % 2.3 reuse the loaded data, or read the file again
+    % 4.3 reuse the loaded data, or read the file again
     if is_reusable
         row.data = stay_row.data{1};
     else
@@ -85,7 +86,6 @@ end
 
 %% out
 existingdata_idx = [scan_strarray.confirmed_dirtableidx];
-reused = [scan_strarray.reused];
 central = confirmed_dirtable(existingdata_idx, :);
 central.data = {scan_strarray.data}';
 central.source_bytes = [scan_strarray.source_bytes]';       % the stamps bout_drift rebuilds its rows against
@@ -111,6 +111,8 @@ end
 
 save(out_path, 'central', 'schema_version', '-v7.3');
 source_info = dir(out_path);
+reused = [scan_strarray.reused];
+
 fprintf('\n%d rows: %d read, %d reused\n', height(central), nnz(~reused), nnz(reused));
 fprintf('%.1f MB -> %s\n', source_info.bytes/1e6, out_path);
 info = struct('n_rows', height(central), 'n_read', nnz(~reused), 'n_reused', nnz(reused), 'out_path', out_path);
@@ -122,7 +124,7 @@ function summary = get_driftsummary(source_path)
 %   Caller: centralize_drift
 %   Scalars are taken on magnitudes, so a sign flip in the file moves none of them.
 %   OUT  summary  1x1 struct   series as columns, then the scalars
-    [disp_row, disp_col, regerror, drift_fps] = io_readmotion(source_path);
+    [disp_row, disp_col, regerror, drift_fps] = io_readmotion(source_path); % sign inverted in here (correction -> actual movement)
     summary = struct( ...
         'disp_row',         disp_row, ...      % N x 1 double  px
         'disp_col',         disp_col, ...      % N x 1 double  px
