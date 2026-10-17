@@ -2,7 +2,8 @@ function pairs = event_merge_bouts(state_idx, merge, t_axis, search_s)
 %EVENT_MERGE_BOUTS  Pair adjacent state bouts and build their two search windows.
 %   Caller: analysis_event.arousaltransition
 %   Structural step: reads the bout tables only, never the diameter trace.
-%   The transition frame is search_from(2) == search_to(1).
+%   Bout tables are half-open, so the later bout starts one frame after the earlier
+%   one ends: search_to(1) == search_from(2) + 1.
 %
 % IN   state_idx  struct of [nBout x 2] frame-index bout tables, timetable2frame per table
 %      merge      Nx4 cell {earlierState, laterState, label, polarity}
@@ -42,8 +43,8 @@ for m = 1:size(merge, 1)
     pre_bouts = state_idx.(pre_state);
     post_bouts = state_idx.(post_state);
     for i = 1:size(pre_bouts, 1)
-        % 1.3 Find the later bout starting exactly where this earlier bout ends
-        j = find(post_bouts(:,1) == pre_bouts(i,2), 1);
+        % 1.3 Find the later bout starting on the frame after this earlier bout ends
+        j = find(post_bouts(:,1) == pre_bouts(i,2) + 1, 1);
         if isempty(j); continue; end
         % 1.4 The two bouts' ends, in frames
         pre_first = pre_bouts(i,1);

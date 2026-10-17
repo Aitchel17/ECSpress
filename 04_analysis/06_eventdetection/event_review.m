@@ -2,8 +2,8 @@ function [ax, h] = event_review(events, dtrace, smooth_diameter, sg_win_s, t_axi
 %EVENT_REVIEW  Review figure for event_merge_bouts -> event_pick_excursions output.
 %   The gate before PIV: a mis-picked endpoint shows up here.
 %   Raw trace plus dsg, the trace the picking saw and the markers sit on. Bands are
-%   the raw 5-category scoring in SECONDS; dashed lines are the merged bout edges
-%   detection cut on, in FRAMES.
+%   the raw 5-category scoring in SECONDS; dashed lines are the transition frames the
+%   pairing cut on, read off the rows: the first frame of each row's later window.
 %
 % IN   events           1 x N struct  event_pick_excursions output, controls included
 %      dtrace           1 x T float   raw caliber trace
@@ -14,8 +14,6 @@ function [ax, h] = event_review(events, dtrace, smooth_diameter, sg_win_s, t_axi
 %                    already in um. This is the figure layer, so the conversion
 %                    happens here -- same place analysis_pax_makefig does it
 %      sleep_score   raw struct for the bands ([] = none)
-%      state_idx     frame-index bout tables for the edge lines ([] = none)
-%      states        which state_idx fields form the merge partition
 %      focus         cell of event labels to draw in POLARITY colour; every other
 %                    transition goes thin grey. {} = colour them all
 %      show_control  false hides the pol='none' stable windows entirely
@@ -35,8 +33,6 @@ arguments
     t_axis  (1,:) double
     opt.pixel2um    (1,1) double = 1
     opt.sleep_score = []
-    opt.state_idx   = []
-    opt.states      cell = {'roughnrem', 'rem', 'roughawake'}
     opt.focus       cell = {}
     opt.show_control (1,1) logical = true
     opt.band_alpha  (1,1) double = 0.40
@@ -68,24 +64,18 @@ if ~isempty(opt.sleep_score)
     uistack(h.bands, 'bottom');
 end
 
-% 3. Merged bout edges
-% 3.1 Collect the edges of the merge partition states
+% 3. Transition frames
+% 3.1 A row searched on both sides of a cut has two different windows; a row searched inside one band has one
+search_from = reshape([events.search_from], 2, [])';
+search_to = reshape([events.search_to], 2, [])';
+is_cut = any(search_from ~= search_to, 2);
+% 3.2 The cut is the first frame of the later window; transitions out of one bout share it
+cut_frames = unique(search_to(is_cut, 1))';
+% 3.3 Dashed line per cut, frame indices -> seconds
 h.edges = gobjects(0);
-if ~isempty(opt.state_idx)
-    medge = [];
-    for s = 1:numel(opt.states)
-        if isfield(opt.state_idx, opt.states{s})
-            medge = [medge; opt.state_idx.(opt.states{s})]; %#ok<AGROW>
-        end
-    end
-    % 3.2 One bout's end is the next one's start, so unique() drops the duplicates
-    medge = unique(medge(:))';
-    medge = medge(medge >= 1 & medge <= nT);
-    % 3.3 Dashed line per edge, frame indices -> seconds
-    for x = medge
-        h.edges(end+1) = xline(ax, t_axis(x), '--', 'Color', [.35 .35 .35], ...
-            'LineWidth', 0.8, 'HandleVisibility', 'off');
-    end
+for x = cut_frames
+    h.edges(end+1) = xline(ax, t_axis(x), '--', 'Color', [.35 .35 .35], ...
+        'LineWidth', 0.8, 'HandleVisibility', 'off');
 end
 
 % 4. Event segments: red up = dilation, blue down = constriction, grey flat = none
@@ -143,6 +133,6 @@ if opt.show_control
 elseif any(isctl)
     parts = sprintf('%s   |   %d stable HIDDEN', parts, nnz(isctl));
 end
-title(ax, sprintf('%d of %d rows: %s   |   dashed = merged bout edges', ...
+title(ax, sprintf('%d of %d rows: %s   |   dashed = transition frames', ...
     n_drawn + n_grey, numel(events), parts));
 end
