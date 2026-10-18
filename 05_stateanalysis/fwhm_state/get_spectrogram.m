@@ -15,7 +15,7 @@ normS5 = (S5-min(S5,[],'all'))./(max(S5,[],'all')-min(S5,[],'all'));
 % output
 spectrogram.log_norm_spectrum = log(normS5)';
 spectrogram.F = F5;
-spectrogram.S = S5;
+spectrogram.S = S5';   % a row, like F and log_norm_spectrum
 end
 
 

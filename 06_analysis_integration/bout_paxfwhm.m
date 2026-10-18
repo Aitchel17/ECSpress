@@ -32,7 +32,8 @@ content_names = [ ...
 %      fs is taken from t_axis, not from pax_fwhm.param.fs; param carries the psd setting;
 %      input_stamp is split into input_source_modified and input_bout_computed; a transition window
 %      cut by the record's first or last frame is dropped instead of clipped (bout_trim is gone)
-schema_version = 5;
+%   6  powerdensity's spectral_density is a row, like spectral_frequency and spectral_lognorm
+schema_version = 6;
 
 % 1. check the two centralized tables exist
 in_path = fullfile(central_dir, "centralized_" + ["paxfwhm", "bout"] + ".mat");
