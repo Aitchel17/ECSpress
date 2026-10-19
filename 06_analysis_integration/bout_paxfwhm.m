@@ -24,22 +24,14 @@ content_names = [ ...
     "displacement", "upbv"; ...
     "displacement", "downbv"];
 
-% Bump when what is taken off state_1d changes, or when any of the five analysis methods
-% changes what it produces. The inputs are untouched by such a change, so no stamp can see it.
-%   2  the four boundary rows are carried alongside the results
-%   3  the bout tables are centralized_bout's and are no longer copied in
-%   4  state windows are half-open, and only the transition windows lose the end margin
-%   5  band_decomposition and peak_trough are per bout (a NaN bout is dropped, a band
-%      needs two periods of its low edge in the bout); powerdensity drops NaN bouts;
-%      eventlist and event, which nothing on this path fills, are no longer carried;
-%      fs is taken from t_axis, not from pax_fwhm.param.fs; param carries the psd setting;
-%      input_stamp is split into input_source_modified and input_bout_computed; a transition window
-%      cut by the record's first or last frame is dropped instead of clipped (bout_trim is gone)
-%   6  powerdensity's spectral_density is a row, like spectral_frequency and spectral_lognorm;
-%      the file holds central (one row per session, t_axis state_idx param idx as cell columns,
-%      input_source_modified renamed input_paxfwhm_source_modified) and the five nests as long
-%      tables beside it, one variable each; there is no data column
-schema_version = 6;
+% Bump when a saved file stops matching what this code writes; no input stamp can see that.
+%   2  boundary rows carried
+%   3  bout tables read from centralized_bout, not copied in
+%   4  half-open state windows
+%   5  results per bout, NaN bouts dropped, stamps split, edge transition windows dropped
+%   6  spectral_density is a row
+%   7  long tables beside central, no data column
+schema_version = 7;
 
 % 1. check the two centralized tables exist
 in_path = fullfile(central_dir, "centralized_" + ["paxfwhm", "bout"] + ".mat");

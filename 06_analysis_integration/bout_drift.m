@@ -9,16 +9,11 @@ function info = bout_drift(central_dir, rebuild)
 %      rebuild      1 x 1 bool   true recomputes every session
 % OUT  info         1 x 1 struct  n_rows, n_computed, n_reused, out_path
 
-% Bump when what is taken off state_1d changes, or when either method changes what it
-% produces. The inputs are untouched by such a change, so no stamp can see it.
-%   2  the bout tables are centralized_bout's and are no longer copied in
-%   3  state windows are half-open, and only the transition windows lose the end margin;
-%      param carries state_1d's settings (butter, psd) beside fs; input_stamp is split into
-%      input_source_modified and input_bout_computed; a transition window cut by the record's first or
-%      last frame is dropped instead of clipped (bout_trim is gone); the file holds central (one
-%      row per session, t_axis state_idx param as cell columns, input_source_modified renamed
-%      input_drift_source_modified) and the two nests as long tables beside it, one variable each
-schema_version = 3;
+% Bump when a saved file stops matching what this code writes; no input stamp can see that.
+%   2  bout tables read from centralized_bout, not copied in
+%   3  half-open state windows, stamps split, edge transition windows dropped
+%   4  long tables beside central, no data column
+schema_version = 4;
 
 % 1. check the two centralized tables exist
 in_path = fullfile(central_dir, "centralized_" + ["drift", "bout"] + ".mat");
