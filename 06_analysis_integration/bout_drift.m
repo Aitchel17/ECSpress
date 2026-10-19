@@ -158,7 +158,7 @@ for nest_name = nest_names
             fragment_list{k} = loaded_nest.(nest_name)(loaded_rows, :);
         else
             key_row = central(k, [carried_columns, "session_key"]);
-            fragment_list{k} = explode_nest({scan(k).state_data.(nest_name)}, key_row);
+            fragment_list{k} = explode_nest(scan(k).state_data.(nest_name), key_row);
         end
     end
     is_filled = ~cellfun(@isempty, fragment_list);
