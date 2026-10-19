@@ -69,7 +69,7 @@ param.match_columns = false;
 fprintf('y space %s | partition %s | edge band %d frames | matching %d\n\n', ...
     param.y_space, param.state_partition, param.edge_frame, param.match_columns);
 
-central = load(fullfile(dirs.central, 'centralized_paxfwhm_state.mat')).central;
+central = load(fullfile(dirs.central, 'centralized_paxfwhm_state.mat'), 'central').central;
 
 %% The stratum
 depth_um = lead_number(central.Depth);
@@ -78,7 +78,7 @@ is_artery = contains(string(central.VesselID), "PA", 'IgnoreCase', true);
 same_setting = abs(resolution_um - param.pool_resolution) <= param.resolution_tol;
 in_stratum = is_artery & depth_um < param.depth_thr & same_setting;
 % a session the sleep scoring reached has an nrem window table; a whisker one does not
-is_scored = cellfun(@(row) isfield(row.state_idx, "nrem"), central.data);
+is_scored = cellfun(@(scored) isfield(scored, "nrem"), central.state_idx);
 row_list = find(in_stratum & is_scored);
 fprintf('PA, depth < %d um, %.3f um/px : %d sessions | with a scoring : %d\n', ...
     param.depth_thr, param.pool_resolution, sum(in_stratum), numel(row_list));
@@ -104,11 +104,10 @@ reached = zeros(2, n_grid);
 
 for a = 1:n_session
     k = row_list(a);
-    state_row = central.data{k};
     um_per_px = resolution_um(k);
     session.vessel(a) = string(central.MouseID(k)) + "_" + string(central.VesselID(k));
 
-    thickness = fwhm_thickness(state_row.idx);
+    thickness = fwhm_thickness(central.idx{k});
     bv_px = double(thickness.bv(:));
     bv_um = bv_px * um_per_px;
     eps_um = double(thickness.eps(:)) * um_per_px;
@@ -121,7 +120,7 @@ for a = 1:n_session
         y_value = eps_um;
     end
 
-    state_window = state_row.state_idx;
+    state_window = central.state_idx{k};
     n_frame = numel(bv_px);
     % frames within edge_frame of a bout's first frame; none when edge_frame is 0
     near_change = false(n_frame, 1);

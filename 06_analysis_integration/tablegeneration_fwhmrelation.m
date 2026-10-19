@@ -41,7 +41,7 @@ param.state_pooled = ["awake", "drowsy", "nrem", "rem"];   % states that get a p
 %% Read the centralized state analysis
 dirs = dirs_central();
 central_path = fullfile(dirs.central, 'centralized_paxfwhm_state.mat');
-loaded_central = load(central_path); central = loaded_central.central; clear loaded_central;
+central = load(central_path, 'central').central;
 % message
 fprintf('centralized state : %d sessions\n   %s\n', height(central), central_path);
 
@@ -75,7 +75,7 @@ fprintf('   type %s %d | not flagged %d | pixel <= %g um %d\n', filt.session_typ
 % px/px = um/um, so it needs no conversion
 gathered = cell(height(filtered), 1);
 for k = 1:height(filtered)
-    thickness = fwhm_thickness(filtered.data{k}.idx);
+    thickness = fwhm_thickness(filtered.idx{k});
     gathered{k} = sample_heatmap(thickness.bv, thickness.eps, param.y_series, ...
         filtered.NumericResolution(k), []);
 end
@@ -126,9 +126,9 @@ state_of = strings(0);
 state_session = zeros(0);
 event_dbv = cell(0);
 for k = 1:height(filtered)
-    scored = filtered.data{k}.state_idx;
-    n_sample_total = numel(filtered.data{k}.t_axis);
-    thickness = fwhm_thickness(filtered.data{k}.idx);
+    scored = filtered.state_idx{k};
+    n_sample_total = numel(filtered.t_axis{k});
+    thickness = fwhm_thickness(filtered.idx{k});
     for state_name = param.state_name
         if ~isfield(scored, state_name) || isempty(scored.(state_name))
             continue
@@ -143,7 +143,7 @@ for k = 1:height(filtered)
             onset_offset = 0;
             half_width = param.event_half_bout;
         end
-        event_dbv(end+1) = {event_average(filtered.data{k}.idx, scored.(state_name), ...
+        event_dbv(end+1) = {event_average(filtered.idx{k}, scored.(state_name), ...
             onset_offset, half_width, filtered.NumericResolution(k))}; %#ok<SAGROW>
         state_of(end+1) = state_name; %#ok<SAGROW>
         state_session(end+1) = k; %#ok<SAGROW>

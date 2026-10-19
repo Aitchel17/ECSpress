@@ -1,5 +1,5 @@
 %TABLEGENERATION_DRIFT  Centralized drift state analysis -> the two tables the drift
-%   figures read. Reads centralized_drift_state.mat, flattens its two nests, applies
+%   figures read. Reads its two long tables out of centralized_drift_state.mat, applies
 %   the same filters as tablegeneration_main plus one -- only recordings the FWHM
 %   pipeline has judged -- and writes drift_summary.mat and drift_transition.mat
 %   beside the dataset, with param and filt saved beside each table.
@@ -20,10 +20,8 @@ param.dataset = 'merged';   % char  the dataset whose tables this reads and writ
 dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 
+% the two long tables; every row carries bout_drift's carried_columns, session_key and DataType
 param.nest_names = ["state_summary", "transition"];
-% Cohort rides on filtered_table for the figures that compare cohorts; the folds drop it
-param.key_columns = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
-    "NumericDepth", "NumericResolution", "Cohort"];
 
 %% Filters : which rows the tables are about
 filt.depth_thr    = 70;                                   % um   L1 / L2-3 boundary
@@ -37,20 +35,17 @@ if ~isfile(central_path)
     error('tablegeneration_drift:noCentral', ...
         'run bout_drift first; %s is missing', central_path);
 end
-loaded_central = load(central_path);
-central = loaded_central.central;
-clear loaded_central
-fprintf('centralized drift state : %d sessions\n   %s\n', height(central), central_path);
+loaded_vars = cellstr(param.nest_names);
+subtable = load(central_path, loaded_vars{:});
+fprintf('centralized drift state : %s\n', central_path);
 
-fwhm_state = load(fullfile(dirs.central, 'centralized_paxfwhm_state.mat')).central;
+fwhm_state = load(fullfile(dirs.central, 'centralized_paxfwhm_state.mat'), 'central').central;
 key_fwhm = util_sessionkey(fwhm_state);
 clear fwhm_state
-subtable = flatten_state(central, param.key_columns, param.nest_names);
 for name_idx = 1:numel(param.nest_names)
     nest_name = param.nest_names(name_idx);
     fprintf('   %-14s %d rows\n', nest_name, height(subtable.(nest_name)));
 end
-clear central
 
 %% State summary analysis
 analysis_table = subtable.state_summary;

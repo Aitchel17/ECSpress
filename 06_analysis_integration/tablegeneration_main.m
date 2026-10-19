@@ -1,5 +1,5 @@
 %TABLEGENERATION_MAIN  Centralized state analysis -> the two tables the figures read.
-%   Reads centralized_paxfwhm_state.mat, flattens the two nests it works on, applies
+%   Reads the two long tables it works on out of centralized_paxfwhm_state.mat, applies
 %   the analysis filters, and writes state_summary.mat and transition.mat beside the
 %   dataset.
 %
@@ -23,39 +23,28 @@ param.dataset = 'merged';   % char  the dataset whose tables this reads and writ
 dirs = dirs_central();
 dirs.out = fullfile(dirs.secondary_root, param.dataset);
 
-% The two nests this file works on. bout_paxfwhm carries five; band_decomposition,
-% powerdensity and peak_trough are not opened here and stay nested where they are.
+% The two long tables this file works on. bout_paxfwhm writes five; band_decomposition,
+% powerdensity and peak_trough are not loaded here. Every row carries the session columns
+% bout_paxfwhm puts on it (carried_columns there), session_key and DataType.
 param.nest_names = ["state_summary", "transition"];
-
-% What a row of the flattened tables carries before DataType and the series' own
-% columns. The first four say which recording, VesselID and NumericDepth are filtered
-% on, NumericResolution is the pixel-to-micrometre scale. Cohort is not read here: it
-% rides on filtered_table for the figures that compare cohorts. The folds group on
-% tableAnalyzer's own keys and drop it; a mouse is in one cohort, so MouseID finds it.
-param.key_columns = ["MouseID", "Date", "SessionType", "SessionID", "VesselID", ...
-    "NumericDepth", "NumericResolution", "Cohort"];
 
 param.depth_thr  = 70;                                    % um  L1 / L2-3 boundary
 param.min_bout_s = 30;                                    % s   shorter is not a state
 param.state_names = ["awake", "drowsy", "nrem", "rem"];
 
-%% Flatten the centralized state analysis
+%% Load the long tables of the centralized state analysis
 central_path = fullfile(dirs.central, 'centralized_paxfwhm_state.mat');
 if ~isfile(central_path)
     error('tablegeneration:noCentral', ...
         'run bout_paxfwhm first; %s is missing', central_path);
 end
-loaded_central = load(central_path);
-central = loaded_central.central;
-clear loaded_central
-fprintf('centralized state : %d sessions\n   %s\n', height(central), central_path);
-
-subtable = flatten_state(central, param.key_columns, param.nest_names);
+loaded_vars = cellstr(param.nest_names);
+subtable = load(central_path, loaded_vars{:});
+fprintf('centralized state : %s\n', central_path);
 for name_idx = 1:numel(param.nest_names)
     nest_name = param.nest_names(name_idx);
     fprintf('   %-14s %d rows\n', nest_name, height(subtable.(nest_name)));
 end
-clear central
 
 %% State summary analysis
 analysis_table = subtable.state_summary;
