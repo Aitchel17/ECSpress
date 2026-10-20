@@ -1,6 +1,6 @@
 function area = heatmap_area(x_base, bv_column, eps_column, baseline_at)
 %HEATMAP_AREA  The annulus area along the mode curve, against its baseline column.
-%   Caller: tablegeneration_fwhmrelation.sample_heatmap
+%   Caller: heatmap_sample
 %   IN   x_base       1 x N double  column centres, on the anchored axis
 %        bv_column    1 x N double  lumen diameter at each column, um, absolute
 %        eps_column   1 x N double  outer diameter at each column, um, absolute

@@ -1,5 +1,6 @@
 function result = heatmap_postprocessing(bin_counts, x_edge, y_edge, x_origin, y_origin)
 %HEATMAP_POSTPROCESSING  The heatmap's main blob, put on the caller's axis.
+%   Caller: heatmap_sample
 %   histcounts2's three outputs as they come; everything returns in the unit the
 %   edges were given in. Bin in pixels, scale the edges -- see CLAUDE_LOG.md
 %

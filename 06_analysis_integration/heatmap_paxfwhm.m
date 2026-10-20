@@ -133,10 +133,7 @@ function trace = event_average(bv_px, interval, onset_offset, half_width, um_per
 end
 
 function frame_mask = interval_mask(interval, n_frame)
-%INTERVAL_MASK  state_idx's [start end] rows as one logical over frames.
-%   Frames, not samples, and it is the one place the difference shows: sleep
-%   scoring is written in t_axis indices. One frame yields one FWHM sample, so
-%   the mask this returns lines up with the series the caller reads.
+%INTERVAL_MASK  state_idx's [start end] rows as one logical over frames, one frame per FWHM sample.
 %   IN   interval    Nx2 double   frame indices, inclusive at both ends
 %        n_frame     1x1 double   how long the session is
 %   OUT  frame_mask  1xT logical

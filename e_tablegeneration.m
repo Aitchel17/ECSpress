@@ -3,7 +3,7 @@
 %   read from or written to the data tree; the tables land in the dataset folder.
 %   paxfwhm       centralized_paxfwhm_state -> state_summary, transition
 %   drift         centralized_drift_state, sessions in centralized_paxfwhm_state -> drift_summary, drift_transition
-%   fwhmrelation  centralized_paxfwhm_state -> fwhmrelation
+%   fwhmrelation  centralized_paxfwhm_heatmap -> fwhmrelation
 %   Every row filter is set here and nowhere else. The figure scripts only choose what to
 %   draw from these tables, and each function's quality gates stay in that function.
 clc, clear

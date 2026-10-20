@@ -16,7 +16,7 @@ reads; scripts under one letter are independent of each other.
 | a | one session folder | `a_analysis_piv` | `pivtransition.mat`, `pivpolar.mat`; needs `a_analysis_pvs` and `a_check_pivquality` |
 | b | one session's products | `b_reviewsession` | the review figures, and the grade through `ledger_quality` |
 | c | the whole data tree | `c_dirtable` | each cohort's directory workbook and the joined dataset sheet |
-| d | the sheet and every session's products | `d_centralize` | `centralized_<product>.mat`, then `centralized_bout.mat` and the series split by bout |
+| d | the sheet and every session's products | `d_centralize` | `centralized_<product>.mat`, then `centralized_bout.mat`, the series split by bout and `centralized_paxfwhm_heatmap.mat` |
 | e | the centralized state files | `06_analysis_integration/tablegeneration_main`, `_drift`, `_fwhmrelation` (scripts for now; they become functions) | the tables the figure scripts under `07_figuregeneration` read |
 
 Every script opens by adding `09_dirstruct` and calling `dirs_ecspath`, which puts this

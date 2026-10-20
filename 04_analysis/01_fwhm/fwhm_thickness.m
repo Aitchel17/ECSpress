@@ -1,7 +1,7 @@
 function thickness = fwhm_thickness(idx)
 % Recover thickness (bv, uppvs, downpvs, totalpvs, eps) from cleaned upper and lower bv, pvs boundary
 
-%   Caller: line_fwhm.getdiameter, tablegeneration_fwhmrelation 
+%   Caller: line_fwhm.getdiameter, heatmap_paxfwhm, pvs_state_fig
 
 %   IN   idx        1x1 struct   clean_upperBVboundary, clean_lowerBVboundary,
 %                                clean_pvsupedge_idx, clean_pvsdownedge_idx
