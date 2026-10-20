@@ -1,23 +1,46 @@
-% Make tables that heatmap figures read.
-%   Reads centralized_paxfwhm_state.mat, derives the two series from the four
-%   Holding session, vessel_pool and vesselbend
-%     caution  the OUTPUT lands in the dataset folder.
+function info = tablegeneration_fwhmrelation(central_dir, out_dir, vessel_prefix, depth_thr, session_type, drop_flagged, max_pxsize)
+%TABLEGENERATION_FWHMRELATION  Centralized FWHM state analysis -> the tables the heatmap figures read.
+%   Reads central out of centralized_paxfwhm_state.mat, derives the two series from the
+%   four boundary rows, and writes fwhmrelation.mat into out_dir: session, state,
+%   vessel_pool, state_pool and vesselbend, with param and filt inside. The copy it
+%   replaces is kept beside it as fwhmrelation_backup_<stamp>.mat.
+%   Caller: e_tablegeneration
+%
+%   Which sessions enter is the caller's: e_tablegeneration sets the five session
+%   filters. The quality gates -- which maps are drawn, which columns pool, which fits
+%   count -- are this method's and are set in the body.
+%
+% IN   central_dir    1 x 1 str     where the centralized_*.mat files live
+%      out_dir        1 x 1 str     the dataset folder fwhmrelation.mat is written to
+%      vessel_prefix  1 x 1 str     VesselID prefix kept ("PA" = arteries)
+%      depth_thr      1 x 1 um      kept shallower than this
+%      session_type   1 x 1 str     session type kept, "" = every type
+%      drop_flagged   1 x 1 bool    drop a folder whose name says notanalyzable
+%      max_pxsize     1 x 1 um/px   coarsest pixel size kept, Inf = every size
+% OUT  info           1 x 1 struct  n_session, out_path
 
-clc, clear
-addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
-dirs_ecspath;                                        % three roots, minus zz_notinuse
-
-param.dataset = 'merged';   % char  the dataset whose tables this reads and writes
+arguments
+    central_dir (1,1) string
+    out_dir (1,1) string
+    vessel_prefix (1,1) string
+    depth_thr (1,1) double
+    session_type (1,1) string
+    drop_flagged (1,1) logical
+    max_pxsize (1,1) double
+end
 
 %% Parameter
 
-filt.depth_thr = 70;           % Cortical depth kept, shallower than this (um)
-filt.session_type = "sleep";   % Session type kept (str), "" = every type
-filt.drop_flagged = true;      % Drop a folder whose name says notanalyzable (logical)
+% the caller's session filters, kept in filt so fwhmrelation.mat records them
+filt.vessel_prefix = vessel_prefix;
+filt.depth_thr = depth_thr;
+filt.session_type = session_type;
+filt.drop_flagged = drop_flagged;
+filt.max_pxsize = max_pxsize;
+% quality gates, this method's own
 filt.min_length = 150;         % Minimum data length (count), REM sets it, see FINDINGS.md
 filt.min_bvamp = 2;            % Minimum diameter span (um)
 filt.max_scatter = Inf;        % Maximum PVS scatter at fixed diameter (um), Inf = off
-filt.max_pxsize = 0.3;         % Coarsest pixel size kept (um/px), Inf = every size
 filt.pool_pxsize = [];         % Pixel size required for pooling (um/px), [] = every size
 filt.pxsize_tol = 0.01;        % Pixel size tolerance (um/px)
 filt.min_vessel = 10;          % Minimum vessels behind a diameter column (count)
@@ -39,16 +62,15 @@ param.state_pooled = ["awake", "drowsy", "nrem", "rem"];   % states that get a p
 % a _trans row overlaps its two neighbours. Why +event_half: see FINDINGS.md
 
 %% Read the centralized state analysis
-dirs = dirs_central();
-central_path = fullfile(dirs.central, 'centralized_paxfwhm_state.mat');
-central = load(central_path, 'central').central;
+paxfwhmstate_path = fullfile(central_dir, 'centralized_paxfwhm_state.mat');
+central = load(paxfwhmstate_path, 'central').central;
 % message
-fprintf('centralized state : %d sessions\n   %s\n', height(central), central_path);
+fprintf('centralized state : %d sessions\n   %s\n', height(central), paxfwhmstate_path);
 
 %% Which sessions the result is about
 cond.is_layer1 = central.NumericDepth < filt.depth_thr;
 cond.vessel_id = string(central.VesselID);
-cond.is_artery = contains(cond.vessel_id, "PA", 'IgnoreCase', true);
+cond.is_artery = startsWith(cond.vessel_id, filt.vessel_prefix, 'IgnoreCase', true);
 cond.has_resolution = isfinite(central.NumericResolution);
 % one session twice as coarse as the rest would set the pooling grid for everybody,
 % and putting it on a finer grid instead would be inventing resolution it never had
@@ -116,7 +138,6 @@ fprintf('   both sides reach %d columns : %d of %d\n', filt.min_column_session, 
     sum(session.bend_fitted), height(session));
 fprintf('\nmode-curve slope d(%s)/d(bv)\n', param.y_series);
 report_slopes('spans enough diameter', session.mode_slope(session.wide_enough));
-held_back = session.wide_enough & ~session.drawn;
 
 
 %% The same measurement again, one map per sleep state
@@ -135,7 +156,7 @@ for k = 1:height(filtered)
         end
         in_state = interval_mask(scored.(state_name), n_sample_total); 
         state_row{end+1} = sample_heatmap(thickness.bv, thickness.eps, ...
-            param.y_series, filtered.NumericResolution(k), in_state); %#ok<SAGROW>
+            param.y_series, filtered.NumericResolution(k), in_state); %#ok<AGROW>
         if endsWith(state_name, "_trans")
             onset_offset = param.event_half;
             half_width = param.event_half;
@@ -144,9 +165,9 @@ for k = 1:height(filtered)
             half_width = param.event_half_bout;
         end
         event_dbv(end+1) = {event_average(filtered.idx{k}, scored.(state_name), ...
-            onset_offset, half_width, filtered.NumericResolution(k))}; %#ok<SAGROW>
-        state_of(end+1) = state_name; %#ok<SAGROW>
-        state_session(end+1) = k; %#ok<SAGROW>
+            onset_offset, half_width, filtered.NumericResolution(k))}; %#ok<AGROW>
+        state_of(end+1) = state_name; %#ok<AGROW>
+        state_session(end+1) = k; %#ok<AGROW>
     end
 end
 state_row = vertcat(state_row{:});
@@ -388,20 +409,19 @@ end
 
 %% Write, one file per top-level field of result
 % save_content is not a description, it is the CONVENTION: five readers across the
-% tree open these files with load(path).save_content, tablegeneration_main writes
+% tree open these files with load(path).save_content, tablegeneration_paxfwhm writes
 % them the same way, and renaming it here would break every one of them silently --
 % load() of a missing field errors nowhere near the file that changed it.
 %   caution  this overwrites, and the copy on disk is the only record of which param built it
-dirs.out = fullfile(dirs.secondary_root, param.dataset);
-if ~isfolder(dirs.out)
-    mkdir(dirs.out)
+if ~isfolder(out_dir)
+    mkdir(out_dir)
 end
 backup_stamp = string(datetime('now', 'Format', 'yyyyMMdd_HHmm'));
 
 for field_name = string(fieldnames(result))'
-    out_path = fullfile(dirs.out, field_name + '.mat');
+    out_path = fullfile(out_dir, field_name + '.mat');
     if isfile(out_path)
-        backup_path = fullfile(dirs.out, field_name + '_backup_' + backup_stamp + '.mat');
+        backup_path = fullfile(out_dir, field_name + '_backup_' + backup_stamp + '.mat');
         copyfile(out_path, backup_path);
         fprintf('kept the previous %s as %s\n', field_name, backup_path);
     end
@@ -416,6 +436,9 @@ for field_name = string(fieldnames(result))'
             fprintf('   %-14s %s\n', inner_name, class(inner));
         end
     end
+end
+info = struct('n_session', height(filtered), ...
+    'out_path', fullfile(out_dir, string(fieldnames(result)) + ".mat"));
 end
 
 %% ---------------------------------------------------------------- helpers
