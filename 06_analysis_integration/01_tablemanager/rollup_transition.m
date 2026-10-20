@@ -1,6 +1,6 @@
 function analyzer = rollup_transition(analyzer)
 %ROLLUP_TRANSITION  The four folds bout -> session -> vessel -> mouse, for the numbers and the traces.
-%   Caller: tablegeneration_main, tablegeneration_drift
+%   Caller: tablegeneration_paxfwhm, tablegeneration_drift
 %   match_tracelength resamples the traces to one length before they are averaged.
 %
 %   IN   analyzer  1x1 tableAnalyzer   filtered and scaled

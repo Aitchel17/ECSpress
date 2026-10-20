@@ -17,7 +17,7 @@ reads; scripts under one letter are independent of each other.
 | b | one session's products | `b_reviewsession` | the review figures, and the grade through `ledger_quality` |
 | c | the whole data tree | `c_dirtable` | each cohort's directory workbook and the joined dataset sheet |
 | d | the sheet and every session's products | `d_centralize` | `centralized_<product>.mat`, then `centralized_bout.mat`, the series split by bout and `centralized_paxfwhm_heatmap.mat` |
-| e | the centralized state files | `06_analysis_integration/tablegeneration_main`, `_drift`, `_fwhmrelation` (scripts for now; they become functions) | the tables the figure scripts under `07_figuregeneration` read |
+| e | the centralized state files | `e_tablegeneration` | `state_summary.mat`, `transition.mat`, `drift_summary.mat`, `drift_transition.mat`, `fwhmrelation.mat` in the dataset folder, the tables the figure scripts under `07_figuregeneration` read |
 
 Every script opens by adding `09_dirstruct` and calling `dirs_ecspath`, which puts this
 tree and its two siblings on the path. `archive_session` is the scheduled copy to the
@@ -33,7 +33,7 @@ archive disk and is run by name from a Windows task.
 | `03_roi` | ROI drawing and storage |
 | `04_analysis` | the analysis classes: FWHM, polar cluster, Radon, PIV, event detection |
 | `05_stateanalysis` | bout tables from the scorings, and `state_1d` |
-| `06_analysis_integration` | the centralize and bout functions `d_centralize` calls, and the table helpers |
+| `06_analysis_integration` | the centralize and bout functions `d_centralize` calls, the tablegeneration functions `e_tablegeneration` calls, and the table helpers |
 | `07_figuregeneration` | the figure scripts |
 | `09_dirstruct` | the data-tree scan, the directory tables, the path and root resolution |
 | `10_ledger` | the session quality register |

@@ -170,7 +170,7 @@ draw_bars(axes(fig_frac), gap_frac, label_frac, param.fontsize, ...
 % BOTH states of a pair are kept and each is one line, so the comparison is within
 % vessel and the vessel-to-vessel spread -- the largest thing on this figure --
 % drops out. The test is signrank on those within-vessel differences.
-%   awake is the reference, as in tablegeneration_main. The awake bar is recomputed
+%   awake is the reference, as in tablegeneration_paxfwhm. The awake bar is recomputed
 %   for each pair, on that pair's own vessels
 param.paired_ref = "awake";
 % beta - beta_noflux and not the ratio: the difference is what appears in
@@ -251,7 +251,7 @@ draw_delta(axes(fig_dirsplit), rows(ismember(rows.vessel_key, vessel(has_both)),
 % The paired blocks draw both bars and leave the reader to take the difference by
 % eye. Here the difference IS the bar, so its height is the effect and its zero is
 % the null. Each vessel enters once, as beta(state) - beta(awake) on its own two
-% fits, which is the same subtraction tablegeneration_main does for state_summary.
+% fits, which is the same subtraction tablegeneration_paxfwhm does for state_summary.
 %   a vessel missing either half of a pair is absent from that bar only, so the two n differ
 fig_delta = figure('Color', 'w', 'Position', [290 160 520 520], 'Name', 'fig_fwhm_areagap_beta_delta');
 draw_delta(axes(fig_delta), rows, param.beta_column, param.paired_ref, ...

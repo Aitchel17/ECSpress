@@ -3,7 +3,7 @@ addpath(genpath('g:\03_program\01_ecspress\00_plotting'));
 addpath('g:/03_program/01_ecspress/09_dirstruct');    % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
 clee = color_lee();
-% Which dataset to draw. tablegeneration_main writes transition.mat beside the
+% Which dataset to draw. tablegeneration_paxfwhm writes transition.mat beside the
 % dirtable it was pointed at, so this must name the same folder.
 param.dataset = 'merged';   % char  the dataset whose tables this reads
 dirs = dirs_central();

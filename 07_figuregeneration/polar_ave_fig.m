@@ -32,7 +32,7 @@ load_struct = load(fullfile(dirs.save_dir, 'polar_ave.mat'));
 sessions = load_struct.polar_ave.sessions;
 
 param.session_type   = "sleep";   % "" = every type
-param.vessel_prefix  = "PA";      % arteries only, the same filter tablegeneration_main uses
+param.vessel_prefix  = "PA";      % arteries only, the same filter tablegeneration_paxfwhm uses
 param.maxgap_deg     = 120;       % drop a session whose contour has a longer empty arc
 param.min_anisotropy = 0.10;      % below this the dilation was radially even -- see below
 param.min_vessel_n   = 3;         % blank the mean at angles fewer vessels than this reach

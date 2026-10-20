@@ -1,7 +1,7 @@
 %FIG_FWHM_STATEDIAMETER  Lumen diameter by arousal state, one vessel per observation.
 %   Reads state_summary.mat and overlays the states twice: a kernel density and the
 %   cumulative fraction. Nothing is measured here: Q2Q3_mean is the middle half of
-%   each bout, already folded to one value per vessel by tablegeneration_main.
+%   each bout, already folded to one value per vessel by tablegeneration_paxfwhm.
 %
 %   Neither panel bins. About thirty vessels carry a state, so a histogram of them
 %   swings between one and ten per bin on Poisson noise alone and the eye reads the

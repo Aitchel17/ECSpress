@@ -1,6 +1,6 @@
 function analyzer = rollup_summary(analyzer)
 %ROLLUP_SUMMARY  Q2Q3 mean and percentiles per bout, then the four folds bout -> session -> vessel -> mouse.
-%   Caller: tablegeneration_main, tablegeneration_drift
+%   Caller: tablegeneration_paxfwhm, tablegeneration_drift
 %   Each fold takes the table the fold before it wrote.
 %
 %   IN   analyzer  1x1 tableAnalyzer   filtered and scaled
