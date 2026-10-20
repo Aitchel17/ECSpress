@@ -147,88 +147,10 @@ end
 
 
 %% Pool at the vessel level
-% Sessions cannot be averaged as they stand. Each carries a different number of
-% samples and reaches a different distance along the diameter axis, so a plain mean
-% would let the widest-ranging sessions set the wings and the narrowest set the
-% centre, and the vessel_pool band's thickness would be a picture of which session
-% reached where. Normalising each DIAMETER COLUMN to sum to one first turns every
-% column into the distribution of PVS thickness AT that diameter, and the average
-% of those is a quantity with a meaning: where the PVS sits at this much dilation,
-% averaged over vessels.
-%   vessel and not session : a vessel with several sessions would otherwise weigh
-%   several times a singly-imaged one
 in_pool = session(session.in_pool, :);
-pool_step = param.pool_step;
-if isempty(pool_step)
-    pool_step = max(in_pool.NumericResolution);
-end
-x_edge = 0;
-y_edge = 0;
-for k = 1:height(in_pool)
-    x_edge = max(x_edge, max(abs(in_pool.heat{k}.x_baseceneters)));
-    y_edge = max(y_edge, max(abs(in_pool.heat{k}.y_baseceneters)));
-end
-grid_x = -x_edge : pool_step : x_edge;
-grid_y = -y_edge : pool_step : y_edge;
-fprintf('\npooling on a %.3f um grid, %d x %d\n', pool_step, numel(grid_y), numel(grid_x));
-
-[vessel_name, ~, vessel_of] = unique(in_pool.vessel_key, 'stable');
-[vessel_map, vessel_count] = pool_by_vessel(in_pool.heat, vessel_of, ...
-    numel(vessel_name), grid_x, grid_y);
-
-vessel_reaches = sum(vessel_count > 0, 1);
-thin_column = vessel_reaches < filt.min_vessel;
-pool_map = mean(vessel_map, 3, 'omitnan');
-pool_map(:, thin_column) = NaN;
-fprintf('   %d vessels from %d mice | columns kept %d of %d\n', numel(vessel_name), ...
-    numel(unique(extractBefore(vessel_name, "_"))), sum(~thin_column), numel(grid_x));
-fprintf('   kept from %+.1f to %+.1f um, where at least %d vessels reach\n', ...
-    min(grid_x(~thin_column)), max(grid_x(~thin_column)), filt.min_vessel);
-
-% one number per column of the vessel_pool distribution, by the same statistic the
-% per-vessel fit below uses, so the two tables are reading the same thing
-pool_mode_curve = column_statistic(pool_map, grid_y, param.column_stat);
-
-% The bend, read off the vessel_pool map rather than off one session. fit_bothsides
-% truncates the longer side, which is what makes the two slopes one measurement
-% made twice; the full-reach pair is carried beside it because the two sides do
-% not reach equally far and the difference between the pairs is worth seeing.
-vessel_pool = struct();
-vessel_pool.grid_x = grid_x;
-vessel_pool.grid_y = grid_y;
-vessel_pool.map = pool_map;
-vessel_pool.mode_curve = pool_mode_curve;
-% the stage before the collapse: one map per vessel, on the same grid. vessel_count
-% says how many of that vessel sessions reached each column, so a thin column can be
-% masked per vessel the way thin_column masks the collapsed map
-vessel_pool.vessel_map = vessel_map;
-vessel_pool.vessel_count = vessel_count;
-vessel_pool.vessel_reaches = vessel_reaches;
-vessel_pool.thin_column = thin_column;
-vessel_pool.step = pool_step;
-vessel_pool.vessel_name = vessel_name;
-[vessel_pool.sym_constricted, vessel_pool.sym_dilated, sym_info] = fit_bothsides(grid_x, pool_mode_curve, ...
-    filt.min_column_vessel);
-vessel_pool.sym_span = sym_info.span;
-vessel_pool.sym_bend = sym_info.bend;
-vessel_pool.n_sym_constricted = sym_info.n_low;
-vessel_pool.n_sym_dilated = sym_info.n_high;
-vessel_pool.sym_constricted_intercept = sym_info.intercept_low;
-vessel_pool.sym_dilated_intercept = sym_info.intercept_high;
-[vessel_pool.full_constricted, vessel_pool.n_full_constricted] = whole_reach(grid_x, pool_mode_curve, -1);
-[vessel_pool.full_dilated, vessel_pool.n_full_dilated] = whole_reach(grid_x, pool_mode_curve, 1);
-vessel_pool.r_sym_constricted = side_correlation(grid_x, pool_mode_curve, -1, vessel_pool.sym_span);
-vessel_pool.r_sym_dilated = side_correlation(grid_x, pool_mode_curve, 1, vessel_pool.sym_span);
+vessel_pool = pool_vessel(in_pool.heat, in_pool.vessel_key, in_pool.NumericResolution, ...
+    param.pool_step, filt.min_vessel, param.column_stat, filt.min_column_vessel);
 result.fwhmrelation.vessel_pool = vessel_pool;
-
-fprintf('   over each side''s whole reach\n');
-fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend %+.3f\n', ...
-    vessel_pool.full_constricted, vessel_pool.n_full_constricted, vessel_pool.full_dilated, vessel_pool.n_full_dilated, ...
-    vessel_pool.full_dilated - vessel_pool.full_constricted);
-fprintf('   over the symmetric span, +/- %.2f um\n', vessel_pool.sym_span);
-fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend %+.3f\n', ...
-    vessel_pool.sym_constricted, vessel_pool.n_sym_constricted, vessel_pool.sym_dilated, vessel_pool.n_sym_dilated, ...
-    vessel_pool.sym_bend);
 
 %% Pool each arousal state at the vessel level
 % The grid and the vessel list are the block above's, so a state map and the
@@ -237,7 +159,7 @@ fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend 
 %   steady states only : a _trans interval shares frames with its neighbours. The
 %   origin is the session median taken before the state mask, so the shift between
 %   states is a measurement, not an offset
-keep_pooled = state.drawn & ismember(state.vessel_key, vessel_name);
+keep_pooled = state.drawn & ismember(state.vessel_key, vessel_pool.vessel_name);
 state_drawn = state(keep_pooled, :);
 fprintf('\nfwhmrelation.state_pool : %d of %d state rows kept\n', ...
     sum(keep_pooled), numel(keep_pooled));
@@ -257,87 +179,19 @@ if filt.pool_common_vessel
         sum(is_common), numel(is_common));
     state_drawn = state_drawn(is_common, :);
 end
-
-n_state = numel(param.state_pooled);
-state_pool = table(param.state_pooled(:), 'VariableNames', {'state'});
-state_pool.n_session = zeros(n_state, 1);
-state_pool.n_vessel = zeros(n_state, 1);
-state_pool.n_mouse = zeros(n_state, 1);
-state_pool.bv_statemedian = nan(n_state, 1);
-state_pool.y_statemedian = nan(n_state, 1);
-state_pool.map = cell(n_state, 1);
-state_pool.mode_curve = cell(n_state, 1);
-state_pool.vessel_reaches = cell(n_state, 1);
-state_pool.thin_column = cell(n_state, 1);
-
-for k = 1:n_state
-    on_state = state_drawn.state == param.state_pooled(k);
-    in_state = state_drawn(on_state, :);
-    [~, vessel_index] = ismember(in_state.vessel_key, vessel_name);
-    [state_map, state_count] = pool_state_by_vessel(in_state.heat, vessel_index, ...
-        numel(vessel_name), grid_x, grid_y);
-    state_reaches = sum(state_count > 0, 1);
-    state_thin = state_reaches < filt.min_vessel;
-    pooled_map = mean(state_map, 3, 'omitnan');
-    pooled_map(:, state_thin) = NaN;
-
-    state_pool.n_session(k) = height(in_state);
-    state_pool.n_vessel(k) = numel(unique(in_state.vessel_key));
-    state_pool.n_mouse(k) = numel(unique(extractBefore(string(in_state.vessel_key), "_")));
-    state_pool.bv_statemedian(k) = median(in_state.bv_sessionmedian, 'omitnan');
-    state_pool.y_statemedian(k) = median(in_state.y_sessionmedian, 'omitnan');
-    state_pool.map{k} = pooled_map;
-    state_pool.mode_curve{k} = column_statistic(pooled_map, grid_y, param.column_stat);
-    state_pool.vessel_reaches{k} = state_reaches;
-    state_pool.thin_column{k} = state_thin;
-
-    fprintf('   %-6s %2d sessions | %2d vessels, %d mice | columns kept %d of %d\n', ...
-        param.state_pooled(k), height(in_state), state_pool.n_vessel(k), ...
-        state_pool.n_mouse(k), sum(~state_thin), numel(grid_x));
-end
+state_pool = pool_state(state_drawn.heat, state_drawn.vessel_key, state_drawn.state, ...
+    state_drawn.bv_sessionmedian, state_drawn.y_sessionmedian, vessel_pool.grid_x, ...
+    vessel_pool.grid_y, vessel_pool.vessel_name, param.state_pooled, filt.min_vessel, param.column_stat);
 result.fwhmrelation.state_pool = state_pool;
 
 %% The bend, once per vessel, so it has a distribution and not just a value
-% The vessel_pool map gives one number and no spread. Fitting each vessel's own map on
-% its own symmetric span makes the two slopes a paired measurement within that
-% vessel, so the difference has a null of exactly zero and the vessels can be
-% counted.
-%   each vessel gets its own symmetric span, not a common one. The two columns per
-%   statistic are the constricted and dilated sides, fixed by the sign of x
-n_vessel = numel(vessel_name);
-vesselbend = table(vessel_name, 'VariableNames', {'vessel_key'});
-vesselbend.MouseID = extractBefore(vessel_name, "_");
-vesselbend.n_session = accumarray(vessel_of, 1);
-% where this vessel sits, so the bend can be read against calibre without a join
-vesselbend.bv_vesselmedian = accumarray(vessel_of, in_pool.bv_sessionmedian, ...
-    [], @(x) median(x, "omitnan"));
-vesselbend.eps_vesselmedian = accumarray(vessel_of, in_pool.eps_sessionmedian, ...
-    [], @(x) median(x, "omitnan"));
-vesselbend.span = nan(n_vessel, 1);
-% one row per vessel on the shared grid_x, so every vessel is a line on one axis.
-% Its own no-flux curve is not stored: bv_vesselmedian and eps_vesselmedian settle it,
-% and a stored copy could drift from them
-for stat = param.stat_name
-    vesselbend.("constricted_" + stat) = nan(n_vessel, 1);
-    vesselbend.("dilated_" + stat) = nan(n_vessel, 1);
-    vesselbend.("curve_" + stat) = nan(n_vessel, numel(grid_x));
-end
-for v = 1:n_vessel
-    for stat = param.stat_name
-        curve = column_statistic(vessel_map(:, :, v), grid_y, stat);
-        vesselbend.("curve_" + stat)(v, :) = curve;
-        [low, high, side_info] = fit_bothsides(grid_x, curve, filt.min_column_vessel);
-        vesselbend.("constricted_" + stat)(v) = low;
-        vesselbend.("dilated_" + stat)(v) = high;
-        vesselbend.span(v) = side_info.span;   % the coverage is common to the three
-    end
-end
-vesselbend.fitted = isfinite(vesselbend.("constricted_" + param.column_stat)) & ...
-    isfinite(vesselbend.("dilated_" + param.column_stat));
+vesselbend = fit_vesselbend(vessel_pool.vessel_map, vessel_pool.grid_x, vessel_pool.grid_y, ...
+    vessel_pool.vessel_name, in_pool.vessel_key, in_pool.bv_sessionmedian, ...
+    in_pool.eps_sessionmedian, param.stat_name, filt.min_column_vessel, param.column_stat);
 result.fwhmrelation.vesselbend = vesselbend;
 % the abscissa curve_* sits on. Beside the table rather than inside it, because it is
 % one vector shared by every row and by vessel_pool
-result.fwhmrelation.grid_x = grid_x;
+result.fwhmrelation.grid_x = vessel_pool.grid_x;
 % the settings that produced the three, so a figure can label them without
 % restating a threshold this file chose
 result.fwhmrelation.param = param;
@@ -391,6 +245,207 @@ info = struct('n_session', height(session), ...
 end
 
 %% ---------------------------------------------------------------- helpers
+function vessel_pool = pool_vessel(heat_cell, vessel_key, um_per_px, pool_step, min_vessel, ...
+    column_stat, min_column_vessel)
+%POOL_VESSEL  The sessions' maps put on one grid, normalised per column, averaged within and then across vessels.
+%   IN   heat_cell          Nx1 cell     the sessions' heat structs
+%        vessel_key         Nx1 str      which vessel each session is
+%        um_per_px          Nx1 double   each session's scale
+%        pool_step          1x1 double   grid spacing (um), [] = the coarsest pixel
+%        min_vessel         1x1 double   vessels a column needs to be kept (count)
+%        column_stat        1x1 str      the statistic the mode curve uses
+%        min_column_vessel  1x1 double   columns a side needs to be fitted (count)
+%   OUT  vessel_pool        1x1 struct   grid, collapsed map and mode curve, the per-vessel
+%                                        maps under it, and the two-side fits off the curve
+    % Sessions cannot be averaged as they stand. Each carries a different number of
+    % samples and reaches a different distance along the diameter axis, so a plain mean
+    % would let the widest-ranging sessions set the wings and the narrowest set the
+    % centre, and the vessel_pool band's thickness would be a picture of which session
+    % reached where. Normalising each DIAMETER COLUMN to sum to one first turns every
+    % column into the distribution of PVS thickness AT that diameter, and the average
+    % of those is a quantity with a meaning: where the PVS sits at this much dilation,
+    % averaged over vessels.
+    %   vessel and not session : a vessel with several sessions would otherwise weigh
+    %   several times a singly-imaged one
+    if isempty(pool_step)
+        pool_step = max(um_per_px);
+    end
+    x_edge = 0;
+    y_edge = 0;
+    for k = 1:numel(heat_cell)
+        x_edge = max(x_edge, max(abs(heat_cell{k}.x_baseceneters)));
+        y_edge = max(y_edge, max(abs(heat_cell{k}.y_baseceneters)));
+    end
+    grid_x = -x_edge : pool_step : x_edge;
+    grid_y = -y_edge : pool_step : y_edge;
+    fprintf('\npooling on a %.3f um grid, %d x %d\n', pool_step, numel(grid_y), numel(grid_x));
+
+    [vessel_name, ~, vessel_of] = unique(vessel_key, 'stable');
+    [vessel_map, vessel_count] = pool_by_vessel(heat_cell, vessel_of, ...
+        numel(vessel_name), grid_x, grid_y);
+
+    vessel_reaches = sum(vessel_count > 0, 1);
+    thin_column = vessel_reaches < min_vessel;
+    pool_map = mean(vessel_map, 3, 'omitnan');
+    pool_map(:, thin_column) = NaN;
+    fprintf('   %d vessels from %d mice | columns kept %d of %d\n', numel(vessel_name), ...
+        numel(unique(extractBefore(vessel_name, "_"))), sum(~thin_column), numel(grid_x));
+    fprintf('   kept from %+.1f to %+.1f um, where at least %d vessels reach\n', ...
+        min(grid_x(~thin_column)), max(grid_x(~thin_column)), min_vessel);
+
+    % one number per column of the vessel_pool distribution, by the same statistic the
+    % per-vessel fit uses, so the two tables are reading the same thing
+    pool_mode_curve = column_statistic(pool_map, grid_y, column_stat);
+
+    % The bend, read off the vessel_pool map rather than off one session. fit_bothsides
+    % truncates the longer side, which is what makes the two slopes one measurement
+    % made twice; the full-reach pair is carried beside it because the two sides do
+    % not reach equally far and the difference between the pairs is worth seeing.
+    vessel_pool = struct();
+    vessel_pool.grid_x = grid_x;
+    vessel_pool.grid_y = grid_y;
+    vessel_pool.map = pool_map;
+    vessel_pool.mode_curve = pool_mode_curve;
+    % the stage before the collapse: one map per vessel, on the same grid. vessel_count
+    % says how many of that vessel sessions reached each column, so a thin column can be
+    % masked per vessel the way thin_column masks the collapsed map
+    vessel_pool.vessel_map = vessel_map;
+    vessel_pool.vessel_count = vessel_count;
+    vessel_pool.vessel_reaches = vessel_reaches;
+    vessel_pool.thin_column = thin_column;
+    vessel_pool.step = pool_step;
+    vessel_pool.vessel_name = vessel_name;
+    [vessel_pool.sym_constricted, vessel_pool.sym_dilated, sym_info] = fit_bothsides(grid_x, pool_mode_curve, ...
+        min_column_vessel);
+    vessel_pool.sym_span = sym_info.span;
+    vessel_pool.sym_bend = sym_info.bend;
+    vessel_pool.n_sym_constricted = sym_info.n_low;
+    vessel_pool.n_sym_dilated = sym_info.n_high;
+    vessel_pool.sym_constricted_intercept = sym_info.intercept_low;
+    vessel_pool.sym_dilated_intercept = sym_info.intercept_high;
+    [vessel_pool.full_constricted, vessel_pool.n_full_constricted] = whole_reach(grid_x, pool_mode_curve, -1);
+    [vessel_pool.full_dilated, vessel_pool.n_full_dilated] = whole_reach(grid_x, pool_mode_curve, 1);
+    vessel_pool.r_sym_constricted = side_correlation(grid_x, pool_mode_curve, -1, vessel_pool.sym_span);
+    vessel_pool.r_sym_dilated = side_correlation(grid_x, pool_mode_curve, 1, vessel_pool.sym_span);
+
+    fprintf('   over each side''s whole reach\n');
+    fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend %+.3f\n', ...
+        vessel_pool.full_constricted, vessel_pool.n_full_constricted, vessel_pool.full_dilated, vessel_pool.n_full_dilated, ...
+        vessel_pool.full_dilated - vessel_pool.full_constricted);
+    fprintf('   over the symmetric span, +/- %.2f um\n', vessel_pool.sym_span);
+    fprintf('      constricted %.3f (%d columns) | dilated %.3f (%d columns) | bend %+.3f\n', ...
+        vessel_pool.sym_constricted, vessel_pool.n_sym_constricted, vessel_pool.sym_dilated, vessel_pool.n_sym_dilated, ...
+        vessel_pool.sym_bend);
+end
+
+function state_pool = pool_state(heat_cell, vessel_key, state_of, bv_median, y_median, ...
+    grid_x, grid_y, vessel_name, state_pooled, min_vessel, column_stat)
+%POOL_STATE  One map per arousal state, pooled by vessel on vessel_pool's grid and vessel index.
+%   IN   heat_cell     Nx1 cell     the state rows' heat structs
+%        vessel_key    Nx1 str      which vessel each row is
+%        state_of      Nx1 str      which state each row is
+%        bv_median     Nx1 double   each row's session median diameter (um)
+%        y_median      Nx1 double   each row's session median of the y series (um)
+%        grid_x        1xX double   vessel_pool's grid
+%        grid_y        1xY double
+%        vessel_name   Vx1 str      vessel_pool's vessel list, the index the maps sit on
+%        state_pooled  1xS str      the states that get a map
+%        min_vessel    1x1 double   vessels a column needs to be kept (count)
+%        column_stat   1x1 str      the statistic the mode curve uses
+%   OUT  state_pool    Sx? table    counts, the two state medians, map, mode curve, reach
+    n_state = numel(state_pooled);
+    state_pool = table(state_pooled(:), 'VariableNames', {'state'});
+    state_pool.n_session = zeros(n_state, 1);
+    state_pool.n_vessel = zeros(n_state, 1);
+    state_pool.n_mouse = zeros(n_state, 1);
+    state_pool.bv_statemedian = nan(n_state, 1);
+    state_pool.y_statemedian = nan(n_state, 1);
+    state_pool.map = cell(n_state, 1);
+    state_pool.mode_curve = cell(n_state, 1);
+    state_pool.vessel_reaches = cell(n_state, 1);
+    state_pool.thin_column = cell(n_state, 1);
+
+    for k = 1:n_state
+        on_state = state_of == state_pooled(k);
+        in_vessel = vessel_key(on_state);
+        [~, vessel_index] = ismember(in_vessel, vessel_name);
+        [state_map, state_count] = pool_state_by_vessel(heat_cell(on_state), vessel_index, ...
+            numel(vessel_name), grid_x, grid_y);
+        state_reaches = sum(state_count > 0, 1);
+        state_thin = state_reaches < min_vessel;
+        pooled_map = mean(state_map, 3, 'omitnan');
+        pooled_map(:, state_thin) = NaN;
+
+        state_pool.n_session(k) = sum(on_state);
+        state_pool.n_vessel(k) = numel(unique(in_vessel));
+        state_pool.n_mouse(k) = numel(unique(extractBefore(string(in_vessel), "_")));
+        state_pool.bv_statemedian(k) = median(bv_median(on_state), 'omitnan');
+        state_pool.y_statemedian(k) = median(y_median(on_state), 'omitnan');
+        state_pool.map{k} = pooled_map;
+        state_pool.mode_curve{k} = column_statistic(pooled_map, grid_y, column_stat);
+        state_pool.vessel_reaches{k} = state_reaches;
+        state_pool.thin_column{k} = state_thin;
+
+        fprintf('   %-6s %2d sessions | %2d vessels, %d mice | columns kept %d of %d\n', ...
+            state_pooled(k), sum(on_state), state_pool.n_vessel(k), ...
+            state_pool.n_mouse(k), sum(~state_thin), numel(grid_x));
+    end
+end
+
+function vesselbend = fit_vesselbend(vessel_map, grid_x, grid_y, vessel_name, session_vessel, ...
+    bv_sessionmedian, eps_sessionmedian, stat_name, min_column_vessel, column_stat)
+%FIT_VESSELBEND  Each vessel's own map fitted either side of zero, once per column statistic.
+%   IN   vessel_map         YxXxV double  vessel_pool's per-vessel maps
+%        grid_x             1xX double    their grid
+%        grid_y             1xY double
+%        vessel_name        Vx1 str       vessel_pool's vessel list, the third index of vessel_map
+%        session_vessel     Nx1 str       the pooled sessions' vessel keys
+%        bv_sessionmedian   Nx1 double    their median diameters (um)
+%        eps_sessionmedian  Nx1 double    their median outer diameters (um)
+%        stat_name          1xC str       the column statistics fitted
+%        min_column_vessel  1x1 double    columns a side needs to be fitted (count)
+%        column_stat        1x1 str       the statistic fitted decides
+%   OUT  vesselbend         Vx? table     one row per vessel: medians, span, the two slopes and the
+%                                         curve per statistic, and whether column_stat's pair fitted
+    % The vessel_pool map gives one number and no spread. Fitting each vessel's own map on
+    % its own symmetric span makes the two slopes a paired measurement within that
+    % vessel, so the difference has a null of exactly zero and the vessels can be
+    % counted.
+    %   each vessel gets its own symmetric span, not a common one. The two columns per
+    %   statistic are the constricted and dilated sides, fixed by the sign of x
+    [~, vessel_of] = ismember(session_vessel, vessel_name);
+    n_vessel = numel(vessel_name);
+    vesselbend = table(vessel_name, 'VariableNames', {'vessel_key'});
+    vesselbend.MouseID = extractBefore(vessel_name, "_");
+    vesselbend.n_session = accumarray(vessel_of, 1);
+    % where this vessel sits, so the bend can be read against calibre without a join
+    vesselbend.bv_vesselmedian = accumarray(vessel_of, bv_sessionmedian, ...
+        [], @(x) median(x, "omitnan"));
+    vesselbend.eps_vesselmedian = accumarray(vessel_of, eps_sessionmedian, ...
+        [], @(x) median(x, "omitnan"));
+    vesselbend.span = nan(n_vessel, 1);
+    % one row per vessel on the shared grid_x, so every vessel is a line on one axis.
+    % Its own no-flux curve is not stored: bv_vesselmedian and eps_vesselmedian settle it,
+    % and a stored copy could drift from them
+    for stat = stat_name
+        vesselbend.("constricted_" + stat) = nan(n_vessel, 1);
+        vesselbend.("dilated_" + stat) = nan(n_vessel, 1);
+        vesselbend.("curve_" + stat) = nan(n_vessel, numel(grid_x));
+    end
+    for v = 1:n_vessel
+        for stat = stat_name
+            curve = column_statistic(vessel_map(:, :, v), grid_y, stat);
+            vesselbend.("curve_" + stat)(v, :) = curve;
+            [low, high, side_info] = fit_bothsides(grid_x, curve, min_column_vessel);
+            vesselbend.("constricted_" + stat)(v) = low;
+            vesselbend.("dilated_" + stat)(v) = high;
+            vesselbend.span(v) = side_info.span;   % the coverage is common to the three
+        end
+    end
+    vesselbend.fitted = isfinite(vesselbend.("constricted_" + column_stat)) & ...
+        isfinite(vesselbend.("dilated_" + column_stat));
+end
+
 function [vessel_map, vessel_count] = pool_by_vessel(heat_cell, vessel_of, n_vessel, ...
     grid_x, grid_y)
 %POOL_BY_VESSEL  Each session's column-normalised heatmap on a common grid, summed
