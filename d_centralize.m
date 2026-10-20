@@ -3,7 +3,8 @@
 %   the data tree; everything lands under dirs.central, one file per product.
 %   1  gather    the sheet's sessions -> centralized_{paxfwhm, polarcluster, roilist, sleep_score, analysis_analog, drift}
 %   2  by bout   centralized_{sleep_score, analysis_analog} -> centralized_bout, then
-%                centralized_{paxfwhm, drift} x centralized_bout -> centralized_{paxfwhm_state, drift_state}
+%                centralized_{paxfwhm, drift} x centralized_bout -> centralized_{paxfwhm_state, drift_state},
+%                then centralized_paxfwhm_state -> centralized_paxfwhm_heatmap
 clc, clear
 addpath('g:\03_program\01_ecspress\09_dirstruct');   % where dirs_ecspath lives
 dirs_ecspath;                                        % three roots, minus zz_notinuse
@@ -26,4 +27,5 @@ info.drift = centralize_drift(dirs.central, dirs.sheet, param.rebuild);
 %% 2. by bout : the scorings as bout tables, then every series over them
 info.bout = centralize_bout(dirs.central, param.rebuild);
 info.paxfwhm_state = bout_paxfwhm(dirs.central, param.rebuild);
+info.paxfwhm_heatmap = heatmap_paxfwhm(dirs.central);
 info.drift_state = bout_drift(dirs.central, param.rebuild);
