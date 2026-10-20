@@ -10,7 +10,7 @@ classdef tableAnalyzer < handle
     
     methods
         function obj = tableAnalyzer(input_table, input_log)
-            % Initializes TableAnalyzer with data loaded/organized by tableManager
+            % Initializes tableAnalyzer with data loaded/organized by tableManager
             obj.filtered_table = input_table;
             if nargin > 1
                 obj.action_log = input_log;
